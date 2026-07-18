@@ -110,15 +110,86 @@ def get_cme_raw() -> pd.DataFrame:
     return df
 
 
+def _to_month(s):
+    """Parse a 'MM/YYYY' period string to a Timestamp (1st of month)."""
+    try:
+        m, y = str(s).strip().split("/")
+        return pd.Timestamp(int(y), int(m), 1)
+    except Exception:  # noqa: BLE001
+        return pd.NaT
+
+
+def _front_month(df: pd.DataFrame):
+    """From rows sharing a product code, pick the front (nearest active) contract."""
+    d = df.copy()
+    d["_start"] = d["Start Period"].map(_to_month)
+    d["_end"] = d["End Period"].map(_to_month)
+    now = pd.Timestamp.now().normalize().replace(day=1)
+    active = d[d["_end"] >= now]
+    pool = active if not active.empty else d
+    return pool.sort_values("_start").iloc[0]
+
+
 def _pick(cme: pd.DataFrame, rule: dict):
-    if "codes" in rule:
-        codes = {c.upper() for c in rule["codes"]}
-        df = cme[cme["Product Code"].astype(str).str.strip().str.upper().isin(codes)]
-        return None if df.empty else df.iloc[0]
-    df = cme[cme["Product Name"].str.contains(rule["inc"], na=False)]
-    for x in rule.get("exc", []):
-        df = df[~df["Product Name"].str.contains(x, na=False)]
-    return None if df.empty else df.iloc[0]
+    """CSV source: return the FRONT-MONTH row for a product code, or None."""
+    codes = {c.upper() for c in rule["codes"]}
+    df = cme[cme["Product Code"].astype(str).str.strip().str.upper().isin(codes)]
+    return None if df.empty else _front_month(df)
+
+
+def get_span2_margin(code: str, label: str):
+    """
+    SPAN 2 source for ES / CL (absent from OUTRIGHT.csv).
+    Resolver order:
+      1) scrape the dedicated CME margin page (works only if the table is in the
+         static HTML — today it's JS-injected, so this usually returns None),
+      2) fall back to the manually-set value so the row always shows a number.
+    Returns (value, source_tag) or (None, None).
+    """
+    scraped = scrape_cme_margin_page(code)
+    if scraped is not None:
+        return scraped, "CME page"
+    manual = MANUAL_MAINT.get(label)
+    if manual is not None:
+        return manual, f"manual ({MANUAL_UPDATED})"
+    return None, None
+
+
+CME_MARGIN_PAGES = {
+    "ES": "https://www.cmegroup.com/markets/equities/sp/e-mini-sandp500.margins.html",
+    "CL": "https://www.cmegroup.com/markets/energy/crude-oil/light-sweet-crude.margins.html",
+}
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def scrape_cme_margin_page(code: str):
+    """Best-effort: parse the nearest contract's maintenance margin off the page.
+    Returns a float or None. Returns None when the table is JS-rendered."""
+    url = CME_MARGIN_PAGES.get(code)
+    if not url:
+        return None
+    try:
+        html = _session.get(url, timeout=25).text
+        tables = pd.read_html(io.StringIO(html))
+    except Exception:  # noqa: BLE001  (no tables in static HTML, network, etc.)
+        return None
+    for t in tables:
+        t.columns = [
+            " ".join(map(str, c)).strip() if isinstance(c, tuple) else str(c).strip()
+            for c in t.columns
+        ]
+        code_col = next((c for c in t.columns if "product code" in c.lower()), None)
+        maint_col = next((c for c in t.columns if "maintenance" in c.lower()), None)
+        if not code_col or not maint_col:
+            continue
+        m = t[t[code_col].astype(str).str.strip().str.upper().eq(code.upper())]
+        if m.empty:
+            continue
+        try:
+            return float(str(m.iloc[0][maint_col]).replace(",", "").replace("$", ""))
+        except Exception:  # noqa: BLE001
+            continue
+    return None
 
 
 def _fmt_maint(v) -> str:
@@ -128,40 +199,51 @@ def _fmt_maint(v) -> str:
         return str(v)
 
 
+SPAN2_PRODUCTS = {"ES  (S&P 500)", "CL  (Crude Oil)"}
+
+
 def build_margins() -> pd.DataFrame:
     try:
         cme = get_cme_raw()
     except Exception as e:  # noqa: BLE001
-        return pd.DataFrame([{"Instrument": "ERROR", "Maint (USD)": str(e),
-                              "Vol Scan": "", "Source": ""}])
+        return pd.DataFrame([{"Instrument": "ERROR", "Month": "", "Code": "",
+                              "Maint (USD)": str(e), "Vol Scan": "", "Source": ""}])
     rows = []
     for label, rule in CME_RULES.items():
+        # 1) Legacy SPAN via OUTRIGHT.csv (front-month row)
         r = _pick(cme, rule)
         if r is not None:
             rows.append({
                 "Instrument": label,
+                "Month": str(r["Start Period"]).strip(),
                 "Code": str(r["Product Code"]).strip(),
                 "Maint (USD)": _fmt_maint(r["Maintenance"]),
                 "Vol Scan": r.get("Maint. Vol. Scan", ""),
                 "Source": "CME CSV",
             })
-        elif MANUAL_MAINT.get(label) is not None:
-            rows.append({
-                "Instrument": label,
-                "Code": "—",
-                "Maint (USD)": _fmt_maint(MANUAL_MAINT[label]),
-                "Vol Scan": "—",
-                "Source": f"manual ({MANUAL_UPDATED})",
-            })
-        else:
-            rows.append({
-                "Instrument": label,
-                "Code": "—",
-                "Maint (USD)": "— set in code",
-                "Vol Scan": "—",
-                "Source": "dedicated page",
-            })
-    return pd.DataFrame(rows)
+            continue
+        # 2) SPAN 2 source (ES / CL): try page scrape, then manual fallback
+        if label in SPAN2_PRODUCTS:
+            code = next(iter(rule["codes"]))
+            val, src = get_span2_margin(code, label)
+            if val is not None:
+                rows.append({
+                    "Instrument": label, "Month": "front", "Code": code,
+                    "Maint (USD)": _fmt_maint(val), "Vol Scan": "—",
+                    "Source": src,
+                })
+            else:
+                rows.append({
+                    "Instrument": label, "Month": "—", "Code": code,
+                    "Maint (USD)": "— set in code", "Vol Scan": "—",
+                    "Source": "SPAN2 page",
+                })
+            continue
+        # 3) Neither
+        rows.append({
+            "Instrument": label, "Month": "—", "Code": "—",
+            "Maint (USD)": "—", "Vol Scan": "—", "Source": "not found",
+        })
     return pd.DataFrame(rows)
 
 
