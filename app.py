@@ -413,6 +413,18 @@ def render_events() -> None:
         st.table(df.style.hide(axis="index"))
 
 
+_MONTHS = {"JAN": 1, "FEB": 2, "MAR": 3, "APR": 4, "MAY": 5, "JUN": 6,
+           "JUL": 7, "AUG": 8, "SEP": 9, "OCT": 10, "NOV": 11, "DEC": 12}
+
+
+def _month_to_date(m: str):
+    try:
+        a, b = str(m).split()
+        return _d.date(2000 + int(b), _MONTHS[a[:3].upper()], 1)
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def render_curve() -> None:
     st.caption(
         "Term structure from CME daily settlements (updates after each close). "
@@ -437,16 +449,26 @@ def render_curve() -> None:
                 st.write(str(e))
         return
 
-    front, back = df["Settle"].iloc[0], df["Settle"].iloc[-1]
-    shape = "Contango ↗" if back > front else "Backwardation ↘" if back < front else "Flat →"
-    spread = back - front
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Front", f"{front:,.2f}")
-    c2.metric("Back", f"{back:,.2f}")
-    c3.metric(shape, f"{spread:+,.2f}")
+    # chronological order (CME lists many illiquid back years)
+    df = df.copy()
+    df["_date"] = df["Month"].map(_month_to_date)
+    df = df.dropna(subset=["_date"]).sort_values("_date").reset_index(drop=True)
 
-    st.line_chart(df.set_index("Month")["Settle"], height=300)
-    st.table(df.style.hide(axis="index")
+    horizon = st.radio("Horizon", ["12M", "24M", "36M", "All"], index=1,
+                       horizontal=True)
+    n = {"12M": 12, "24M": 24, "36M": 36, "All": len(df)}[horizon]
+    view = df.head(n)
+
+    front, back = view["Settle"].iloc[0], view["Settle"].iloc[-1]
+    shape = ("Contango ↗" if back > front else
+             "Backwardation ↘" if back < front else "Flat →")
+    c1, c2, c3 = st.columns(3)
+    c1.metric(f"Front ({view['Month'].iloc[0]})", f"{front:,.2f}")
+    c2.metric(f"Back ({view['Month'].iloc[-1]})", f"{back:,.2f}")
+    c3.metric(shape, f"{back - front:+,.2f}")
+
+    st.line_chart(view.set_index("_date")["Settle"], height=300)
+    st.table(view.drop(columns="_date").style.hide(axis="index")
              .format({"Settle": lambda v: f"{v:,.2f}"}))
 
 
