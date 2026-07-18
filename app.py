@@ -244,6 +244,56 @@ EVENTS = [
 INSTRUMENTS = ["ES", "NQ", "GC", "SI", "HG", "CL", "NG", "ZC", "ZS", "6E", "6J"]
 
 
+# --------------------------------------------------------------------------- #
+# Term structure (CME settlements)
+# --------------------------------------------------------------------------- #
+CURVE_URL = "https://www.cmegroup.com/CmeWS/mvc/Settlements/Futures/Settlements/{pid}/FUT"
+# Confident productIds first; CL & NG lead the dropdown.
+CURVE_PRODUCTS = {
+    "CL  (Crude Oil)": 425,
+    "NG  (Nat Gas)":   444,
+    "GC  (Gold)":      437,
+    "SI  (Silver)":    458,
+    "ES  (S&P 500)":   133,
+    "ZC  (Corn)":      300,
+    "ZS  (Soybeans)":  320,
+}
+
+
+def _num(x):
+    try:
+        v = float(str(x).replace(",", "").replace("+", "").strip())
+        return v
+    except Exception:  # noqa: BLE001
+        return None
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def get_curve(pid: int) -> pd.DataFrame:
+    """Fetch the full settlement strip (term structure) for a productId."""
+    r = _session.get(CURVE_URL.format(pid=pid), timeout=25,
+                     headers={"Accept": "application/json"})
+    data = r.json()
+    settlements = data.get("settlements", data) if isinstance(data, dict) else data
+    rows = []
+    for s in settlements:
+        month = str(s.get("month", "")).strip()
+        if not month or month.lower() in ("total", "totals"):
+            continue
+        price = next((p for p in (_num(s.get("settle")), _num(s.get("last")),
+                                  _num(s.get("priorSettle"))) if p is not None), None)
+        if price is None:
+            continue
+        rows.append({
+            "Month": month,
+            "Settle": price,
+            "Change": s.get("change", ""),
+            "Volume": s.get("volume", ""),
+            "OI": s.get("openInterest", ""),
+        })
+    return pd.DataFrame(rows)
+
+
 def build_events(selected: list) -> pd.DataFrame:
     t = _d.date.today()
     rows = []
@@ -318,16 +368,52 @@ def render_events() -> None:
         st.table(df.style.hide(axis="index"))
 
 
+def render_curve() -> None:
+    st.caption(
+        "Term structure from CME daily settlements (updates after each close). "
+        "Contango = back months higher; backwardation = front months higher."
+    )
+    name = st.selectbox("Symbol", list(CURVE_PRODUCTS.keys()))
+    pid = CURVE_PRODUCTS[name]
+    if st.button("🔄 Refresh curve"):
+        get_curve.clear()
+        st.rerun()
+    try:
+        df = get_curve(pid)
+    except Exception as e:  # noqa: BLE001
+        st.error(f"Couldn't load curve (CME may be blocking): {str(e)[:80]}")
+        return
+    if df.empty:
+        st.info("No settlement data returned.")
+        return
+
+    front, back = df["Settle"].iloc[0], df["Settle"].iloc[-1]
+    shape = "Contango ↗" if back > front else "Backwardation ↘" if back < front else "Flat →"
+    spread = back - front
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Front", f"{front:,.2f}")
+    c2.metric("Back", f"{back:,.2f}")
+    c3.metric(shape, f"{spread:+,.2f}")
+
+    st.line_chart(df.set_index("Month")["Settle"], height=300)
+    st.table(df.style.hide(axis="index")
+             .format({"Settle": lambda v: f"{v:,.2f}"}))
+
+
 def main() -> None:
     st.title("🎋 Sakata")
     st.caption(f"Refreshed {dt.datetime.now():%Y-%m-%d %H:%M:%S}")
-    tab_board, tab_margins, tab_events = st.tabs(["Board", "Margins", "Events"])
+    tab_board, tab_margins, tab_events, tab_curve = st.tabs(
+        ["Board", "Margins", "Events", "Curve"]
+    )
     with tab_board:
         render_board()
     with tab_margins:
         render_margins()
     with tab_events:
         render_events()
+    with tab_curve:
+        render_curve()
 
 
 if __name__ == "__main__":
