@@ -38,7 +38,6 @@ SYMBOLS = {
 # SB (Sugar #11) is ICE, not CME, so it's not here.
 CME_URL = "https://www.cmegroup.com/CmeWS/mvc/Margins/OUTRIGHT.csv"
 # Locked to exact CME Product Codes (confirmed from the outrights file).
-# ES / CL may be absent from filtered exports; they resolve from the full file.
 CME_RULES = {
     "ES  (S&P 500)":   dict(codes={"ES"}),
     "ZB  (T-Bond)":    dict(codes={"17"}),
@@ -48,6 +47,17 @@ CME_RULES = {
     "ZC  (Corn)":      dict(codes={"C"}),
     "BTC (Bitcoin)":   dict(codes={"BTC"}),
 }
+
+# ES and CL are NOT in the bulk CSV — CME lists them on dedicated product pages.
+# Read the current maintenance margin off these pages and set the numbers below
+# (they change only a few times a year, announced via CME advisory notices):
+#   ES: https://www.cmegroup.com/markets/equities/sp/e-mini-sandp500.margins.html
+#   CL: https://www.cmegroup.com/markets/energy/crude-oil/light-sweet-crude.margins.html
+MANUAL_MAINT = {
+    "ES  (S&P 500)":   None,   # e.g. 16896  (set from the ES page above)
+    "CL  (Crude Oil)": None,   # e.g. 6050   (set from the CL page above)
+}
+MANUAL_UPDATED = "not set"     # bump this date when you update the two above
 
 _session = cffi_requests.Session(impersonate="chrome110")
 
@@ -123,21 +133,35 @@ def build_margins() -> pd.DataFrame:
         cme = get_cme_raw()
     except Exception as e:  # noqa: BLE001
         return pd.DataFrame([{"Instrument": "ERROR", "Maint (USD)": str(e),
-                              "Vol Scan": "", "Matched product": ""}])
+                              "Vol Scan": "", "Source": ""}])
     rows = []
     for label, rule in CME_RULES.items():
         r = _pick(cme, rule)
-        if r is None:
-            rows.append({"Instrument": label, "Code": "—", "Maint (USD)": "—",
-                         "Vol Scan": "—", "Matched product": "(no match)"})
-        else:
+        if r is not None:
             rows.append({
                 "Instrument": label,
                 "Code": str(r["Product Code"]).strip(),
                 "Maint (USD)": _fmt_maint(r["Maintenance"]),
                 "Vol Scan": r.get("Maint. Vol. Scan", ""),
-                "Matched product": str(r["Product Name"]).title(),
+                "Source": "CME CSV",
             })
+        elif MANUAL_MAINT.get(label) is not None:
+            rows.append({
+                "Instrument": label,
+                "Code": "—",
+                "Maint (USD)": _fmt_maint(MANUAL_MAINT[label]),
+                "Vol Scan": "—",
+                "Source": f"manual ({MANUAL_UPDATED})",
+            })
+        else:
+            rows.append({
+                "Instrument": label,
+                "Code": "—",
+                "Maint (USD)": "— set in code",
+                "Vol Scan": "—",
+                "Source": "dedicated page",
+            })
+    return pd.DataFrame(rows)
     return pd.DataFrame(rows)
 
 
