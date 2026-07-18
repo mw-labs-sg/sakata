@@ -268,13 +268,6 @@ def _num(x):
         return None
 
 
-@st.cache_data(ttl=1800, show_spinner=False)
-def get_curve_raw(pid: int) -> str:
-    """Raw response text (for debugging the JSON shape)."""
-    return _session.get(CURVE_URL.format(pid=pid), timeout=25,
-                        headers={"Accept": "application/json"}).text
-
-
 def _find_settlements(data):
     """Locate the list-of-dicts holding the monthly rows, wherever it sits."""
     if isinstance(data, list):
@@ -283,18 +276,14 @@ def _find_settlements(data):
         s = data.get("settlements")
         if isinstance(s, list):
             return [x for x in s if isinstance(x, dict)]
-        for v in data.values():  # search one level down
+        for v in data.values():
             if isinstance(v, list) and v and isinstance(v[0], dict):
                 if any(k in v[0] for k in ("month", "settle", "last")):
                     return v
     return []
 
 
-@st.cache_data(ttl=1800, show_spinner=False)
-def get_curve(pid: int) -> pd.DataFrame:
-    """Fetch the full settlement strip (term structure) for a productId."""
-    import json as _json
-    data = _json.loads(get_curve_raw(pid))
+def _parse_settlements(data) -> list:
     rows = []
     for s in _find_settlements(data):
         month = str(s.get("month", "")).strip()
@@ -305,13 +294,49 @@ def get_curve(pid: int) -> pd.DataFrame:
         if price is None:
             continue
         rows.append({
-            "Month": month,
-            "Settle": price,
-            "Change": s.get("change", ""),
-            "Volume": s.get("volume", ""),
-            "OI": s.get("openInterest", ""),
+            "Month": month, "Settle": price, "Change": s.get("change", ""),
+            "Volume": s.get("volume", ""), "OI": s.get("openInterest", ""),
         })
-    return pd.DataFrame(rows)
+    return rows
+
+
+def _fetch_settlements(pid: int, trade_date: str) -> str:
+    url = CURVE_URL.format(pid=pid) + f"?tradeDate={trade_date}"
+    return _session.get(url, timeout=25, headers={"Accept": "application/json"}).text
+
+
+def _recent_business_days(n: int = 6) -> list:
+    days, d = [], _d.date.today()
+    while len(days) < n:
+        if d.weekday() < 5:
+            days.append(d)
+        d -= _d.timedelta(days=1)
+    return days
+
+
+_DATE_FMTS = ["%m/%d/%Y", "%Y-%m-%d", "%Y%m%d"]
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def get_curve(pid: int) -> pd.DataFrame:
+    """Try recent trading days / date formats until CME returns the strip."""
+    import json as _json
+    for day in _recent_business_days():
+        for fmt in _DATE_FMTS:
+            try:
+                raw = _fetch_settlements(pid, day.strftime(fmt))
+                rows = _parse_settlements(_json.loads(raw))
+                if rows:
+                    return pd.DataFrame(rows)
+            except Exception:  # noqa: BLE001
+                continue
+    return pd.DataFrame()
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def get_curve_raw(pid: int) -> str:
+    """Raw response for the most recent business day (debug)."""
+    return _fetch_settlements(pid, _recent_business_days()[0].strftime("%m/%d/%Y"))
 
 
 def build_events(selected: list) -> pd.DataFrame:
