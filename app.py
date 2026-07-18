@@ -1,11 +1,15 @@
 """
-Sakata — Futures Board (v1)
----------------------------
-Two tabs:
-  • Board   — current price + day change (yfinance)
-  • Margins — current CME maintenance margin per contract (CME public CSV)
+Sakata — Futures Board
+----------------------
+Board tab   : current price + day change (yfinance).
+Margins tab : maintenance + day-trade margin per contract.
 
-Data fetched through a curl_cffi chrome session to dodge bot-blocking.
+Margin sources:
+  • AMP Futures margins page — a STATIC HTML table (scrapes cleanly, covers
+    ES, CL, 6E, GC, ZB, ZC, SB incl. the ones absent from CME's CSV).
+  • CME OUTRIGHT.csv — used only for BTC (AMP doesn't list Bitcoin).
+
+Everything fetched through a curl_cffi chrome session to avoid bot-blocking.
 """
 
 import datetime as dt
@@ -19,7 +23,7 @@ from curl_cffi import requests as cffi_requests
 
 st.set_page_config(page_title="Sakata", page_icon="🎋", layout="centered")
 
-# Price board. name -> (yahoo_ticker, decimals)
+# Board: name -> (yahoo_ticker, decimals)
 SYMBOLS = {
     "ES  (S&P 500)":   ("ES=F", 2),
     "ZB  (T-Bond)":    ("ZB=F", 2),
@@ -31,33 +35,20 @@ SYMBOLS = {
     "BTC (Bitcoin)":   ("BTC=F", 0),
 }
 
-# CME margin match rules.
-#   inc   = keyword that must appear in CME "Product Name"
-#   exc   = keywords that must NOT appear (kills micro/mini/strip/synthetic/BTIC)
-#   exact = preferred exact product name if present
-# SB (Sugar #11) is ICE, not CME, so it's not here.
+# Margins from AMP: instrument -> AMP symbol
+AMP_URL = "https://www.ampfutures.com/trading-info/margins"
+AMP_SYMBOLS = {
+    "ES  (S&P 500)":   "ES",
+    "ZB  (T-Bond)":    "ZB",
+    "EC  (Euro FX)":   "6E",
+    "CL  (Crude Oil)": "CL",
+    "GC  (Gold)":      "GC",
+    "ZC  (Corn)":      "ZC",
+    "SB  (Sugar)":     "SB",
+}
+# BTC isn't on AMP's list -> pull from CME's outright CSV by product code.
 CME_URL = "https://www.cmegroup.com/CmeWS/mvc/Margins/OUTRIGHT.csv"
-# Locked to exact CME Product Codes (confirmed from the outrights file).
-CME_RULES = {
-    "ES  (S&P 500)":   dict(codes={"ES"}),
-    "ZB  (T-Bond)":    dict(codes={"17"}),
-    "EC  (Euro FX)":   dict(codes={"EC"}),
-    "CL  (Crude Oil)": dict(codes={"CL"}),
-    "GC  (Gold)":      dict(codes={"GC"}),
-    "ZC  (Corn)":      dict(codes={"C"}),
-    "BTC (Bitcoin)":   dict(codes={"BTC"}),
-}
-
-# ES and CL are NOT in the bulk CSV — CME lists them on dedicated product pages.
-# Read the current maintenance margin off these pages and set the numbers below
-# (they change only a few times a year, announced via CME advisory notices):
-#   ES: https://www.cmegroup.com/markets/equities/sp/e-mini-sandp500.margins.html
-#   CL: https://www.cmegroup.com/markets/energy/crude-oil/light-sweet-crude.margins.html
-MANUAL_MAINT = {
-    "ES  (S&P 500)":   None,   # e.g. 16896  (set from the ES page above)
-    "CL  (Crude Oil)": None,   # e.g. 6050   (set from the CL page above)
-}
-MANUAL_UPDATED = "not set"     # bump this date when you update the two above
+CME_CODES = {"BTC (Bitcoin)": "BTC"}
 
 _session = cffi_requests.Session(impersonate="chrome110")
 
@@ -100,150 +91,79 @@ def build_board() -> pd.DataFrame:
 
 
 # --------------------------------------------------------------------------- #
-# CME margins
+# Margins — helpers
 # --------------------------------------------------------------------------- #
-@st.cache_data(ttl=3600, show_spinner=False)
-def get_cme_raw() -> pd.DataFrame:
-    raw = _session.get(CME_URL, timeout=25).text
-    df = pd.read_csv(io.StringIO(raw))
-    df["Product Name"] = df["Product Name"].astype(str).str.upper().str.strip()
-    return df
-
-
-def _to_month(s):
-    """Parse a 'MM/YYYY' period string to a Timestamp (1st of month)."""
+def _money(x):
     try:
-        m, y = str(s).strip().split("/")
-        return pd.Timestamp(int(y), int(m), 1)
+        return float(str(x).replace("$", "").replace(",", "").strip())
     except Exception:  # noqa: BLE001
-        return pd.NaT
-
-
-def _front_month(df: pd.DataFrame):
-    """From rows sharing a product code, pick the front (nearest active) contract."""
-    d = df.copy()
-    d["_start"] = d["Start Period"].map(_to_month)
-    d["_end"] = d["End Period"].map(_to_month)
-    now = pd.Timestamp.now().normalize().replace(day=1)
-    active = d[d["_end"] >= now]
-    pool = active if not active.empty else d
-    return pool.sort_values("_start").iloc[0]
-
-
-def _pick(cme: pd.DataFrame, rule: dict):
-    """CSV source: return the FRONT-MONTH row for a product code, or None."""
-    codes = {c.upper() for c in rule["codes"]}
-    df = cme[cme["Product Code"].astype(str).str.strip().str.upper().isin(codes)]
-    return None if df.empty else _front_month(df)
-
-
-def get_span2_margin(code: str, label: str):
-    """
-    SPAN 2 source for ES / CL (absent from OUTRIGHT.csv).
-    Resolver order:
-      1) scrape the dedicated CME margin page (works only if the table is in the
-         static HTML — today it's JS-injected, so this usually returns None),
-      2) fall back to the manually-set value so the row always shows a number.
-    Returns (value, source_tag) or (None, None).
-    """
-    scraped = scrape_cme_margin_page(code)
-    if scraped is not None:
-        return scraped, "CME page"
-    manual = MANUAL_MAINT.get(label)
-    if manual is not None:
-        return manual, f"manual ({MANUAL_UPDATED})"
-    return None, None
-
-
-CME_MARGIN_PAGES = {
-    "ES": "https://www.cmegroup.com/markets/equities/sp/e-mini-sandp500.margins.html",
-    "CL": "https://www.cmegroup.com/markets/energy/crude-oil/light-sweet-crude.margins.html",
-}
+        return None
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def scrape_cme_margin_page(code: str):
-    """Best-effort: parse the nearest contract's maintenance margin off the page.
-    Returns a float or None. Returns None when the table is JS-rendered."""
-    url = CME_MARGIN_PAGES.get(code)
-    if not url:
-        return None
-    try:
-        html = _session.get(url, timeout=25).text
-        tables = pd.read_html(io.StringIO(html))
-    except Exception:  # noqa: BLE001  (no tables in static HTML, network, etc.)
-        return None
-    for t in tables:
-        t.columns = [
-            " ".join(map(str, c)).strip() if isinstance(c, tuple) else str(c).strip()
-            for c in t.columns
-        ]
-        code_col = next((c for c in t.columns if "product code" in c.lower()), None)
-        maint_col = next((c for c in t.columns if "maintenance" in c.lower()), None)
-        if not code_col or not maint_col:
+def get_amp_table() -> pd.DataFrame:
+    """Scrape AMP's static margins table into Symbol/Name/Exchange/Maint/Day."""
+    html = _session.get(AMP_URL, timeout=25).text
+    rows = []
+    for t in pd.read_html(io.StringIO(html)):
+        cols = [str(c) for c in t.columns]
+        symcol = next((c for c in cols if str(c).strip().lower() == "symbol"), None)
+        maintcol = next((c for c in cols if "maintenance" in str(c).lower()), None)
+        daycol = next((c for c in cols if "day" in str(c).lower()), None)
+        namecol = next((c for c in cols if str(c).strip().lower() == "name"), None)
+        exchcol = next((c for c in cols if "exchange" in str(c).lower()), None)
+        if not symcol or not maintcol:
             continue
-        m = t[t[code_col].astype(str).str.strip().str.upper().eq(code.upper())]
-        if m.empty:
-            continue
-        try:
-            return float(str(m.iloc[0][maint_col]).replace(",", "").replace("$", ""))
-        except Exception:  # noqa: BLE001
-            continue
-    return None
+        t.columns = cols
+        for _, r in t.iterrows():
+            rows.append({
+                "Symbol": str(r[symcol]).strip(),
+                "Name": str(r[namecol]).strip() if namecol else "",
+                "Exchange": str(r[exchcol]).strip() if exchcol else "",
+                "Maint": _money(r[maintcol]),
+                "Day": _money(r[daycol]) if daycol else None,
+            })
+    return pd.DataFrame(rows)
 
 
-def _fmt_maint(v) -> str:
-    try:
-        return f"{float(str(v).replace(',', '')):,.0f}"
-    except Exception:  # noqa: BLE001
-        return str(v)
-
-
-SPAN2_PRODUCTS = {"ES  (S&P 500)", "CL  (Crude Oil)"}
+@st.cache_data(ttl=3600, show_spinner=False)
+def get_cme_btc() -> float:
+    """Front-month BTC maintenance from CME OUTRIGHT.csv."""
+    df = pd.read_csv(io.StringIO(_session.get(CME_URL, timeout=25).text))
+    hit = df[df["Product Code"].astype(str).str.strip().str.upper() == "BTC"]
+    return _money(hit.iloc[0]["Maintenance"]) if not hit.empty else None
 
 
 def build_margins() -> pd.DataFrame:
     try:
-        cme = get_cme_raw()
+        amp = get_amp_table()
     except Exception as e:  # noqa: BLE001
-        return pd.DataFrame([{"Instrument": "ERROR", "Month": "", "Code": "",
-                              "Maint (USD)": str(e), "Vol Scan": "", "Source": ""}])
+        return pd.DataFrame([{"Instrument": "AMP ERROR", "Sym": "", "Exchange": "",
+                              "Maint (USD)": str(e), "Day (USD)": "", "Source": ""}])
     rows = []
-    for label, rule in CME_RULES.items():
-        # 1) Legacy SPAN via OUTRIGHT.csv (front-month row)
-        r = _pick(cme, rule)
-        if r is not None:
-            rows.append({
-                "Instrument": label,
-                "Month": str(r["Start Period"]).strip(),
-                "Code": str(r["Product Code"]).strip(),
-                "Maint (USD)": _fmt_maint(r["Maintenance"]),
-                "Vol Scan": r.get("Maint. Vol. Scan", ""),
-                "Source": "CME CSV",
-            })
-            continue
-        # 2) SPAN 2 source (ES / CL): try page scrape, then manual fallback
-        if label in SPAN2_PRODUCTS:
-            code = next(iter(rule["codes"]))
-            val, src = get_span2_margin(code, label)
-            if val is not None:
+    for label in SYMBOLS:
+        if label in AMP_SYMBOLS:
+            sym = AMP_SYMBOLS[label]
+            hit = amp[amp["Symbol"].str.upper() == sym.upper()]
+            if not hit.empty:
+                r = hit.iloc[0]
                 rows.append({
-                    "Instrument": label, "Month": "front", "Code": code,
-                    "Maint (USD)": _fmt_maint(val), "Vol Scan": "—",
-                    "Source": src,
+                    "Instrument": label, "Sym": sym, "Exchange": r["Exchange"],
+                    "Maint (USD)": f"{r['Maint']:,.0f}" if r["Maint"] else "—",
+                    "Day (USD)": f"{r['Day']:,.0f}" if r["Day"] else "—",
+                    "Source": "AMP",
                 })
             else:
-                rows.append({
-                    "Instrument": label, "Month": "—", "Code": code,
-                    "Maint (USD)": "— set in code", "Vol Scan": "—",
-                    "Source": "SPAN2 page",
-                })
-            continue
-        # 3) Neither
-        rows.append({
-            "Instrument": label, "Month": "—", "Code": "—",
-            "Maint (USD)": "—", "Vol Scan": "—", "Source": "not found",
-        })
+                rows.append({"Instrument": label, "Sym": sym, "Exchange": "—",
+                             "Maint (USD)": "—", "Day (USD)": "—", "Source": "AMP (missing)"})
+        elif label in CME_CODES:
+            try:
+                v = get_cme_btc()
+            except Exception:  # noqa: BLE001
+                v = None
+            rows.append({"Instrument": label, "Sym": "BTC", "Exchange": "CME",
+                         "Maint (USD)": f"{v:,.0f}" if v else "—",
+                         "Day (USD)": "—", "Source": "CME CSV"})
     return pd.DataFrame(rows)
 
 
@@ -261,41 +181,25 @@ def render_board() -> None:
             return ""
         return "color: #4ade80;" if v >= 0 else "color: #f87171;"
 
-    styled = (
-        df.style
-        .map(colour, subset=["Chg %"])
+    st.table(
+        df.style.map(colour, subset=["Chg %"])
         .format({"Chg %": lambda v: "—" if v is None or pd.isna(v) else f"{v:+.2f}%"})
         .hide(axis="index")
     )
-    st.table(styled)
 
 
 def render_margins() -> None:
     st.caption(
-        "CME maintenance margin per contract. Vol Scan = margin as a % of the "
-        "contract's notional (a leverage/riskiness gauge). Initial ≈ maintenance "
-        "× ~1.1; your broker adds house margin. Sugar (SB) is ICE, not CME."
+        "Overnight **maintenance** + AMP **day-trade** margin per contract. "
+        "Maintenance is exchange-set (AMP shows the retail figure, ~10% above raw "
+        "CME). BTC comes from CME's CSV. Margins change with volatility — verify "
+        "before sizing a trade."
     )
     if st.button("🔄 Refresh margins"):
-        get_cme_raw.clear()
+        get_amp_table.clear()
+        get_cme_btc.clear()
         st.rerun()
     st.table(build_margins().style.hide(axis="index"))
-
-    with st.expander("🔍 Look up a CME product name"):
-        st.caption("Type part of a contract name to see what CME calls it "
-                   "(use this to fix any '(no match)' or wrong row).")
-        q = st.text_input("Search", value="S&P")
-        if q:
-            try:
-                cme = get_cme_raw()
-                hit = cme[cme["Product Name"].str.contains(q.upper(), na=False)]
-                st.dataframe(
-                    hit[["Product Name", "Product Code", "Maintenance",
-                         "Maint. Vol. Scan"]].reset_index(drop=True),
-                    use_container_width=True,
-                )
-            except Exception as e:  # noqa: BLE001
-                st.error(str(e))
 
 
 def main() -> None:
