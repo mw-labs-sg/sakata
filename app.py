@@ -491,20 +491,33 @@ def render_curve() -> None:
             "negative = contango (roll drag). Roll = front − 2nd month."
         )
 
-    # --- zoomed chart ---
+    # --- chart: settle line over OI bars (dual axis) ---
+    view = view.copy()
+    view["OI_num"] = view["OI"].map(_num)
+    view["Vol_num"] = view["Volume"].map(_num)
     lo, hi = view["Settle"].min(), view["Settle"].max()
     pad = max((hi - lo) * 0.15, 0.5)
-    chart = (
-        alt.Chart(view)
-        .mark_line(point=True, color="#14b8a6")
-        .encode(
-            x=alt.X("_date:T", title="Contract month"),
-            y=alt.Y("Settle:Q", title="Settle",
-                    scale=alt.Scale(domain=[lo - pad, hi + pad])),
-            tooltip=["Month", "Settle"],
-        )
-        .properties(height=320)
+    order = list(view["Month"])
+
+    base = alt.Chart(view).encode(
+        x=alt.X("Month:N", sort=order, title=None,
+                axis=alt.Axis(labelAngle=-45, labelFontSize=10))
     )
+    bars = base.mark_bar(color="#cbd5e1", opacity=0.5).encode(
+        y=alt.Y("OI_num:Q", axis=alt.Axis(title="Open interest", orient="right",
+                                          grid=False)),
+        tooltip=["Month", "Settle", "OI", "Volume"],
+    )
+    line = base.mark_line(point=alt.OverlayMarkDef(size=35, filled=True),
+                          color="#0d9488", strokeWidth=2.5).encode(
+        y=alt.Y("Settle:Q", axis=alt.Axis(title="Settle", orient="left"),
+                scale=alt.Scale(domain=[lo - pad, hi + pad])),
+        tooltip=["Month", "Settle", "OI", "Volume"],
+    )
+    chart = (alt.layer(bars, line).resolve_scale(y="independent")
+             .properties(height=360)
+             .configure_view(strokeWidth=0)
+             .configure_axis(labelColor="#6b7280", titleColor="#6b7280"))
     st.altair_chart(chart, use_container_width=True)
     st.table(view.drop(columns="_date").style.hide(axis="index")
              .format({"Settle": lambda v: f"{v:,.2f}"}))
