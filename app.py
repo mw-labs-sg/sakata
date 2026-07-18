@@ -1,13 +1,16 @@
 """
 Sakata — Futures Board (v1)
 ---------------------------
-Small, plain dashboard: current price + day change for a fixed set of futures.
-Data via yfinance, using a curl_cffi chrome session to dodge rate limits.
+Two tabs:
+  • Board   — current price + day change (yfinance)
+  • Margins — current CME maintenance margin per contract (CME public CSV)
 
-Keep it boring for now. Charts / levels / P&L come later.
+Data via yfinance and CME's public margins endpoint, both fetched through a
+curl_cffi chrome session to dodge bot-blocking / rate limits.
 """
 
 import datetime as dt
+import io
 import time
 
 import pandas as pd
@@ -20,7 +23,7 @@ from curl_cffi import requests as cffi_requests
 # --------------------------------------------------------------------------- #
 st.set_page_config(page_title="Sakata", page_icon="🎋", layout="centered")
 
-# Your eight. name -> (yahoo_ticker, decimals)
+# Price board. name -> (yahoo_ticker, decimals)
 SYMBOLS = {
     "ES  (S&P 500)":   ("ES=F", 2),
     "ZB  (T-Bond)":    ("ZB=F", 2),
@@ -32,12 +35,25 @@ SYMBOLS = {
     "BTC (Bitcoin)":   ("BTC=F", 0),
 }
 
+# CME margins. name -> keyword to match in CME's "Product Name" column.
+# SB (Sugar #11) is an ICE product, so it's intentionally absent here.
+CME_URL = "https://www.cmegroup.com/CmeWS/mvc/Margins/OUTRIGHT.csv"
+CME_MATCH = {
+    "ES  (S&P 500)":   "E-MINI S&P 500",
+    "ZB  (T-Bond)":    "U.S. TREASURY BOND",
+    "EC  (Euro FX)":   "EURO FX",
+    "CL  (Crude Oil)": "CRUDE OIL",
+    "GC  (Gold)":      "GOLD FUTURES",
+    "ZC  (Corn)":      "CORN FUTURES",
+    "BTC (Bitcoin)":   "BITCOIN",
+}
+
 # Shared browser-impersonating session (kept out of Streamlit's cache).
 _session = cffi_requests.Session(impersonate="chrome110")
 
 
 # --------------------------------------------------------------------------- #
-# Data
+# Data — prices
 # --------------------------------------------------------------------------- #
 @st.cache_data(ttl=60, show_spinner=False)
 def get_quote(ticker: str, attempts: int = 3) -> dict:
@@ -56,7 +72,6 @@ def get_quote(ticker: str, attempts: int = 3) -> dict:
                 return {"last": last, "chg": chg, "pct": pct}
         except Exception as e:  # noqa: BLE001
             last_err = str(e)
-        # empty or errored -> wait a moment and retry (handles cold-start throttle)
         time.sleep(0.6 * (i + 1))
     return {"last": None, "chg": None, "pct": None, "err": last_err}
 
@@ -78,15 +93,45 @@ def build_board() -> pd.DataFrame:
 
 
 # --------------------------------------------------------------------------- #
+# Data — CME margins
+# --------------------------------------------------------------------------- #
+@st.cache_data(ttl=3600, show_spinner=False)
+def get_cme_raw() -> pd.DataFrame:
+    """Download the full CME outright maintenance-margin CSV."""
+    raw = _session.get(CME_URL, timeout=25).text
+    df = pd.read_csv(io.StringIO(raw))
+    df["Product Name"] = df["Product Name"].astype(str).str.upper()
+    return df
+
+
+def build_margins() -> pd.DataFrame:
+    try:
+        cme = get_cme_raw()
+    except Exception as e:  # noqa: BLE001
+        return pd.DataFrame([{"Instrument": "ERROR", "Maintenance": str(e),
+                              "Vol Scan": "", "Matched product": ""}])
+    rows = []
+    for label, kw in CME_MATCH.items():
+        hit = cme[cme["Product Name"].str.contains(kw, na=False)]
+        if hit.empty:
+            rows.append({"Instrument": label, "Maintenance": "—",
+                         "Vol Scan": "—", "Matched product": "(no match)"})
+        else:
+            r = hit.iloc[0]
+            rows.append({
+                "Instrument": label,
+                "Maintenance": r["Maintenance"],
+                "Vol Scan": r.get("Maint. Vol. Scan", ""),
+                "Matched product": str(r["Product Name"]).title(),
+            })
+    return pd.DataFrame(rows)
+
+
+# --------------------------------------------------------------------------- #
 # UI
 # --------------------------------------------------------------------------- #
-def main() -> None:
-    st.title("🎋 Sakata")
-    st.caption(
-        f"Futures board · delayed data · refreshed {dt.datetime.now():%H:%M:%S}"
-    )
-
-    if st.button("🔄 Refresh"):
+def render_board() -> None:
+    if st.button("🔄 Refresh prices"):
         st.cache_data.clear()
         st.rerun()
 
@@ -104,6 +149,29 @@ def main() -> None:
         .hide(axis="index")
     )
     st.table(styled)
+
+
+def render_margins() -> None:
+    st.caption(
+        "CME maintenance margin per contract (initial ≈ maintenance × ~1.1; "
+        "your broker sets its own house margin). Sugar (SB) is ICE, not CME, so "
+        "it's not shown. Updated by CME roughly daily."
+    )
+    if st.button("🔄 Refresh margins"):
+        get_cme_raw.clear()
+        st.rerun()
+    st.table(build_margins().style.hide(axis="index"))
+
+
+def main() -> None:
+    st.title("🎋 Sakata")
+    st.caption(f"Refreshed {dt.datetime.now():%Y-%m-%d %H:%M:%S}")
+
+    tab_board, tab_margins = st.tabs(["Board", "Margins"])
+    with tab_board:
+        render_board()
+    with tab_margins:
+        render_margins()
 
 
 if __name__ == "__main__":
