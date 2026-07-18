@@ -101,29 +101,31 @@ def _money(x):
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def get_amp_table() -> pd.DataFrame:
-    """Scrape AMP's static margins table into Symbol/Name/Exchange/Maint/Day."""
+def get_amp_margins() -> dict:
+    """Scrape AMP's margins table by matching cell VALUES (robust to how the
+    HTML headers get parsed). Returns {amp_symbol: {name, exch, maint, day}}."""
+    wanted = set(AMP_SYMBOLS.values())
+    exchanges = ("CME", "CBOT", "COMEX", "NYMEX", "ICE", "Eurex")
     html = _session.get(AMP_URL, timeout=25).text
-    rows = []
+    out: dict = {}
     for t in pd.read_html(io.StringIO(html)):
-        cols = [str(c) for c in t.columns]
-        symcol = next((c for c in cols if str(c).strip().lower() == "symbol"), None)
-        maintcol = next((c for c in cols if "maintenance" in str(c).lower()), None)
-        daycol = next((c for c in cols if "day" in str(c).lower()), None)
-        namecol = next((c for c in cols if str(c).strip().lower() == "name"), None)
-        exchcol = next((c for c in cols if "exchange" in str(c).lower()), None)
-        if not symcol or not maintcol:
-            continue
-        t.columns = cols
-        for _, r in t.iterrows():
-            rows.append({
-                "Symbol": str(r[symcol]).strip(),
-                "Name": str(r[namecol]).strip() if namecol else "",
-                "Exchange": str(r[exchcol]).strip() if exchcol else "",
-                "Maint": _money(r[maintcol]),
-                "Day": _money(r[daycol]) if daycol else None,
-            })
-    return pd.DataFrame(rows)
+        for row in t.itertuples(index=False):
+            cells = [str(c).strip() for c in row if str(c).strip().lower() != "nan"]
+            sym = next((c for c in cells if c in wanted), None)
+            if not sym or sym in out:
+                continue
+            monies = [m for m in (_money(c) for c in cells
+                                  if str(c).strip().startswith("$")) if m is not None]
+            if not monies:
+                continue
+            exch = next((c for c in cells if any(x in c for x in exchanges)), "")
+            out[sym] = {
+                "name": cells[0] if cells else "",
+                "exch": exch,
+                "maint": monies[0],
+                "day": monies[1] if len(monies) > 1 else None,
+            }
+    return out
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
@@ -136,26 +138,26 @@ def get_cme_btc() -> float:
 
 def build_margins() -> pd.DataFrame:
     try:
-        amp = get_amp_table()
+        amp = get_amp_margins()
     except Exception as e:  # noqa: BLE001
         return pd.DataFrame([{"Instrument": "AMP ERROR", "Sym": "", "Exchange": "",
-                              "Maint (USD)": str(e), "Day (USD)": "", "Source": ""}])
+                              "Maint (USD)": str(e)[:60], "Day (USD)": "", "Source": ""}])
     rows = []
     for label in SYMBOLS:
         if label in AMP_SYMBOLS:
             sym = AMP_SYMBOLS[label]
-            hit = amp[amp["Symbol"].str.upper() == sym.upper()]
-            if not hit.empty:
-                r = hit.iloc[0]
+            r = amp.get(sym)
+            if r:
                 rows.append({
-                    "Instrument": label, "Sym": sym, "Exchange": r["Exchange"],
-                    "Maint (USD)": f"{r['Maint']:,.0f}" if r["Maint"] else "—",
-                    "Day (USD)": f"{r['Day']:,.0f}" if r["Day"] else "—",
+                    "Instrument": label, "Sym": sym, "Exchange": r["exch"],
+                    "Maint (USD)": f"{r['maint']:,.0f}" if r["maint"] else "—",
+                    "Day (USD)": f"{r['day']:,.0f}" if r["day"] else "—",
                     "Source": "AMP",
                 })
             else:
                 rows.append({"Instrument": label, "Sym": sym, "Exchange": "—",
-                             "Maint (USD)": "—", "Day (USD)": "—", "Source": "AMP (missing)"})
+                             "Maint (USD)": "—", "Day (USD)": "—",
+                             "Source": "AMP (missing)"})
         elif label in CME_CODES:
             try:
                 v = get_cme_btc()
@@ -196,7 +198,7 @@ def render_margins() -> None:
         "before sizing a trade."
     )
     if st.button("🔄 Refresh margins"):
-        get_amp_table.clear()
+        get_amp_margins.clear()
         get_cme_btc.clear()
         st.rerun()
     st.table(build_margins().style.hide(axis="index"))
