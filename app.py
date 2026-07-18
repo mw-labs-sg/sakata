@@ -269,14 +269,34 @@ def _num(x):
 
 
 @st.cache_data(ttl=1800, show_spinner=False)
+def get_curve_raw(pid: int) -> str:
+    """Raw response text (for debugging the JSON shape)."""
+    return _session.get(CURVE_URL.format(pid=pid), timeout=25,
+                        headers={"Accept": "application/json"}).text
+
+
+def _find_settlements(data):
+    """Locate the list-of-dicts holding the monthly rows, wherever it sits."""
+    if isinstance(data, list):
+        return [x for x in data if isinstance(x, dict)]
+    if isinstance(data, dict):
+        s = data.get("settlements")
+        if isinstance(s, list):
+            return [x for x in s if isinstance(x, dict)]
+        for v in data.values():  # search one level down
+            if isinstance(v, list) and v and isinstance(v[0], dict):
+                if any(k in v[0] for k in ("month", "settle", "last")):
+                    return v
+    return []
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
 def get_curve(pid: int) -> pd.DataFrame:
     """Fetch the full settlement strip (term structure) for a productId."""
-    r = _session.get(CURVE_URL.format(pid=pid), timeout=25,
-                     headers={"Accept": "application/json"})
-    data = r.json()
-    settlements = data.get("settlements", data) if isinstance(data, dict) else data
+    import json as _json
+    data = _json.loads(get_curve_raw(pid))
     rows = []
-    for s in settlements:
+    for s in _find_settlements(data):
         month = str(s.get("month", "")).strip()
         if not month or month.lower() in ("total", "totals"):
             continue
@@ -385,6 +405,11 @@ def render_curve() -> None:
         return
     if df.empty:
         st.info("No settlement data returned.")
+        with st.expander("🔧 Debug: raw CME response"):
+            try:
+                st.code(get_curve_raw(pid)[:1500])
+            except Exception as e:  # noqa: BLE001
+                st.write(str(e))
         return
 
     front, back = df["Settle"].iloc[0], df["Settle"].iloc[-1]
