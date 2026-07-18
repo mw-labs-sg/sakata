@@ -8,6 +8,7 @@ Keep it boring for now. Charts / levels / P&L come later.
 """
 
 import datetime as dt
+import time
 
 import pandas as pd
 import streamlit as st
@@ -39,19 +40,25 @@ _session = cffi_requests.Session(impersonate="chrome110")
 # Data
 # --------------------------------------------------------------------------- #
 @st.cache_data(ttl=60, show_spinner=False)
-def get_quote(ticker: str) -> dict:
-    """Last price + change vs previous daily close."""
-    try:
-        hist = yf.Ticker(ticker, session=_session).history(period="5d", interval="1d")
-        if hist.empty:
-            return {"last": None, "chg": None, "pct": None}
-        last = float(hist["Close"].iloc[-1])
-        prev = float(hist["Close"].iloc[-2]) if len(hist) > 1 else last
-        chg = last - prev
-        pct = (chg / prev * 100) if prev else 0.0
-        return {"last": last, "chg": chg, "pct": pct}
-    except Exception as e:  # noqa: BLE001
-        return {"last": None, "chg": None, "pct": None, "err": str(e)}
+def get_quote(ticker: str, attempts: int = 3) -> dict:
+    """Last price + change vs previous daily close, with retry on throttle."""
+    last_err = None
+    for i in range(attempts):
+        try:
+            hist = yf.Ticker(ticker, session=_session).history(
+                period="5d", interval="1d"
+            )
+            if not hist.empty:
+                last = float(hist["Close"].iloc[-1])
+                prev = float(hist["Close"].iloc[-2]) if len(hist) > 1 else last
+                chg = last - prev
+                pct = (chg / prev * 100) if prev else 0.0
+                return {"last": last, "chg": chg, "pct": pct}
+        except Exception as e:  # noqa: BLE001
+            last_err = str(e)
+        # empty or errored -> wait a moment and retry (handles cold-start throttle)
+        time.sleep(0.6 * (i + 1))
+    return {"last": None, "chg": None, "pct": None, "err": last_err}
 
 
 def build_board() -> pd.DataFrame:
