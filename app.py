@@ -17,6 +17,7 @@ import io
 import calendar
 import time
 
+import altair as alt
 import pandas as pd
 import streamlit as st
 import yfinance as yf
@@ -467,7 +468,44 @@ def render_curve() -> None:
     c2.metric(f"Back ({view['Month'].iloc[-1]})", f"{back:,.2f}")
     c3.metric(shape, f"{back - front:+,.2f}")
 
-    st.line_chart(view.set_index("_date")["Settle"], height=300)
+    # --- roll / cost of carry ---
+    def _months_between(d1, d2):
+        return (d2.year - d1.year) * 12 + (d2.month - d1.month)
+
+    if len(view) > 1:
+        m1, m2 = view.iloc[0], view.iloc[1]
+        roll = m1["Settle"] - m2["Settle"]            # >0 = backwardation
+        roll_pct = roll / m2["Settle"] * 100 if m2["Settle"] else 0
+        step = _months_between(m1["_date"], m2["_date"]) or 1
+        roll_ann = roll_pct * (12 / step)
+        span = _months_between(view["_date"].iloc[0], view["_date"].iloc[-1]) or 1
+        carry_ann = (front - back) / back * (12 / span) * 100 if back else 0
+        d1, d2, d3 = st.columns(3)
+        d1.metric(f"Next roll ({m1['Month']}→{m2['Month']})",
+                  f"{roll:+,.2f}", f"{roll_pct:+.2f}%")
+        d2.metric("Roll annualized", f"{roll_ann:+.1f}%")
+        d3.metric(f"Carry annualized (→{view['Month'].iloc[-1]})",
+                  f"{carry_ann:+.1f}%")
+        st.caption(
+            "Positive = backwardation (roll tailwind for longs); "
+            "negative = contango (roll drag). Roll = front − 2nd month."
+        )
+
+    # --- zoomed chart ---
+    lo, hi = view["Settle"].min(), view["Settle"].max()
+    pad = max((hi - lo) * 0.15, 0.5)
+    chart = (
+        alt.Chart(view)
+        .mark_line(point=True, color="#14b8a6")
+        .encode(
+            x=alt.X("_date:T", title="Contract month"),
+            y=alt.Y("Settle:Q", title="Settle",
+                    scale=alt.Scale(domain=[lo - pad, hi + pad])),
+            tooltip=["Month", "Settle"],
+        )
+        .properties(height=320)
+    )
+    st.altair_chart(chart, use_container_width=True)
     st.table(view.drop(columns="_date").style.hide(axis="index")
              .format({"Settle": lambda v: f"{v:,.2f}"}))
 
