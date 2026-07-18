@@ -37,14 +37,16 @@ SYMBOLS = {
 #   exact = preferred exact product name if present
 # SB (Sugar #11) is ICE, not CME, so it's not here.
 CME_URL = "https://www.cmegroup.com/CmeWS/mvc/Margins/OUTRIGHT.csv"
+# Locked to exact CME Product Codes (confirmed from the outrights file).
+# ES / CL may be absent from filtered exports; they resolve from the full file.
 CME_RULES = {
-    "ES  (S&P 500)":   dict(inc="S&P 500",       exc=["MICRO", "OPTION", "DIVIDEND", "TAS", "BTIC", "ADJUSTED", "ANNUAL"], exact="E-MINI S&P 500 FUTURES"),
-    "ZB  (T-Bond)":    dict(inc="TREASURY BOND",  exc=["ULTRA", "MICRO", "OPTION", "TAS"],                                  exact=None),
-    "EC  (Euro FX)":   dict(inc="EURO FX",        exc=["E-MINI", "E-MICRO", "MICRO", "OPTION", "TAS"],                      exact="EURO FX FUTURES"),
-    "CL  (Crude Oil)": dict(inc="CRUDE OIL",      exc=["CALENDAR", "STRIP", "SYNTH", "MICRO", "OPTION", "FINANCIAL", "TAS", "AVERAGE", "BULLET", "MODULE", "WTI"], exact="CRUDE OIL FUTURES"),
-    "GC  (Gold)":      dict(inc="GOLD",           exc=["MICRO", "OUNCE", "E-MICRO", "OPTION", "KILO", "SHANGHAI", "TAS", "ENGLAND"], exact="GOLD FUTURES"),
-    "ZC  (Corn)":      dict(inc="CORN",           exc=["MICRO", "MINI", "SHORT-DATED", "OPTION", "TAS", "SOUTH AMERICAN"],  exact="CORN FUTURES"),
-    "BTC (Bitcoin)":   dict(inc="BITCOIN",        exc=["MICRO", "BTIC", "FRIDAY", "OPTION", "TAS", "ETHER"],                exact="BITCOIN FUTURES"),
+    "ES  (S&P 500)":   dict(codes={"ES"}),
+    "ZB  (T-Bond)":    dict(codes={"17"}),
+    "EC  (Euro FX)":   dict(codes={"EC"}),
+    "CL  (Crude Oil)": dict(codes={"CL"}),
+    "GC  (Gold)":      dict(codes={"GC"}),
+    "ZC  (Corn)":      dict(codes={"C"}),
+    "BTC (Bitcoin)":   dict(codes={"BTC"}),
 }
 
 _session = cffi_requests.Session(impersonate="chrome110")
@@ -99,16 +101,14 @@ def get_cme_raw() -> pd.DataFrame:
 
 
 def _pick(cme: pd.DataFrame, rule: dict):
+    if "codes" in rule:
+        codes = {c.upper() for c in rule["codes"]}
+        df = cme[cme["Product Code"].astype(str).str.strip().str.upper().isin(codes)]
+        return None if df.empty else df.iloc[0]
     df = cme[cme["Product Name"].str.contains(rule["inc"], na=False)]
-    for x in rule["exc"]:
+    for x in rule.get("exc", []):
         df = df[~df["Product Name"].str.contains(x, na=False)]
-    if df.empty:
-        return None
-    if rule.get("exact"):
-        ex = df[df["Product Name"] == rule["exact"]]
-        if not ex.empty:
-            return ex.iloc[0]
-    return df.iloc[0]
+    return None if df.empty else df.iloc[0]
 
 
 def _fmt_maint(v) -> str:
@@ -128,11 +128,12 @@ def build_margins() -> pd.DataFrame:
     for label, rule in CME_RULES.items():
         r = _pick(cme, rule)
         if r is None:
-            rows.append({"Instrument": label, "Maint (USD)": "—",
+            rows.append({"Instrument": label, "Code": "—", "Maint (USD)": "—",
                          "Vol Scan": "—", "Matched product": "(no match)"})
         else:
             rows.append({
                 "Instrument": label,
+                "Code": str(r["Product Code"]).strip(),
                 "Maint (USD)": _fmt_maint(r["Maintenance"]),
                 "Vol Scan": r.get("Maint. Vol. Scan", ""),
                 "Matched product": str(r["Product Name"]).title(),
