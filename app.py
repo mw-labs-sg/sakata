@@ -29,7 +29,6 @@ st.set_page_config(page_title="Sakata", page_icon="🎋", layout="centered")
 # Scanner sectors. sector -> {name: (yahoo_ticker, decimals)}
 SECTORS = {
     "Indices":    {"ES  S&P 500": ("ES=F", 2), "NQ  Nasdaq": ("NQ=F", 2)},
-    "Volatility": {"VIX  Vol": ("^VIX", 2)},
     "Bonds":      {"ZB  T-Bond": ("ZB=F", 3), "ZN  10Y Note": ("ZN=F", 3),
                    "SR3  SOFR": ("SR3=F", 4)},
     "Currencies": {"6E  Euro": ("6E=F", 4), "6J  Yen": ("6J=F", 7)},
@@ -568,11 +567,10 @@ def render_board() -> None:
         .configure_axis(labelColor="#64748b"))
     st.altair_chart(bar, use_container_width=True)
 
-    # --- full scanner ---
+    # --- full scanner (tight table, all rows in one shot) ---
     st.markdown("##### Scanner")
-    st.dataframe(
-        df.style.map(pct_colour, subset=horizons).format(fmt_map),
-        hide_index=True, use_container_width=True, height=770,
+    st.table(
+        df.style.map(pct_colour, subset=horizons).format(fmt_map).hide(axis="index")
     )
 
 
@@ -589,13 +587,11 @@ def render_margins() -> None:
         get_atr.clear()
         get_ann_vol.clear()
         st.rerun()
-    df = build_margins()
-    st.dataframe(
-        df, hide_index=True, use_container_width=True, height=700,
-        column_config={
-            "Marg/Vol": st.column_config.NumberColumn(format="%.2f"),
-            "Days ATR": st.column_config.NumberColumn(format="%.1f"),
-        },
+    df = build_margins().sort_values("Marg/Vol", ascending=True, na_position="last")
+    st.table(
+        df.style.format({"Marg/Vol": lambda v: "—" if pd.isna(v) else f"{v:.2f}",
+                         "Days ATR": lambda v: "—" if pd.isna(v) else f"{v:.1f}"})
+        .hide(axis="index")
     )
 
 
@@ -864,20 +860,21 @@ def render_curve() -> None:
 
 _CSS = """
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap');
 
 html, body, [data-testid="stAppViewContainer"], .stMarkdown,
 .stButton, input, textarea, select, [data-baseweb], [class*="st-"] {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
 }
-.block-container { padding-top: 2.8rem; padding-bottom: 2.5rem; max-width: 1180px; }
+.block-container { padding-top: 2.4rem; padding-bottom: 2rem; max-width: 1000px; }
 
 /* header */
-.sakata-head { display:flex; align-items:baseline; gap:12px; border-bottom:2px solid #0f766e;
-  padding-bottom:10px; margin-bottom:10px; }
-.sakata-title { font-size:1.45rem; font-weight:700; letter-spacing:-0.02em; color:#0f172a;
-  font-family:'Inter'; }
-.sakata-sub { font-size:11.5px; color:#94a3b8; font-weight:500; letter-spacing:0.02em; }
+.sakata-head { display:flex; align-items:center; gap:11px; border-bottom:2px solid #0f766e;
+  padding-bottom:9px; margin-bottom:12px; }
+.sakata-title { font-family:'Poppins',sans-serif !important; font-size:1.4rem; font-weight:700;
+  letter-spacing:-0.01em; color:#0f172a; }
+.sakata-sub { font-size:11px; color:#94a3b8; font-weight:500; letter-spacing:0.03em;
+  margin-left:auto; text-transform:uppercase; }
 
 /* tabs */
 .stTabs [data-baseweb="tab-list"] { gap:2px; border-bottom:1px solid #e5e7eb; }
@@ -887,39 +884,56 @@ html, body, [data-testid="stAppViewContainer"], .stMarkdown,
 .stTabs [data-baseweb="tab-highlight"] { background-color:#0f766e; height:2px; }
 
 /* eyebrow subheaders */
-.stMarkdown h5 { font-size:11px; text-transform:uppercase; letter-spacing:0.08em;
-  color:#64748b; font-weight:700; margin:10px 0 4px; }
+.stMarkdown h5 { font-family:'Poppins',sans-serif !important; font-size:11px;
+  text-transform:uppercase; letter-spacing:0.07em; color:#475569; font-weight:600;
+  margin:10px 0 4px; }
 
-/* buttons — flat, compact, professional */
-.stButton>button { border:1px solid #e2e8f0; border-radius:6px; padding:3px 16px;
-  font-size:12px; font-weight:600; letter-spacing:0.03em; text-transform:uppercase;
-  color:#475569; background:#fff; box-shadow:none; transition:all .12s; min-height:32px; }
+/* buttons */
+.stButton>button { border:1px solid #e2e8f0; border-radius:6px; padding:2px 15px;
+  font-size:11px; font-weight:600; letter-spacing:0.05em; text-transform:uppercase;
+  color:#475569; background:#fff; box-shadow:none; transition:all .12s; min-height:30px; }
 .stButton>button:hover { border-color:#0f766e; color:#0f766e; background:#f0fdfa; }
 .stButton>button:active, .stButton>button:focus { color:#0f766e; border-color:#0f766e;
   box-shadow:none; }
 
-/* captions + control labels */
+/* captions + controls */
 [data-testid="stCaptionContainer"] { color:#64748b; font-size:12px; line-height:1.5; }
-.stRadio label, .stSelectbox label, .stMultiSelect label { font-size:11px; color:#94a3b8;
-  font-weight:700; text-transform:uppercase; letter-spacing:0.05em; }
-.stRadio [role="radiogroup"] label { font-size:12.5px; text-transform:none; color:#334155;
-  font-weight:500; letter-spacing:0; }
+.stRadio [role="radiogroup"] label { font-size:12.5px; color:#334155; font-weight:500; }
 
-/* tables */
-[data-testid="stDataFrame"] { font-size:13px; border:1px solid #eef2f6; border-radius:8px; }
-[data-testid="stTable"] table { font-size:12.5px; }
+/* TIGHT tables (st.table) — terminal density */
+[data-testid="stTable"] { width:100%; overflow-x:auto; }
+[data-testid="stTable"] table { width:auto; min-width:60%; font-size:11.5px;
+  border-collapse:collapse; font-variant-numeric:tabular-nums; line-height:1.25; }
 [data-testid="stTable"] thead th { background:#f8fafc; color:#64748b; font-weight:700;
-  text-transform:uppercase; font-size:10.5px; letter-spacing:0.04em; border-bottom:1px solid #e2e8f0; }
-[data-testid="stTable"] td { padding:5px 10px !important; border-bottom:1px solid #f1f5f9; }
-hr { margin:0.7rem 0; border-color:#eef2f6; }
+  text-transform:uppercase; font-size:9px; letter-spacing:0.04em;
+  border-bottom:1px solid #e2e8f0; padding:4px 10px !important; text-align:right; }
+[data-testid="stTable"] thead th:first-child,
+[data-testid="stTable"] tbody th { text-align:left; }
+[data-testid="stTable"] td { padding:2px 10px !important; border-bottom:1px solid #f4f6f8;
+  text-align:right; white-space:nowrap; }
+[data-testid="stTable"] td:first-child { text-align:left; font-weight:500; color:#1e293b;
+  padding-right:18px !important; }
+[data-testid="stTable"] tbody tr:hover td { background:#f8fafc; }
+[data-testid="stDataFrame"] { font-size:13px; border:1px solid #eef2f6; border-radius:8px; }
+hr { margin:0.6rem 0; border-color:#eef2f6; }
 </style>
 """
+
+_LOGO = (
+    '<svg width="26" height="26" viewBox="0 0 26 26" fill="none">'
+    '<line x1="7.5" y1="2" x2="7.5" y2="24" stroke="#16a34a" stroke-width="1.6"/>'
+    '<rect x="4" y="7" width="7" height="11" rx="1.5" fill="#16a34a"/>'
+    '<line x1="18.5" y1="4" x2="18.5" y2="23" stroke="#dc2626" stroke-width="1.6"/>'
+    '<rect x="15" y="10" width="7" height="9" rx="1.5" fill="#dc2626"/>'
+    '</svg>'
+)
 
 
 def main() -> None:
     st.markdown(_CSS, unsafe_allow_html=True)
     st.markdown(
-        f'<div class="sakata-head"><span class="sakata-title">🎋 Sakata</span>'
+        f'<div class="sakata-head">{_LOGO}'
+        f'<span class="sakata-title">Sakata</span>'
         f'<span class="sakata-sub">futures terminal · {dt.datetime.now():%Y-%m-%d %H:%M}</span>'
         f'</div>', unsafe_allow_html=True)
     tab_board, tab_margins, tab_events, tab_curve = st.tabs(
