@@ -300,6 +300,15 @@ CURVE_PRODUCTS = {
     # Not on CME settlements: SB & KC (ICE), VIX (Cboe), SR3 (rates)
 }
 
+# ICE products — CME's endpoint doesn't carry ICE softs. Sugar marketId from URL.
+ICE_URL = ("https://www.ice.com/marketdata/DelayedMarkets.shtml"
+           "?getContractsAsJson=&marketId={mid}")
+ICE_PRODUCTS = {
+    "SB  Sugar": 7537907,
+    # "KC  Coffee": <marketId>   # add once confirmed from the ICE coffee page URL
+}
+ALL_CURVE = list(CURVE_PRODUCTS) + list(ICE_PRODUCTS)
+
 
 def _num(x):
     try:
@@ -499,6 +508,59 @@ def _month_to_date(m: str):
         return None
 
 
+@st.cache_data(ttl=1800, show_spinner=False)
+def get_ice_raw(mid: int) -> str:
+    return _session.get(ICE_URL.format(mid=mid), timeout=25,
+                        headers={"Accept": "application/json"}).text
+
+
+def _norm_ice_month(s: str) -> str:
+    """ICE 'Oct26' / "Oct '26" -> 'OCT 26' to match CME month format."""
+    import re
+    m = re.match(r"\s*([A-Za-z]{3})[A-Za-z]*\s*'?(\d{2,4})", str(s))
+    return f"{m.group(1).upper()} {m.group(2)[-2:]}" if m else ""
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def get_ice_curve(mid: int) -> pd.DataFrame:
+    import json as _json
+    data = _json.loads(get_ice_raw(mid))
+    if isinstance(data, list):
+        contracts = data
+    elif isinstance(data, dict):
+        contracts = next((v for v in data.values() if isinstance(v, list)), [])
+    else:
+        contracts = []
+    rows = []
+    for c in contracts:
+        if not isinstance(c, dict):
+            continue
+        strip = c.get("marketStrip") or c.get("MarketStrip") or c.get("hubName") or ""
+        month = _norm_ice_month(strip)
+        settle = next((p for p in (_num(c.get("settlementPrice")),
+                                   _num(c.get("lastPrice")),
+                                   _num(c.get("previousDaySettlementPrice")))
+                       if p is not None), None)
+        if not month or settle is None:
+            continue
+        rows.append({"Month": month, "Settle": settle,
+                     "Change": c.get("change", ""), "Volume": c.get("volume", ""),
+                     "OI": c.get("openInterest", "")})
+    return pd.DataFrame(rows)
+
+
+def get_curve_for(name: str) -> pd.DataFrame:
+    if name in CURVE_PRODUCTS:
+        return get_curve(CURVE_PRODUCTS[name])
+    return get_ice_curve(ICE_PRODUCTS[name])
+
+
+def get_curve_raw_for(name: str) -> str:
+    if name in CURVE_PRODUCTS:
+        return get_curve_raw(CURVE_PRODUCTS[name])
+    return get_ice_raw(ICE_PRODUCTS[name])
+
+
 def _months_between(d1, d2):
     return (d2.year - d1.year) * 12 + (d2.month - d1.month)
 
@@ -531,9 +593,9 @@ def _curve_metrics(df: pd.DataFrame, n: int):
 @st.cache_data(ttl=1800, show_spinner=False)
 def build_curve_scanner(n: int = 12) -> pd.DataFrame:
     rows = []
-    for name, pid in CURVE_PRODUCTS.items():
+    for name in ALL_CURVE:
         try:
-            m = _curve_metrics(get_curve(pid), n)
+            m = _curve_metrics(get_curve_for(name), n)
         except Exception:  # noqa: BLE001
             m = None
         if not m:
@@ -578,22 +640,22 @@ def render_curve() -> None:
     st.divider()
 
     # --- per-symbol detail ---
-    name = st.selectbox("Symbol", list(CURVE_PRODUCTS.keys()))
-    pid = CURVE_PRODUCTS[name]
+    name = st.selectbox("Symbol", ALL_CURVE)
     if st.button("🔄 Refresh curve"):
         get_curve.clear()
+        get_ice_curve.clear()
         build_curve_scanner.clear()
         st.rerun()
     try:
-        df = get_curve(pid)
+        df = get_curve_for(name)
     except Exception as e:  # noqa: BLE001
         st.error(f"Couldn't load curve: {str(e)[:80]}")
         return
     if df.empty:
         st.info("No settlement data returned.")
-        with st.expander("🔧 Debug: raw CME response"):
+        with st.expander("🔧 Debug: raw response"):
             try:
-                st.code(get_curve_raw(pid)[:1500])
+                st.code(get_curve_raw_for(name)[:1500])
             except Exception as e:  # noqa: BLE001
                 st.write(str(e))
         return
