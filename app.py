@@ -350,9 +350,21 @@ def _parse_settlements(data) -> list:
     return rows
 
 
+_CME_HEADERS = {
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer": ("https://www.cmegroup.com/markets/energy/crude-oil/"
+                "light-sweet-crude.settlements.html"),
+    "X-Requested-With": "XMLHttpRequest",
+    "Sec-Fetch-Dest": "empty",
+    "Sec-Fetch-Mode": "cors",
+    "Sec-Fetch-Site": "same-origin",
+}
+
+
 def _fetch_settlements(pid: int, trade_date: str) -> str:
     url = CURVE_URL.format(pid=pid) + f"?tradeDate={trade_date}"
-    return _session.get(url, timeout=25, headers={"Accept": "application/json"}).text
+    return _session.get(url, timeout=25, headers=_CME_HEADERS).text
 
 
 def _recent_business_days(n: int = 6) -> list:
@@ -645,7 +657,9 @@ def render_curve() -> None:
     st.markdown("##### Curve scanner — 12M carry, most backwardated first")
     scan = build_curve_scanner(12)
     if scan.empty:
-        st.info("Scanner unavailable (CME fetch).")
+        st.warning("Curve data unavailable — CME may be rate-limiting this "
+                   "server's IP. Try Refresh in a few minutes; if it persists "
+                   "we'll switch to a snapshot fetched via GitHub Actions.")
     else:
         st.dataframe(
             scan.style.map(pct_colour, subset=["Roll ann %", "Carry ann %"])
