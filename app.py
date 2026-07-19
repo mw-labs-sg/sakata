@@ -97,16 +97,56 @@ def get_quote(ticker: str, attempts: int = 3) -> dict:
     return {"last": None, "chg": None, "pct": None, "err": last_err}
 
 
+@st.cache_data(ttl=300, show_spinner=False)
+def get_perf(ticker: str) -> dict:
+    """Last close + Day/WTD/MTD/QTD/YTD % from 1y of daily closes."""
+    try:
+        h = yf.Ticker(ticker, session=_session).history(period="1y", interval="1d")
+        s = h["Close"].dropna()
+        if s.empty:
+            return {}
+        pairs = [(d.date(), float(v)) for d, v in zip(s.index, s.values)]
+        today, last = pairs[-1]
+
+        def ref_before(boundary):
+            r = None
+            for d, v in pairs:
+                if d < boundary:
+                    r = v
+                else:
+                    break
+            return r
+
+        def pct(ref):
+            return round((last / ref - 1) * 100, 2) if ref else float("nan")
+
+        wk = today - dt.timedelta(days=today.weekday())            # Monday
+        mo = today.replace(day=1)
+        qt = dt.date(today.year, ((today.month - 1) // 3) * 3 + 1, 1)
+        yr = dt.date(today.year, 1, 1)
+        day = round((last / pairs[-2][1] - 1) * 100, 2) if len(pairs) > 1 else float("nan")
+        return {"last": last, "day": day, "wtd": pct(ref_before(wk)),
+                "mtd": pct(ref_before(mo)), "qtd": pct(ref_before(qt)),
+                "ytd": pct(ref_before(yr))}
+    except Exception:  # noqa: BLE001
+        return {}
+
+
 def build_scanner() -> pd.DataFrame:
     rows = []
     for sector, members in SECTORS.items():
         for name, (ticker, dec) in members.items():
-            q = get_quote(ticker)
-            last = None if q["last"] is None else f"{q['last']:,.{dec}f}"
-            chg = None if q["chg"] is None else f"{q['chg']:+.{dec}f}"
-            pct = float("nan") if q["pct"] is None else round(q["pct"], 2)
-            rows.append({"Instrument": name.strip(), "Sector": sector,
-                         "Last": last or "—", "Chg": chg or "—", "Chg %": pct})
+            p = get_perf(ticker)
+            last = p.get("last")
+            rows.append({
+                "Instrument": name.strip(), "Sector": sector,
+                "Last": f"{last:,.{dec}f}" if last else "—",
+                "Day %": p.get("day", float("nan")),
+                "WTD %": p.get("wtd", float("nan")),
+                "MTD %": p.get("mtd", float("nan")),
+                "QTD %": p.get("qtd", float("nan")),
+                "YTD %": p.get("ytd", float("nan")),
+            })
     return pd.DataFrame(rows)
 
 
@@ -494,48 +534,32 @@ def render_board() -> None:
         st.rerun()
 
     df = build_scanner()
+    horizons = ["Day %", "WTD %", "MTD %", "QTD %", "YTD %"]
 
     def pct_colour(v):
         if v is None or (isinstance(v, float) and pd.isna(v)):
             return "color:#9ca3af;"
         return "color:#16a34a;font-weight:600;" if v >= 0 else "color:#dc2626;font-weight:600;"
 
-    def chg_colour(s):
-        s = str(s)
-        if s.startswith("-"):
-            return "color:#dc2626;"
-        if s.startswith("+"):
-            return "color:#16a34a;"
-        return "color:#9ca3af;"
-
     def fmt_pct(v):
         return "—" if v is None or pd.isna(v) else f"{v:+.2f}%"
 
-    # --- sector performance aggregate (top) ---
-    agg = (df.dropna(subset=["Chg %"]).groupby("Sector", sort=False)["Chg %"]
-           .mean().reset_index().sort_values("Chg %", ascending=False))
-    agg.columns = ["Sector", "Avg %"]
+    fmt_map = {h: fmt_pct for h in horizons}
+
+    # --- sector performance across horizons (top) ---
+    agg = (df.groupby("Sector", sort=False)[horizons].mean().reset_index()
+           .sort_values("Day %", ascending=False))
     st.markdown("##### Sector performance")
     st.dataframe(
-        agg.style.map(pct_colour, subset=["Avg %"]).format({"Avg %": fmt_pct}),
+        agg.style.map(pct_colour, subset=horizons).format(fmt_map),
         hide_index=True, use_container_width=True,
-        column_config={"Sector": st.column_config.TextColumn(width="medium"),
-                       "Avg %": st.column_config.TextColumn(width="small")},
     )
 
     # --- full scanner (bottom) ---
     st.markdown("##### Scanner")
     st.dataframe(
-        df.style.map(pct_colour, subset=["Chg %"])
-        .map(chg_colour, subset=["Chg"]).format({"Chg %": fmt_pct}),
+        df.style.map(pct_colour, subset=horizons).format(fmt_map),
         hide_index=True, use_container_width=True, height=770,
-        column_config={
-            "Instrument": st.column_config.TextColumn(width="medium"),
-            "Sector": st.column_config.TextColumn(width="small"),
-            "Last": st.column_config.TextColumn(width="small"),
-            "Chg": st.column_config.TextColumn(width="small"),
-            "Chg %": st.column_config.TextColumn(width="small"),
-        },
     )
 
 
