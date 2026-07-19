@@ -541,8 +541,16 @@ def _month_to_date(m: str):
 
 @st.cache_data(ttl=1800, show_spinner=False)
 def get_ice_raw(mid: int) -> str:
-    return _session.get(ICE_URL.format(mid=mid), timeout=25,
-                        headers={"Accept": "application/json"}).text
+    headers = {
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": "https://www.ice.com/products",
+        "X-Requested-With": "XMLHttpRequest",
+        "Sec-Fetch-Dest": "empty",
+        "Sec-Fetch-Mode": "cors",
+        "Sec-Fetch-Site": "same-origin",
+    }
+    return _session.get(ICE_URL.format(mid=mid), timeout=25, headers=headers).text
 
 
 def _norm_ice_month(s: str) -> str:
