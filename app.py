@@ -795,10 +795,10 @@ def render_curve() -> None:
         st.warning("Curve data unavailable — CME may be rate-limiting this "
                    "server's IP. Try Refresh in a few minutes.")
     else:
-        st.dataframe(
+        st.table(
             scan.style.map(pct_colour, subset=["Roll %", "Carry ann %"])
-            .format({"Roll %": fmt_pct2, "Carry ann %": fmt_pct}),
-            hide_index=True, use_container_width=True,
+            .format({"Roll %": fmt_pct2, "Carry ann %": fmt_pct,
+                     "Front": "{:,.2f}", "Back": "{:,.2f}"}).hide(axis="index")
         )
 
     st.divider()
@@ -866,7 +866,7 @@ html, body, [data-testid="stAppViewContainer"], .stMarkdown,
 .stButton, input, textarea, select, [data-baseweb], [class*="st-"] {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
 }
-.block-container { padding-top: 2.4rem; padding-bottom: 2rem; max-width: 1000px; }
+.block-container { padding-top: 2.4rem; padding-bottom: 2rem; max-width: 1060px; }
 
 /* header */
 .sakata-head { display:flex; align-items:center; gap:11px; border-bottom:2px solid #0f766e;
@@ -900,19 +900,19 @@ html, body, [data-testid="stAppViewContainer"], .stMarkdown,
 [data-testid="stCaptionContainer"] { color:#64748b; font-size:12px; line-height:1.5; }
 .stRadio [role="radiogroup"] label { font-size:12.5px; color:#334155; font-weight:500; }
 
-/* TIGHT tables (st.table) — terminal density */
+/* tables (st.table) — tight but comfortable terminal density */
 [data-testid="stTable"] { width:100%; overflow-x:auto; }
-[data-testid="stTable"] table { width:auto; min-width:60%; font-size:11.5px;
-  border-collapse:collapse; font-variant-numeric:tabular-nums; line-height:1.25; }
-[data-testid="stTable"] thead th { background:#f8fafc; color:#64748b; font-weight:700;
-  text-transform:uppercase; font-size:9px; letter-spacing:0.04em;
-  border-bottom:1px solid #e2e8f0; padding:4px 10px !important; text-align:right; }
+[data-testid="stTable"] table { width:auto; min-width:70%; font-size:12px;
+  border-collapse:collapse; font-variant-numeric:tabular-nums; line-height:1.35; }
+[data-testid="stTable"] thead th { background:#f8fafc; color:#64748b; font-weight:600;
+  text-transform:uppercase; font-size:10px; letter-spacing:0.04em;
+  border-bottom:1px solid #e2e8f0; padding:6px 12px !important; text-align:right; }
 [data-testid="stTable"] thead th:first-child,
 [data-testid="stTable"] tbody th { text-align:left; }
-[data-testid="stTable"] td { padding:2px 10px !important; border-bottom:1px solid #f4f6f8;
-  text-align:right; white-space:nowrap; }
-[data-testid="stTable"] td:first-child { text-align:left; font-weight:500; color:#1e293b;
-  padding-right:18px !important; }
+[data-testid="stTable"] td { padding:4px 12px !important; border-bottom:1px solid #f4f6f8;
+  text-align:right; white-space:nowrap; color:#334155; }
+[data-testid="stTable"] td:first-child { text-align:left; font-weight:500; color:#0f172a;
+  padding-right:20px !important; }
 [data-testid="stTable"] tbody tr:hover td { background:#f8fafc; }
 [data-testid="stDataFrame"] { font-size:13px; border:1px solid #eef2f6; border-radius:8px; }
 hr { margin:0.6rem 0; border-color:#eef2f6; }
@@ -920,11 +920,16 @@ hr { margin:0.6rem 0; border-color:#eef2f6; }
 """
 
 _LOGO = (
-    '<svg width="26" height="26" viewBox="0 0 26 26" fill="none">'
-    '<line x1="7.5" y1="2" x2="7.5" y2="24" stroke="#16a34a" stroke-width="1.6"/>'
-    '<rect x="4" y="7" width="7" height="11" rx="1.5" fill="#16a34a"/>'
-    '<line x1="18.5" y1="4" x2="18.5" y2="23" stroke="#dc2626" stroke-width="1.6"/>'
-    '<rect x="15" y="10" width="7" height="9" rx="1.5" fill="#dc2626"/>'
+    '<svg width="30" height="30" viewBox="0 0 30 30" fill="none">'
+    '<rect width="30" height="30" rx="7" fill="#0f172a"/>'
+    # commodity bars (amber)
+    '<rect x="6.5" y="17" width="3" height="7" rx="1" fill="#f59e0b"/>'
+    '<rect x="13.5" y="14" width="3" height="10" rx="1" fill="#f59e0b"/>'
+    '<rect x="20.5" y="11" width="3" height="13" rx="1" fill="#f59e0b"/>'
+    # financial trend line (teal) weaving over the bars
+    '<path d="M5 21 L11 13 L15 18 L19 9 L25 6" stroke="#2dd4bf" stroke-width="2.1" '
+    'fill="none" stroke-linecap="round" stroke-linejoin="round"/>'
+    '<circle cx="25" cy="6" r="2.1" fill="#2dd4bf"/>'
     '</svg>'
 )
 
