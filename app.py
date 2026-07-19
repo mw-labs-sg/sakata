@@ -43,20 +43,35 @@ SECTORS = {
 }
 SYMBOLS = {k: v for g in SECTORS.values() for k, v in g.items()}
 
-# Margins from AMP: instrument -> AMP symbol
+# Margins from AMP: instrument -> AMP symbol (sector order, matching the board)
 AMP_URL = "https://www.ampfutures.com/trading-info/margins"
 AMP_SYMBOLS = {
-    "ES  (S&P 500)":   "ES",
-    "ZB  (T-Bond)":    "ZB",
-    "EC  (Euro FX)":   "6E",
-    "CL  (Crude Oil)": "CL",
-    "GC  (Gold)":      "GC",
-    "ZC  (Corn)":      "ZC",
-    "SB  (Sugar)":     "SB",
+    "ES  S&P 500": "ES", "NQ  Nasdaq": "NQ",
+    "ZB  T-Bond": "ZB", "ZN  10Y Note": "ZN",
+    "6E  Euro": "6E", "6J  Yen": "6J",
+    "CL  Crude": "CL", "NG  Nat Gas": "NG",
+    "GC  Gold": "GC", "SI  Silver": "SI", "HG  Copper": "HG",
+    "ZC  Corn": "ZC", "ZW  Wheat": "ZW", "ZS  Soybean": "ZS",
+    "SB  Sugar": "SB", "KC  Coffee": "KC",
 }
 # BTC isn't on AMP's list -> pull from CME's outright CSV by product code.
 CME_URL = "https://www.cmegroup.com/CmeWS/mvc/Margins/OUTRIGHT.csv"
-CME_CODES = {"BTC (Bitcoin)": "BTC"}
+CME_CODES = {"BTC  Bitcoin": "BTC"}
+
+# label -> (yahoo ticker for price, notional multiplier).
+# Multiplier folds in unit conversion so notional = yahoo_price * mult.
+CONTRACT_SPECS = {
+    "ES  S&P 500": ("ES=F", 50),      "NQ  Nasdaq": ("NQ=F", 20),
+    "ZB  T-Bond": ("ZB=F", 1000),     "ZN  10Y Note": ("ZN=F", 1000),
+    "6E  Euro": ("6E=F", 125000),     "6J  Yen": ("6J=F", 12500000),
+    "CL  Crude": ("CL=F", 1000),      "NG  Nat Gas": ("NG=F", 10000),
+    "GC  Gold": ("GC=F", 100),        "SI  Silver": ("SI=F", 5000),
+    "HG  Copper": ("HG=F", 25000),
+    "ZC  Corn": ("ZC=F", 50),         "ZW  Wheat": ("ZW=F", 50),
+    "ZS  Soybean": ("ZS=F", 50),
+    "SB  Sugar": ("SB=F", 1120),      "KC  Coffee": ("KC=F", 375),
+    "BTC  Bitcoin": ("BTC-USD", 5),
+}
 
 _session = cffi_requests.Session(impersonate="chrome110")
 
@@ -141,36 +156,46 @@ def get_cme_btc() -> float:
     return _money(hit.iloc[0]["Maintenance"]) if not hit.empty else None
 
 
+def _notional(label):
+    spec = CONTRACT_SPECS.get(label)
+    if not spec:
+        return None
+    ticker, mult = spec
+    q = get_quote(ticker)
+    return q["last"] * mult if q["last"] is not None else None
+
+
 def build_margins() -> pd.DataFrame:
     try:
         amp = get_amp_margins()
     except Exception as e:  # noqa: BLE001
-        return pd.DataFrame([{"Instrument": "AMP ERROR", "Sym": "", "Exchange": "",
-                              "Maint (USD)": str(e)[:60], "Day (USD)": "", "Source": ""}])
+        return pd.DataFrame([{"Instrument": "AMP ERROR", "Sym": "",
+                              "Maint (USD)": str(e)[:60], "Notional (USD)": "",
+                              "Margin %": "", "Source": ""}])
+
+    def _row(label, sym, maint, source):
+        notl = _notional(label)
+        return {
+            "Instrument": label, "Sym": sym,
+            "Maint (USD)": f"{maint:,.0f}" if maint else "—",
+            "Notional (USD)": f"{notl:,.0f}" if notl else "—",
+            "Margin %": f"{maint / notl * 100:.1f}%" if (maint and notl) else "—",
+            "Source": source,
+        }
+
     rows = []
     for label in list(AMP_SYMBOLS) + list(CME_CODES):
         if label in AMP_SYMBOLS:
             sym = AMP_SYMBOLS[label]
             r = amp.get(sym)
-            if r:
-                rows.append({
-                    "Instrument": label, "Sym": sym, "Exchange": r["exch"],
-                    "Maint (USD)": f"{r['maint']:,.0f}" if r["maint"] else "—",
-                    "Day (USD)": f"{r['day']:,.0f}" if r["day"] else "—",
-                    "Source": "AMP",
-                })
-            else:
-                rows.append({"Instrument": label, "Sym": sym, "Exchange": "—",
-                             "Maint (USD)": "—", "Day (USD)": "—",
-                             "Source": "AMP (missing)"})
-        elif label in CME_CODES:
+            rows.append(_row(label, sym, r["maint"] if r else None,
+                             "AMP" if r else "AMP (missing)"))
+        else:
             try:
                 v = get_cme_btc()
             except Exception:  # noqa: BLE001
                 v = None
-            rows.append({"Instrument": label, "Sym": "BTC", "Exchange": "CME",
-                         "Maint (USD)": f"{v:,.0f}" if v else "—",
-                         "Day (USD)": "—", "Source": "CME CSV"})
+            rows.append(_row(label, CME_CODES[label], v, "CME CSV"))
     return pd.DataFrame(rows)
 
 
