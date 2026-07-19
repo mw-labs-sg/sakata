@@ -279,13 +279,25 @@ INSTRUMENTS = ["ES", "NQ", "GC", "SI", "HG", "CL", "NG", "ZC", "ZS", "6E", "6J"]
 CURVE_URL = "https://www.cmegroup.com/CmeWS/mvc/Settlements/Futures/Settlements/{pid}/FUT"
 # Confident productIds first; CL & NG lead the dropdown.
 CURVE_PRODUCTS = {
-    "CL  (Crude Oil)": 425,
-    "NG  (Nat Gas)":   444,
-    "GC  (Gold)":      437,
-    "SI  (Silver)":    458,
-    "ES  (S&P 500)":   133,
-    "ZC  (Corn)":      300,
-    "ZS  (Soybeans)":  320,
+    # verified productIds
+    "ES  S&P 500": 133,
+    "CL  Crude":   425,
+    "NG  Nat Gas": 444,
+    "GC  Gold":    437,
+    "SI  Silver":  458,
+    "ZC  Corn":    300,
+    "ZS  Soybean": 320,
+    # best-guess productIds — confirm via each product's settlements page
+    "NQ  Nasdaq":  129,
+    "ZB  T-Bond":  303,
+    "ZN  10Y Note": 316,
+    "6E  Euro":    399,
+    "6J  Yen":     544,
+    "HG  Copper":  438,
+    "ZW  Wheat":   323,
+    "BTC  Bitcoin": 8215,
+    "ETH  Ether":  8216,
+    # Not on CME settlements: SB & KC (ICE), VIX (Cboe), SR3 (rates)
 }
 
 
