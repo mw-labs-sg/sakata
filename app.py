@@ -26,16 +26,43 @@ from curl_cffi import requests as cffi_requests
 st.set_page_config(page_title="Sakata", page_icon="🎋", layout="centered")
 
 # Board: name -> (yahoo_ticker, decimals)
-SYMBOLS = {
-    "ES  (S&P 500)":   ("ES=F", 2),
-    "ZB  (T-Bond)":    ("ZB=F", 2),
-    "EC  (Euro FX)":   ("6E=F", 4),
-    "CL  (Crude Oil)": ("CL=F", 2),
-    "GC  (Gold)":      ("GC=F", 1),
-    "ZC  (Corn)":      ("ZC=F", 2),
-    "SB  (Sugar)":     ("SB=F", 2),
-    "BTC (Bitcoin)":   ("BTC=F", 0),
+# Board grouped by market (like Barchart). group -> {name: (yahoo_ticker, decimals)}
+BOARD_GROUPS = {
+    "Financials": {
+        "ES  (S&P 500)":  ("ES=F", 2),
+        "NQ  (Nasdaq)":   ("NQ=F", 2),
+        "VIX (Vol)":      ("^VIX", 2),
+        "6E  (Euro FX)":  ("6E=F", 4),
+        "6J  (Yen)":      ("6J=F", 7),
+        "ZB  (T-Bond)":   ("ZB=F", 3),
+        "ZN  (10Y Note)": ("ZN=F", 3),
+        "SR3 (SOFR)":     ("SR3=F", 4),
+    },
+    "Crypto": {
+        "BTC (Bitcoin)":  ("BTC-USD", 0),
+        "ETH (Ether)":    ("ETH-USD", 2),
+    },
+    "Energy": {
+        "CL  (Crude Oil)": ("CL=F", 2),
+        "NG  (Nat Gas)":   ("NG=F", 3),
+    },
+    "Metals": {
+        "GC  (Gold)":   ("GC=F", 1),
+        "SI  (Silver)": ("SI=F", 3),
+        "HG  (Copper)": ("HG=F", 4),
+    },
+    "Grains": {
+        "ZC  (Corn)":     ("ZC=F", 2),
+        "ZW  (Wheat)":    ("ZW=F", 2),
+        "ZS  (Soybeans)": ("ZS=F", 2),
+    },
+    "Softs": {
+        "SB  (Sugar)":  ("SB=F", 2),
+        "KC  (Coffee)": ("KC=F", 2),
+    },
 }
+# flat view kept for code that iterates a single dict
+SYMBOLS = {k: v for g in BOARD_GROUPS.values() for k, v in g.items()}
 
 # Margins from AMP: instrument -> AMP symbol
 AMP_URL = "https://www.ampfutures.com/trading-info/margins"
@@ -76,9 +103,9 @@ def get_quote(ticker: str, attempts: int = 3) -> dict:
     return {"last": None, "chg": None, "pct": None, "err": last_err}
 
 
-def build_board() -> pd.DataFrame:
+def build_board(group: dict) -> pd.DataFrame:
     rows = []
-    for name, (ticker, dec) in SYMBOLS.items():
+    for name, (ticker, dec) in group.items():
         q = get_quote(ticker)
         if q["last"] is None:
             rows.append({"Instrument": name, "Last": "—", "Chg": "—", "Chg %": None})
@@ -145,7 +172,7 @@ def build_margins() -> pd.DataFrame:
         return pd.DataFrame([{"Instrument": "AMP ERROR", "Sym": "", "Exchange": "",
                               "Maint (USD)": str(e)[:60], "Day (USD)": "", "Source": ""}])
     rows = []
-    for label in SYMBOLS:
+    for label in list(AMP_SYMBOLS) + list(CME_CODES):
         if label in AMP_SYMBOLS:
             sym = AMP_SYMBOLS[label]
             r = amp.get(sym)
@@ -372,18 +399,24 @@ def render_board() -> None:
     if st.button("🔄 Refresh prices"):
         st.cache_data.clear()
         st.rerun()
-    df = build_board()
 
     def colour(v):
         if v is None or pd.isna(v):
             return ""
         return "color: #4ade80;" if v >= 0 else "color: #f87171;"
 
-    st.table(
-        df.style.map(colour, subset=["Chg %"])
-        .format({"Chg %": lambda v: "—" if v is None or pd.isna(v) else f"{v:+.2f}%"})
-        .hide(axis="index")
-    )
+    for group, members in BOARD_GROUPS.items():
+        df = build_board(members)
+        # group day-change average (ignoring blanks) for the header
+        pcts = [p for p in df["Chg %"] if p is not None and not pd.isna(p)]
+        avg = sum(pcts) / len(pcts) if pcts else None
+        tag = f"  ·  {avg:+.2f}%" if avg is not None else ""
+        st.markdown(f"**{group}**{tag}")
+        st.table(
+            df.style.map(colour, subset=["Chg %"])
+            .format({"Chg %": lambda v: "—" if v is None or pd.isna(v) else f"{v:+.2f}%"})
+            .hide(axis="index")
+        )
 
 
 def render_margins() -> None:
