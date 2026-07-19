@@ -529,10 +529,6 @@ def build_events(selected: list) -> pd.DataFrame:
 
 
 def render_board() -> None:
-    if st.button("🔄 Refresh prices"):
-        st.cache_data.clear()
-        st.rerun()
-
     df = build_scanner()
     horizons = ["Day %", "WTD %", "MTD %", "QTD %", "YTD %"]
 
@@ -546,16 +542,33 @@ def render_board() -> None:
 
     fmt_map = {h: fmt_pct for h in horizons}
 
-    # --- sector performance across horizons (top) ---
-    agg = (df.groupby("Sector", sort=False)[horizons].mean().reset_index()
-           .sort_values("Day %", ascending=False))
-    st.markdown("##### Sector performance")
-    st.dataframe(
-        agg.style.map(pct_colour, subset=horizons).format(fmt_map),
-        hide_index=True, use_container_width=True,
-    )
+    # controls row
+    c1, c2 = st.columns([4, 1])
+    with c1:
+        hz = st.radio("Horizon", horizons, index=0, horizontal=True,
+                      label_visibility="collapsed")
+    with c2:
+        if st.button("Refresh", key="rb"):
+            st.cache_data.clear()
+            st.rerun()
 
-    # --- full scanner (bottom) ---
+    # --- sector performance: horizontal bar chart ---
+    st.markdown(f"##### Sector performance · {hz}")
+    agg = (df.groupby("Sector", sort=False)[horizons].mean().reset_index())
+    agg["_v"] = agg[hz]
+    agg = agg.sort_values("_v", ascending=False)
+    bar = (alt.Chart(agg).mark_bar(cornerRadius=2, height=16).encode(
+        x=alt.X("_v:Q", title=None, axis=alt.Axis(format="+.1f", grid=True,
+                gridColor="#f1f5f9")),
+        y=alt.Y("Sector:N", sort=list(agg["Sector"]), title=None,
+                axis=alt.Axis(labelFontSize=12, labelColor="#334155")),
+        color=alt.condition("datum._v >= 0", alt.value("#16a34a"), alt.value("#dc2626")),
+        tooltip=[alt.Tooltip("Sector:N"), alt.Tooltip("_v:Q", format="+.2f", title=hz)],
+    ).properties(height=28 * len(agg) + 10).configure_view(strokeWidth=0)
+        .configure_axis(labelColor="#64748b"))
+    st.altair_chart(bar, use_container_width=True)
+
+    # --- full scanner ---
     st.markdown("##### Scanner")
     st.dataframe(
         df.style.map(pct_colour, subset=horizons).format(fmt_map),
@@ -570,7 +583,7 @@ def render_margins() -> None:
         "**Days ATR** = margin ÷ daily $range. Click a header to sort — lowest "
         "Marg/Vol first = thinnest cushion vs risk (margin-hike candidates)."
     )
-    if st.button("🔄 Refresh margins"):
+    if st.button("Refresh", key="rm"):
         get_amp_margins.clear()
         get_cme_margin.clear()
         get_atr.clear()
@@ -772,7 +785,7 @@ def render_curve() -> None:
                            horizontal=True)
     with c2:
         name = st.selectbox("Symbol", ALL_CURVE)
-    if st.button("🔄 Refresh curve"):
+    if st.button("Refresh", key="rc"):
         get_curve.clear()
         get_ice_curve.clear()
         build_curve_scanner.clear()
@@ -854,16 +867,17 @@ _CSS = """
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
 
 html, body, [data-testid="stAppViewContainer"], .stMarkdown,
-.stButton, input, textarea, select, [data-baseweb] {
+.stButton, input, textarea, select, [data-baseweb], [class*="st-"] {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
 }
-.block-container { padding-top: 1.4rem; padding-bottom: 2.5rem; max-width: 1180px; }
+.block-container { padding-top: 2.8rem; padding-bottom: 2.5rem; max-width: 1180px; }
 
 /* header */
 .sakata-head { display:flex; align-items:baseline; gap:12px; border-bottom:2px solid #0f766e;
-  padding-bottom:8px; margin-bottom:6px; }
-.sakata-title { font-size:1.5rem; font-weight:700; letter-spacing:-0.02em; color:#0f172a; }
-.sakata-sub { font-size:12px; color:#94a3b8; font-weight:500; }
+  padding-bottom:10px; margin-bottom:10px; }
+.sakata-title { font-size:1.45rem; font-weight:700; letter-spacing:-0.02em; color:#0f172a;
+  font-family:'Inter'; }
+.sakata-sub { font-size:11.5px; color:#94a3b8; font-weight:500; letter-spacing:0.02em; }
 
 /* tabs */
 .stTabs [data-baseweb="tab-list"] { gap:2px; border-bottom:1px solid #e5e7eb; }
@@ -872,21 +886,32 @@ html, body, [data-testid="stAppViewContainer"], .stMarkdown,
 .stTabs [aria-selected="true"] { color:#0f766e; }
 .stTabs [data-baseweb="tab-highlight"] { background-color:#0f766e; height:2px; }
 
-/* section subheaders (##### x) -> uppercase eyebrow */
+/* eyebrow subheaders */
 .stMarkdown h5 { font-size:11px; text-transform:uppercase; letter-spacing:0.08em;
-  color:#64748b; font-weight:700; margin:6px 0 2px; }
+  color:#64748b; font-weight:700; margin:10px 0 4px; }
 
-/* buttons */
-.stButton>button { border:1px solid #e2e8f0; border-radius:6px; padding:2px 14px;
-  font-size:12.5px; font-weight:500; color:#334155; background:#fff; transition:all .15s; }
+/* buttons — flat, compact, professional */
+.stButton>button { border:1px solid #e2e8f0; border-radius:6px; padding:3px 16px;
+  font-size:12px; font-weight:600; letter-spacing:0.03em; text-transform:uppercase;
+  color:#475569; background:#fff; box-shadow:none; transition:all .12s; min-height:32px; }
 .stButton>button:hover { border-color:#0f766e; color:#0f766e; background:#f0fdfa; }
+.stButton>button:active, .stButton>button:focus { color:#0f766e; border-color:#0f766e;
+  box-shadow:none; }
 
-/* captions + controls */
-[data-testid="stCaptionContainer"] { color:#64748b; font-size:12.5px; line-height:1.5; }
-.stRadio label, .stSelectbox label, .stMultiSelect label { font-size:12px; color:#64748b;
-  font-weight:600; text-transform:uppercase; letter-spacing:0.04em; }
+/* captions + control labels */
+[data-testid="stCaptionContainer"] { color:#64748b; font-size:12px; line-height:1.5; }
+.stRadio label, .stSelectbox label, .stMultiSelect label { font-size:11px; color:#94a3b8;
+  font-weight:700; text-transform:uppercase; letter-spacing:0.05em; }
+.stRadio [role="radiogroup"] label { font-size:12.5px; text-transform:none; color:#334155;
+  font-weight:500; letter-spacing:0; }
+
+/* tables */
 [data-testid="stDataFrame"] { font-size:13px; border:1px solid #eef2f6; border-radius:8px; }
-hr { margin:0.8rem 0; border-color:#eef2f6; }
+[data-testid="stTable"] table { font-size:12.5px; }
+[data-testid="stTable"] thead th { background:#f8fafc; color:#64748b; font-weight:700;
+  text-transform:uppercase; font-size:10.5px; letter-spacing:0.04em; border-bottom:1px solid #e2e8f0; }
+[data-testid="stTable"] td { padding:5px 10px !important; border-bottom:1px solid #f1f5f9; }
+hr { margin:0.7rem 0; border-color:#eef2f6; }
 </style>
 """
 
