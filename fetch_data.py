@@ -38,16 +38,6 @@ CME_HEADERS = {
     "X-Requested-With": "XMLHttpRequest",
 }
 
-# --- ICE softs (marketIds from the product data page URL) ---------------------
-ICE_PRODUCTS = {"SB  Sugar": 7537907, "KC  Coffee": 7510986}
-ICE_URL = ("https://www.ice.com/marketdata/DelayedMarkets.shtml"
-           "?getContractsAsJson=&marketId={mid}")
-ICE_HEADERS = {
-    "Accept": "application/json, text/plain, */*",
-    "Referer": "https://www.ice.com/products",
-    "X-Requested-With": "XMLHttpRequest",
-}
-
 AMP_URL = "https://www.ampfutures.com/trading-info/margins"
 AMP_SYMBOLS = ["ES", "NQ", "ZB", "ZN", "6E", "6J", "CL", "NG", "GC", "SI",
                "HG", "ZC", "ZW", "ZS", "SB", "KC"]
@@ -115,30 +105,51 @@ def _norm_ice_month(s):
     return f"{m.group(1).upper()} {m.group(2)[-2:]}" if m else ""
 
 
-def fetch_ice(mid):
+# --- Barchart softs (SB, KC) via the free core-api + token handshake ----------
+BARCHART_SOFTS = {"SB  Sugar": "SB", "KC  Coffee": "KC"}
+_BC_MONTH = {"F": "JAN", "G": "FEB", "H": "MAR", "J": "APR", "K": "MAY",
+             "M": "JUN", "N": "JUL", "Q": "AUG", "U": "SEP", "V": "OCT",
+             "X": "NOV", "Z": "DEC"}
+
+
+def fetch_barchart(root):
+    import urllib.parse
     try:
-        r = session.get(ICE_URL.format(mid=mid), headers=ICE_HEADERS, timeout=25)
-        print(f"  ICE {mid}: HTTP {r.status_code}, first 300 chars:")
+        # 1) hit the page to receive the XSRF-TOKEN cookie
+        session.get(f"https://www.barchart.com/futures/quotes/{root}*0",
+                    headers={"User-Agent": "Mozilla/5.0"}, timeout=25)
+        token = session.cookies.get("XSRF-TOKEN")
+        token = urllib.parse.unquote(token) if token else ""
+        # 2) call the core-api for all contracts of the root
+        url = ("https://www.barchart.com/proxies/core-api/v1/quotes/get"
+               f"?symbols={root}%5EF&fields=symbol,lastPrice,openInterest,volume&raw=1")
+        r = session.get(url, timeout=25, headers={
+            "X-XSRF-TOKEN": token,
+            "Referer": f"https://www.barchart.com/futures/quotes/{root}*0",
+            "Accept": "application/json",
+            "User-Agent": "Mozilla/5.0",
+        })
+        print(f"  Barchart {root}: HTTP {r.status_code}, first 300 chars:")
         print("  " + repr(r.text[:300]))
-        data = r.json()
+        data = r.json().get("data", [])
     except Exception as e:
-        print(f"  ICE {mid} failed: {e}")
+        print(f"  Barchart {root} failed: {e}")
         return []
-    contracts = data if isinstance(data, list) else (
-        next((v for v in data.values() if isinstance(v, list)), [])
-        if isinstance(data, dict) else [])
-    out = []
-    for c in contracts:
-        if not isinstance(c, dict):
+    rows = []
+    for c in data:
+        sym = str(c.get("symbol", ""))
+        raw = c.get("raw", c) or c
+        if len(sym) < 3 or not sym.startswith(root):
             continue
-        month = _norm_ice_month(c.get("marketStrip") or c.get("hubName") or "")
-        settle = next((p for p in (_num(c.get("settlementPrice")),
-                                   _num(c.get("lastPrice"))) if p is not None), None)
-        if month and settle is not None:
-            out.append({"Month": month, "Settle": settle,
-                        "Change": c.get("change", ""), "Volume": c.get("volume", ""),
-                        "OI": c.get("openInterest", "")})
-    return out
+        code = sym[len(root):-2][-1:]          # month letter
+        yr = sym[-2:]
+        mon = _BC_MONTH.get(code)
+        settle = _num(raw.get("lastPrice"))
+        if not mon or settle is None:
+            continue
+        rows.append({"Month": f"{mon} {yr}", "Settle": settle, "Change": "",
+                     "Volume": raw.get("volume", ""), "OI": raw.get("openInterest", "")})
+    return rows
 
 
 def fetch_margins():
@@ -176,11 +187,11 @@ def main():
         if rows:
             curves[name] = rows
             print(f"  CME {name}: {len(rows)} rows")
-    for name, mid in ICE_PRODUCTS.items():
-        rows = fetch_ice(mid)
+    for name, root in BARCHART_SOFTS.items():
+        rows = fetch_barchart(root)
         if rows:
             curves[name] = rows
-            print(f"  ICE {name}: {len(rows)} rows")
+            print(f"  Barchart {name}: {len(rows)} rows")
 
     (OUT / "curves.json").write_text(json.dumps(
         {"generated": now, "tradeDate": td, "curves": curves}, indent=1))
