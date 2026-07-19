@@ -1,0 +1,2888 @@
+{
+ "generated": "2026-07-19T01:48:46Z",
+ "tradeDate": "07/17/2026",
+ "curves": {
+  "ES  S&P 500": [
+   {
+    "Month": "SEP 26",
+    "Settle": 7497.75,
+    "Change": "-80.00",
+    "Volume": "1,598,009",
+    "OI": "1,911,872"
+   },
+   {
+    "Month": "DEC 26",
+    "Settle": 7564.5,
+    "Change": "-80.25",
+    "Volume": "2,357",
+    "OI": "28,048"
+   },
+   {
+    "Month": "MAR 27",
+    "Settle": 7640.5,
+    "Change": "-78.75",
+    "Volume": "0",
+    "OI": "143"
+   },
+   {
+    "Month": "JUN 27",
+    "Settle": 7713.25,
+    "Change": "-79.75",
+    "Volume": "0",
+    "OI": "102"
+   },
+   {
+    "Month": "SEP 27",
+    "Settle": 7785.75,
+    "Change": "-80.50",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "DEC 27",
+    "Settle": 7856.5,
+    "Change": "-83.75",
+    "Volume": "0",
+    "OI": "83"
+   },
+   {
+    "Month": "MAR 28",
+    "Settle": 7932.5,
+    "Change": "-82.75",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "JUN 28",
+    "Settle": 8006.25,
+    "Change": "-87.50",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "SEP 28",
+    "Settle": 8081.25,
+    "Change": "-87.50",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "DEC 28",
+    "Settle": 8157.0,
+    "Change": "-82.50",
+    "Volume": "0",
+    "OI": "20"
+   },
+   {
+    "Month": "MAR 29",
+    "Settle": 8237.5,
+    "Change": "-86.75",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "JUN 29",
+    "Settle": 8317.75,
+    "Change": "-91.25",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "SEP 29",
+    "Settle": 8398.25,
+    "Change": "-95.25",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "DEC 29",
+    "Settle": 8478.5,
+    "Change": "-99.75",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "MAR 30",
+    "Settle": 8562.75,
+    "Change": "-102.75",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "JUN 30",
+    "Settle": 8647.0,
+    "Change": "-105.75",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "SEP 30",
+    "Settle": 8731.0,
+    "Change": "-109.00",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "DEC 30",
+    "Settle": 8815.0,
+    "Change": "-112.25",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "MAR 31",
+    "Settle": 8877.75,
+    "Change": "-112.25",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "JUN 31",
+    "Settle": 8940.25,
+    "Change": "-112.25",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "SEP 31",
+    "Settle": 9025.25,
+    "Change": "-112.25",
+    "Volume": "0",
+    "OI": "0"
+   }
+  ],
+  "CL  Crude": [
+   {
+    "Month": "AUG 26",
+    "Settle": 82.49,
+    "Change": "+3.54",
+    "Volume": "96,003",
+    "OI": "67,659"
+   },
+   {
+    "Month": "SEP 26",
+    "Settle": 81.78,
+    "Change": "+3.50",
+    "Volume": "255,772",
+    "OI": "272,601"
+   },
+   {
+    "Month": "OCT 26",
+    "Settle": 80.34,
+    "Change": "+3.00",
+    "Volume": "103,226",
+    "OI": "137,803"
+   },
+   {
+    "Month": "NOV 26",
+    "Settle": 78.91,
+    "Change": "+2.57",
+    "Volume": "54,372",
+    "OI": "85,862"
+   },
+   {
+    "Month": "DEC 26",
+    "Settle": 77.65,
+    "Change": "+2.22",
+    "Volume": "83,575",
+    "OI": "207,282"
+   },
+   {
+    "Month": "JAN 27",
+    "Settle": 76.6,
+    "Change": "+1.96",
+    "Volume": "22,755",
+    "OI": "60,943"
+   },
+   {
+    "Month": "FEB 27",
+    "Settle": 75.68,
+    "Change": "+1.77",
+    "Volume": "11,249",
+    "OI": "47,615"
+   },
+   {
+    "Month": "MAR 27",
+    "Settle": 74.87,
+    "Change": "+1.63",
+    "Volume": "17,028",
+    "OI": "53,677"
+   },
+   {
+    "Month": "APR 27",
+    "Settle": 74.17,
+    "Change": "+1.54",
+    "Volume": "5,300",
+    "OI": "41,321"
+   },
+   {
+    "Month": "MAY 27",
+    "Settle": 73.56,
+    "Change": "+1.46",
+    "Volume": "3,124",
+    "OI": "39,348"
+   },
+   {
+    "Month": "JUN 27",
+    "Settle": 73.02,
+    "Change": "+1.40",
+    "Volume": "24,169",
+    "OI": "130,611"
+   },
+   {
+    "Month": "JUL 27",
+    "Settle": 72.52,
+    "Change": "+1.35",
+    "Volume": "1,857",
+    "OI": "34,355"
+   },
+   {
+    "Month": "AUG 27",
+    "Settle": 72.06,
+    "Change": "+1.29",
+    "Volume": "1,639",
+    "OI": "26,359"
+   },
+   {
+    "Month": "SEP 27",
+    "Settle": 71.66,
+    "Change": "+1.24",
+    "Volume": "4,780",
+    "OI": "41,181"
+   },
+   {
+    "Month": "OCT 27",
+    "Settle": 71.28,
+    "Change": "+1.19",
+    "Volume": "1,237",
+    "OI": "26,270"
+   },
+   {
+    "Month": "NOV 27",
+    "Settle": 70.95,
+    "Change": "+1.13",
+    "Volume": "764",
+    "OI": "32,263"
+   },
+   {
+    "Month": "DEC 27",
+    "Settle": 70.68,
+    "Change": "+1.10",
+    "Volume": "29,967",
+    "OI": "146,034"
+   },
+   {
+    "Month": "JAN 28",
+    "Settle": 70.39,
+    "Change": "+1.06",
+    "Volume": "473",
+    "OI": "26,988"
+   },
+   {
+    "Month": "FEB 28",
+    "Settle": 70.12,
+    "Change": "+1.02",
+    "Volume": "357",
+    "OI": "15,099"
+   },
+   {
+    "Month": "MAR 28",
+    "Settle": 69.88,
+    "Change": "+.99",
+    "Volume": "1,037",
+    "OI": "22,198"
+   },
+   {
+    "Month": "APR 28",
+    "Settle": 69.66,
+    "Change": "+.96",
+    "Volume": "222",
+    "OI": "21,311"
+   },
+   {
+    "Month": "MAY 28",
+    "Settle": 69.47,
+    "Change": "+.93",
+    "Volume": "390",
+    "OI": "8,547"
+   },
+   {
+    "Month": "JUN 28",
+    "Settle": 69.27,
+    "Change": "+.89",
+    "Volume": "4,350",
+    "OI": "52,850"
+   },
+   {
+    "Month": "JUL 28",
+    "Settle": 69.06,
+    "Change": "+.85",
+    "Volume": "116",
+    "OI": "8,254"
+   },
+   {
+    "Month": "AUG 28",
+    "Settle": 68.86,
+    "Change": "+.81",
+    "Volume": "65",
+    "OI": "7,993"
+   },
+   {
+    "Month": "SEP 28",
+    "Settle": 68.69,
+    "Change": "+.79",
+    "Volume": "185",
+    "OI": "17,170"
+   },
+   {
+    "Month": "OCT 28",
+    "Settle": 68.53,
+    "Change": "+.75",
+    "Volume": "378",
+    "OI": "4,642"
+   },
+   {
+    "Month": "NOV 28",
+    "Settle": 68.4,
+    "Change": "+.73",
+    "Volume": "487",
+    "OI": "7,776"
+   },
+   {
+    "Month": "DEC 28",
+    "Settle": 68.25,
+    "Change": "+.70",
+    "Volume": "9,644",
+    "OI": "85,392"
+   },
+   {
+    "Month": "JAN 29",
+    "Settle": 68.06,
+    "Change": "+.67",
+    "Volume": "57",
+    "OI": "10,523"
+   },
+   {
+    "Month": "FEB 29",
+    "Settle": 67.9,
+    "Change": "+.66",
+    "Volume": "29",
+    "OI": "2,206"
+   },
+   {
+    "Month": "MAR 29",
+    "Settle": 67.75,
+    "Change": "+.62",
+    "Volume": "26",
+    "OI": "5,376"
+   },
+   {
+    "Month": "APR 29",
+    "Settle": 67.61,
+    "Change": "+.59",
+    "Volume": "7",
+    "OI": "1,940"
+   },
+   {
+    "Month": "MAY 29",
+    "Settle": 67.49,
+    "Change": "+.56",
+    "Volume": "57",
+    "OI": "2,349"
+   },
+   {
+    "Month": "JUN 29",
+    "Settle": 67.35,
+    "Change": "+.54",
+    "Volume": "674",
+    "OI": "20,541"
+   },
+   {
+    "Month": "JUL 29",
+    "Settle": 67.18,
+    "Change": "+.51",
+    "Volume": "46",
+    "OI": "972"
+   },
+   {
+    "Month": "AUG 29",
+    "Settle": 67.04,
+    "Change": "+.51",
+    "Volume": "0",
+    "OI": "61"
+   },
+   {
+    "Month": "SEP 29",
+    "Settle": 66.89,
+    "Change": "+.49",
+    "Volume": "0",
+    "OI": "320"
+   },
+   {
+    "Month": "OCT 29",
+    "Settle": 66.75,
+    "Change": "+.46",
+    "Volume": "0",
+    "OI": "55"
+   },
+   {
+    "Month": "NOV 29",
+    "Settle": 66.64,
+    "Change": "+.44",
+    "Volume": "1",
+    "OI": "161"
+   },
+   {
+    "Month": "DEC 29",
+    "Settle": 66.53,
+    "Change": "+.40",
+    "Volume": "2,283",
+    "OI": "45,456"
+   },
+   {
+    "Month": "JAN 30",
+    "Settle": 66.38,
+    "Change": "+.37",
+    "Volume": "1",
+    "OI": "111"
+   },
+   {
+    "Month": "FEB 30",
+    "Settle": 66.23,
+    "Change": "+.36",
+    "Volume": "0",
+    "OI": "60"
+   },
+   {
+    "Month": "MAR 30",
+    "Settle": 66.08,
+    "Change": "+.34",
+    "Volume": "0",
+    "OI": "170"
+   },
+   {
+    "Month": "APR 30",
+    "Settle": 65.95,
+    "Change": "+.32",
+    "Volume": "0",
+    "OI": "60"
+   },
+   {
+    "Month": "MAY 30",
+    "Settle": 65.83,
+    "Change": "+.30",
+    "Volume": "0",
+    "OI": "125"
+   },
+   {
+    "Month": "JUN 30",
+    "Settle": 65.69,
+    "Change": "+.28",
+    "Volume": "30",
+    "OI": "4,765"
+   },
+   {
+    "Month": "JUL 30",
+    "Settle": 65.52,
+    "Change": "+.26",
+    "Volume": "0",
+    "OI": "125"
+   },
+   {
+    "Month": "AUG 30",
+    "Settle": 65.39,
+    "Change": "+.24",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "SEP 30",
+    "Settle": 65.27,
+    "Change": "+.23",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "OCT 30",
+    "Settle": 65.15,
+    "Change": "+.22",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "NOV 30",
+    "Settle": 65.03,
+    "Change": "+.19",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "DEC 30",
+    "Settle": 64.9,
+    "Change": "+.17",
+    "Volume": "529",
+    "OI": "16,210"
+   },
+   {
+    "Month": "JAN 31",
+    "Settle": 64.72,
+    "Change": "+.16",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "FEB 31",
+    "Settle": 64.56,
+    "Change": "+.15",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "MAR 31",
+    "Settle": 64.44,
+    "Change": "+.15",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "APR 31",
+    "Settle": 64.33,
+    "Change": "+.14",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "MAY 31",
+    "Settle": 64.21,
+    "Change": "+.13",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "JUN 31",
+    "Settle": 64.07,
+    "Change": "+.12",
+    "Volume": "0",
+    "OI": "1,588"
+   },
+   {
+    "Month": "JUL 31",
+    "Settle": 63.92,
+    "Change": "+.10",
+    "Volume": "0",
+    "OI": "4"
+   },
+   {
+    "Month": "AUG 31",
+    "Settle": 63.78,
+    "Change": "+.09",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "SEP 31",
+    "Settle": 63.65,
+    "Change": "+.07",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "OCT 31",
+    "Settle": 63.53,
+    "Change": "+.05",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "NOV 31",
+    "Settle": 63.39,
+    "Change": "+.04",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "DEC 31",
+    "Settle": 63.27,
+    "Change": "+.02",
+    "Volume": "98",
+    "OI": "6,536"
+   },
+   {
+    "Month": "JAN 32",
+    "Settle": 63.09,
+    "Change": "+.02",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "FEB 32",
+    "Settle": 62.96,
+    "Change": "+.01",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "MAR 32",
+    "Settle": 62.83,
+    "Change": "+.01",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "APR 32",
+    "Settle": 62.69,
+    "Change": "+.01",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "MAY 32",
+    "Settle": 62.55,
+    "Change": ".00",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "JUN 32",
+    "Settle": 62.41,
+    "Change": ".00",
+    "Volume": "0",
+    "OI": "152"
+   },
+   {
+    "Month": "JUL 32",
+    "Settle": 62.25,
+    "Change": ".00",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "AUG 32",
+    "Settle": 62.12,
+    "Change": ".00",
+    "Volume": "0",
+    "OI": "2"
+   },
+   {
+    "Month": "SEP 32",
+    "Settle": 61.98,
+    "Change": "-.01",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "OCT 32",
+    "Settle": 61.81,
+    "Change": "-.01",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "NOV 32",
+    "Settle": 61.7,
+    "Change": "-.01",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "DEC 32",
+    "Settle": 61.59,
+    "Change": "-.01",
+    "Volume": "20",
+    "OI": "5,437"
+   },
+   {
+    "Month": "JAN 33",
+    "Settle": 61.42,
+    "Change": "-.02",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "FEB 33",
+    "Settle": 61.32,
+    "Change": "-.02",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "MAR 33",
+    "Settle": 61.18,
+    "Change": "-.03",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "APR 33",
+    "Settle": 61.05,
+    "Change": "-.03",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "MAY 33",
+    "Settle": 60.86,
+    "Change": "-.04",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "JUN 33",
+    "Settle": 60.67,
+    "Change": "-.04",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "JUL 33",
+    "Settle": 60.45,
+    "Change": "-.04",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "AUG 33",
+    "Settle": 60.26,
+    "Change": "-.04",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "SEP 33",
+    "Settle": 60.1,
+    "Change": "-.05",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "OCT 33",
+    "Settle": 59.98,
+    "Change": "-.05",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "NOV 33",
+    "Settle": 59.87,
+    "Change": "-.05",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "DEC 33",
+    "Settle": 59.8,
+    "Change": "-.05",
+    "Volume": "4",
+    "OI": "1,506"
+   },
+   {
+    "Month": "JAN 34",
+    "Settle": 59.63,
+    "Change": "-.05",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "FEB 34",
+    "Settle": 59.47,
+    "Change": "-.05",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "MAR 34",
+    "Settle": 59.31,
+    "Change": "-.06",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "APR 34",
+    "Settle": 59.15,
+    "Change": "-.06",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "MAY 34",
+    "Settle": 59.01,
+    "Change": "-.06",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "JUN 34",
+    "Settle": 58.88,
+    "Change": "-.06",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "JUL 34",
+    "Settle": 58.75,
+    "Change": "-.06",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "AUG 34",
+    "Settle": 58.6,
+    "Change": "-.06",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "SEP 34",
+    "Settle": 58.47,
+    "Change": "-.07",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "OCT 34",
+    "Settle": 58.34,
+    "Change": "-.07",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "NOV 34",
+    "Settle": 58.2,
+    "Change": "-.07",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "DEC 34",
+    "Settle": 58.06,
+    "Change": "-.07",
+    "Volume": "0",
+    "OI": "24"
+   },
+   {
+    "Month": "JAN 35",
+    "Settle": 57.91,
+    "Change": "-.07",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "FEB 35",
+    "Settle": 57.78,
+    "Change": "-.07",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "MAR 35",
+    "Settle": 57.65,
+    "Change": "-.08",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "APR 35",
+    "Settle": 57.52,
+    "Change": "-.08",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "MAY 35",
+    "Settle": 57.36,
+    "Change": "-.08",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "JUN 35",
+    "Settle": 57.16,
+    "Change": "-.08",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "JUL 35",
+    "Settle": 57.03,
+    "Change": "-.08",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "AUG 35",
+    "Settle": 56.88,
+    "Change": "-.08",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "SEP 35",
+    "Settle": 56.77,
+    "Change": "-.09",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "OCT 35",
+    "Settle": 56.64,
+    "Change": "-.09",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "NOV 35",
+    "Settle": 56.53,
+    "Change": "-.09",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "DEC 35",
+    "Settle": 56.38,
+    "Change": "-.12",
+    "Volume": "0",
+    "OI": "11"
+   },
+   {
+    "Month": "JAN 36",
+    "Settle": 56.27,
+    "Change": "-.09",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "FEB 36",
+    "Settle": 56.15,
+    "Change": "-.09",
+    "Volume": "0",
+    "OI": "32"
+   },
+   {
+    "Month": "MAR 36",
+    "Settle": 56.04,
+    "Change": "-.09",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "APR 36",
+    "Settle": 55.92,
+    "Change": "-.09",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "MAY 36",
+    "Settle": 55.78,
+    "Change": "-.09",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "JUN 36",
+    "Settle": 55.61,
+    "Change": "-.09",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "JUL 36",
+    "Settle": 55.44,
+    "Change": "-.09",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "AUG 36",
+    "Settle": 55.27,
+    "Change": "-.09",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "SEP 36",
+    "Settle": 55.16,
+    "Change": "-.09",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "OCT 36",
+    "Settle": 55.04,
+    "Change": "-.09",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "NOV 36",
+    "Settle": 54.91,
+    "Change": "-.09",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "DEC 36",
+    "Settle": 54.77,
+    "Change": "-.11",
+    "Volume": "0",
+    "OI": "20"
+   },
+   {
+    "Month": "JAN 37",
+    "Settle": 54.7,
+    "Change": "-.11",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "FEB 37",
+    "Settle": 54.64,
+    "Change": "-.11",
+    "Volume": "0",
+    "OI": "0"
+   }
+  ],
+  "NG  Nat Gas": [
+   {
+    "Month": "AUG 26",
+    "Settle": 2.911,
+    "Change": "+.05300",
+    "Volume": "106,995",
+    "OI": "105,904"
+   },
+   {
+    "Month": "SEP 26",
+    "Settle": 2.876,
+    "Change": "+.05300",
+    "Volume": "91,959",
+    "OI": "323,183"
+   },
+   {
+    "Month": "OCT 26",
+    "Settle": 2.905,
+    "Change": "+.05100",
+    "Volume": "47,086",
+    "OI": "144,882"
+   },
+   {
+    "Month": "NOV 26",
+    "Settle": 3.098,
+    "Change": "+.03900",
+    "Volume": "27,258",
+    "OI": "96,506"
+   },
+   {
+    "Month": "DEC 26",
+    "Settle": 3.735,
+    "Change": "+.01000",
+    "Volume": "25,969",
+    "OI": "127,406"
+   },
+   {
+    "Month": "JAN 27",
+    "Settle": 4.16,
+    "Change": "+.00900",
+    "Volume": "19,510",
+    "OI": "149,327"
+   },
+   {
+    "Month": "FEB 27",
+    "Settle": 3.765,
+    "Change": "+.01600",
+    "Volume": "9,261",
+    "OI": "66,036"
+   },
+   {
+    "Month": "MAR 27",
+    "Settle": 2.977,
+    "Change": "+.02700",
+    "Volume": "12,314",
+    "OI": "129,139"
+   },
+   {
+    "Month": "APR 27",
+    "Settle": 2.806,
+    "Change": "+.02400",
+    "Volume": "10,759",
+    "OI": "115,966"
+   },
+   {
+    "Month": "MAY 27",
+    "Settle": 2.793,
+    "Change": "+.02400",
+    "Volume": "5,071",
+    "OI": "57,083"
+   },
+   {
+    "Month": "JUN 27",
+    "Settle": 2.928,
+    "Change": "+.02400",
+    "Volume": "2,645",
+    "OI": "24,839"
+   },
+   {
+    "Month": "JUL 27",
+    "Settle": 3.138,
+    "Change": "+.02400",
+    "Volume": "3,194",
+    "OI": "31,477"
+   },
+   {
+    "Month": "AUG 27",
+    "Settle": 3.204,
+    "Change": "+.02400",
+    "Volume": "2,396",
+    "OI": "28,958"
+   },
+   {
+    "Month": "SEP 27",
+    "Settle": 3.181,
+    "Change": "+.02600",
+    "Volume": "2,191",
+    "OI": "29,934"
+   },
+   {
+    "Month": "OCT 27",
+    "Settle": 3.259,
+    "Change": "+.02900",
+    "Volume": "3,529",
+    "OI": "58,741"
+   },
+   {
+    "Month": "NOV 27",
+    "Settle": 3.506,
+    "Change": "+.03400",
+    "Volume": "1,646",
+    "OI": "19,988"
+   },
+   {
+    "Month": "DEC 27",
+    "Settle": 4.144,
+    "Change": "+.03700",
+    "Volume": "518",
+    "OI": "23,786"
+   },
+   {
+    "Month": "JAN 28",
+    "Settle": 4.566,
+    "Change": "+.03200",
+    "Volume": "1,330",
+    "OI": "31,664"
+   },
+   {
+    "Month": "FEB 28",
+    "Settle": 4.112,
+    "Change": "+.03300",
+    "Volume": "397",
+    "OI": "12,538"
+   },
+   {
+    "Month": "MAR 28",
+    "Settle": 3.362,
+    "Change": "+.03400",
+    "Volume": "304",
+    "OI": "14,640"
+   },
+   {
+    "Month": "APR 28",
+    "Settle": 3.105,
+    "Change": "+.02700",
+    "Volume": "259",
+    "OI": "14,869"
+   },
+   {
+    "Month": "MAY 28",
+    "Settle": 3.089,
+    "Change": "+.02600",
+    "Volume": "99",
+    "OI": "7,361"
+   },
+   {
+    "Month": "JUN 28",
+    "Settle": 3.222,
+    "Change": "+.02500",
+    "Volume": "99",
+    "OI": "3,805"
+   },
+   {
+    "Month": "JUL 28",
+    "Settle": 3.429,
+    "Change": "+.02500",
+    "Volume": "44",
+    "OI": "2,189"
+   },
+   {
+    "Month": "AUG 28",
+    "Settle": 3.49,
+    "Change": "+.02500",
+    "Volume": "28",
+    "OI": "2,417"
+   },
+   {
+    "Month": "SEP 28",
+    "Settle": 3.465,
+    "Change": "+.02600",
+    "Volume": "36",
+    "OI": "3,050"
+   },
+   {
+    "Month": "OCT 28",
+    "Settle": 3.521,
+    "Change": "+.02700",
+    "Volume": "90",
+    "OI": "11,061"
+   },
+   {
+    "Month": "NOV 28",
+    "Settle": 3.713,
+    "Change": "+.02900",
+    "Volume": "69",
+    "OI": "1,972"
+   },
+   {
+    "Month": "DEC 28",
+    "Settle": 4.286,
+    "Change": "+.02200",
+    "Volume": "42",
+    "OI": "5,321"
+   },
+   {
+    "Month": "JAN 29",
+    "Settle": 4.702,
+    "Change": "+.01800",
+    "Volume": "30",
+    "OI": "5,896"
+   },
+   {
+    "Month": "FEB 29",
+    "Settle": 4.295,
+    "Change": "+.01800",
+    "Volume": "7",
+    "OI": "1,728"
+   },
+   {
+    "Month": "MAR 29",
+    "Settle": 3.421,
+    "Change": "+.01900",
+    "Volume": "17",
+    "OI": "2,370"
+   },
+   {
+    "Month": "APR 29",
+    "Settle": 3.114,
+    "Change": "+.01900",
+    "Volume": "22",
+    "OI": "3,475"
+   },
+   {
+    "Month": "MAY 29",
+    "Settle": 3.093,
+    "Change": "+.01900",
+    "Volume": "6",
+    "OI": "532"
+   },
+   {
+    "Month": "JUN 29",
+    "Settle": 3.206,
+    "Change": "+.02100",
+    "Volume": "6",
+    "OI": "654"
+   },
+   {
+    "Month": "JUL 29",
+    "Settle": 3.419,
+    "Change": "+.02200",
+    "Volume": "3",
+    "OI": "840"
+   },
+   {
+    "Month": "AUG 29",
+    "Settle": 3.478,
+    "Change": "+.02300",
+    "Volume": "0",
+    "OI": "510"
+   },
+   {
+    "Month": "SEP 29",
+    "Settle": 3.463,
+    "Change": "+.02200",
+    "Volume": "4",
+    "OI": "239"
+   },
+   {
+    "Month": "OCT 29",
+    "Settle": 3.528,
+    "Change": "+.02200",
+    "Volume": "25",
+    "OI": "2,865"
+   },
+   {
+    "Month": "NOV 29",
+    "Settle": 3.687,
+    "Change": "+.02300",
+    "Volume": "6",
+    "OI": "389"
+   },
+   {
+    "Month": "DEC 29",
+    "Settle": 4.264,
+    "Change": "+.02400",
+    "Volume": "1",
+    "OI": "1,461"
+   },
+   {
+    "Month": "JAN 30",
+    "Settle": 4.701,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "2,072"
+   },
+   {
+    "Month": "FEB 30",
+    "Settle": 4.276,
+    "Change": "+.02200",
+    "Volume": "0",
+    "OI": "594"
+   },
+   {
+    "Month": "MAR 30",
+    "Settle": 3.438,
+    "Change": "+.01900",
+    "Volume": "0",
+    "OI": "522"
+   },
+   {
+    "Month": "APR 30",
+    "Settle": 3.058,
+    "Change": "+.01900",
+    "Volume": "1",
+    "OI": "680"
+   },
+   {
+    "Month": "MAY 30",
+    "Settle": 3.016,
+    "Change": "+.01600",
+    "Volume": "1",
+    "OI": "264"
+   },
+   {
+    "Month": "JUN 30",
+    "Settle": 3.15,
+    "Change": "+.01400",
+    "Volume": "0",
+    "OI": "251"
+   },
+   {
+    "Month": "JUL 30",
+    "Settle": 3.398,
+    "Change": "+.00900",
+    "Volume": "2",
+    "OI": "188"
+   },
+   {
+    "Month": "AUG 30",
+    "Settle": 3.428,
+    "Change": "+.01400",
+    "Volume": "2",
+    "OI": "147"
+   },
+   {
+    "Month": "SEP 30",
+    "Settle": 3.389,
+    "Change": "+.02100",
+    "Volume": "4",
+    "OI": "180"
+   },
+   {
+    "Month": "OCT 30",
+    "Settle": 3.461,
+    "Change": "+.02200",
+    "Volume": "7",
+    "OI": "395"
+   },
+   {
+    "Month": "NOV 30",
+    "Settle": 3.614,
+    "Change": "+.02300",
+    "Volume": "3",
+    "OI": "793"
+   },
+   {
+    "Month": "DEC 30",
+    "Settle": 4.147,
+    "Change": "+.02600",
+    "Volume": "3",
+    "OI": "120"
+   },
+   {
+    "Month": "JAN 31",
+    "Settle": 4.55,
+    "Change": "+.02600",
+    "Volume": "3",
+    "OI": "287"
+   },
+   {
+    "Month": "FEB 31",
+    "Settle": 4.141,
+    "Change": "+.02600",
+    "Volume": "0",
+    "OI": "59"
+   },
+   {
+    "Month": "MAR 31",
+    "Settle": 3.403,
+    "Change": "+.02600",
+    "Volume": "0",
+    "OI": "102"
+   },
+   {
+    "Month": "APR 31",
+    "Settle": 3.006,
+    "Change": "+.02700",
+    "Volume": "0",
+    "OI": "109"
+   },
+   {
+    "Month": "MAY 31",
+    "Settle": 2.973,
+    "Change": "+.02800",
+    "Volume": "0",
+    "OI": "174"
+   },
+   {
+    "Month": "JUN 31",
+    "Settle": 3.095,
+    "Change": "+.03000",
+    "Volume": "0",
+    "OI": "111"
+   },
+   {
+    "Month": "JUL 31",
+    "Settle": 3.296,
+    "Change": "+.03200",
+    "Volume": "0",
+    "OI": "27"
+   },
+   {
+    "Month": "AUG 31",
+    "Settle": 3.352,
+    "Change": "+.03200",
+    "Volume": "0",
+    "OI": "27"
+   },
+   {
+    "Month": "SEP 31",
+    "Settle": 3.335,
+    "Change": "+.03200",
+    "Volume": "0",
+    "OI": "37"
+   },
+   {
+    "Month": "OCT 31",
+    "Settle": 3.414,
+    "Change": "+.03200",
+    "Volume": "2",
+    "OI": "96"
+   },
+   {
+    "Month": "NOV 31",
+    "Settle": 3.649,
+    "Change": "+.03100",
+    "Volume": "2",
+    "OI": "42"
+   },
+   {
+    "Month": "DEC 31",
+    "Settle": 4.236,
+    "Change": "+.03000",
+    "Volume": "0",
+    "OI": "22"
+   },
+   {
+    "Month": "JAN 32",
+    "Settle": 4.577,
+    "Change": "+.02900",
+    "Volume": "1",
+    "OI": "32"
+   },
+   {
+    "Month": "FEB 32",
+    "Settle": 4.14,
+    "Change": "+.02900",
+    "Volume": "2",
+    "OI": "7"
+   },
+   {
+    "Month": "MAR 32",
+    "Settle": 3.345,
+    "Change": "+.02500",
+    "Volume": "1",
+    "OI": "48"
+   },
+   {
+    "Month": "APR 32",
+    "Settle": 2.9,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "43"
+   },
+   {
+    "Month": "MAY 32",
+    "Settle": 2.865,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "37"
+   },
+   {
+    "Month": "JUN 32",
+    "Settle": 2.995,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "33"
+   },
+   {
+    "Month": "JUL 32",
+    "Settle": 3.169,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "18"
+   },
+   {
+    "Month": "AUG 32",
+    "Settle": 3.218,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "13"
+   },
+   {
+    "Month": "SEP 32",
+    "Settle": 3.192,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "13"
+   },
+   {
+    "Month": "OCT 32",
+    "Settle": 3.257,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "39"
+   },
+   {
+    "Month": "NOV 32",
+    "Settle": 3.474,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "15"
+   },
+   {
+    "Month": "DEC 32",
+    "Settle": 3.996,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "20"
+   },
+   {
+    "Month": "JAN 33",
+    "Settle": 4.308,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "5"
+   },
+   {
+    "Month": "FEB 33",
+    "Settle": 3.854,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "MAR 33",
+    "Settle": 3.145,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "APR 33",
+    "Settle": 2.786,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "34"
+   },
+   {
+    "Month": "MAY 33",
+    "Settle": 2.772,
+    "Change": "+.02500",
+    "Volume": "4",
+    "OI": "28"
+   },
+   {
+    "Month": "JUN 33",
+    "Settle": 2.914,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "JUL 33",
+    "Settle": 3.103,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "AUG 33",
+    "Settle": 3.154,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "SEP 33",
+    "Settle": 3.128,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "OCT 33",
+    "Settle": 3.201,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "17"
+   },
+   {
+    "Month": "NOV 33",
+    "Settle": 3.44,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "DEC 33",
+    "Settle": 3.875,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "JAN 34",
+    "Settle": 4.165,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "FEB 34",
+    "Settle": 3.82,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "MAR 34",
+    "Settle": 3.2,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "APR 34",
+    "Settle": 2.78,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "MAY 34",
+    "Settle": 2.77,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "JUN 34",
+    "Settle": 2.92,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "JUL 34",
+    "Settle": 3.1,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "AUG 34",
+    "Settle": 3.16,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "SEP 34",
+    "Settle": 3.175,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "OCT 34",
+    "Settle": 3.221,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "14"
+   },
+   {
+    "Month": "NOV 34",
+    "Settle": 3.461,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "DEC 34",
+    "Settle": 3.861,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "JAN 35",
+    "Settle": 4.086,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "FEB 35",
+    "Settle": 3.846,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "MAR 35",
+    "Settle": 3.416,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "APR 35",
+    "Settle": 3.026,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "MAY 35",
+    "Settle": 3.004,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "JUN 35",
+    "Settle": 3.039,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "JUL 35",
+    "Settle": 3.079,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "AUG 35",
+    "Settle": 3.119,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "SEP 35",
+    "Settle": 3.134,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "OCT 35",
+    "Settle": 3.18,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "NOV 35",
+    "Settle": 3.38,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "DEC 35",
+    "Settle": 3.69,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "JAN 36",
+    "Settle": 3.96,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "FEB 36",
+    "Settle": 3.79,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "MAR 36",
+    "Settle": 3.52,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "APR 36",
+    "Settle": 3.19,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "MAY 36",
+    "Settle": 3.168,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "JUN 36",
+    "Settle": 3.208,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "JUL 36",
+    "Settle": 3.248,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "AUG 36",
+    "Settle": 3.288,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "SEP 36",
+    "Settle": 3.303,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "OCT 36",
+    "Settle": 3.349,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "NOV 36",
+    "Settle": 3.499,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "DEC 36",
+    "Settle": 3.774,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "JAN 37",
+    "Settle": 3.999,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "FEB 37",
+    "Settle": 3.849,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "MAR 37",
+    "Settle": 3.649,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "APR 37",
+    "Settle": 3.319,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "MAY 37",
+    "Settle": 3.297,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "JUN 37",
+    "Settle": 3.332,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "JUL 37",
+    "Settle": 3.372,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "AUG 37",
+    "Settle": 3.412,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "SEP 37",
+    "Settle": 3.427,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "OCT 37",
+    "Settle": 3.473,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "NOV 37",
+    "Settle": 3.598,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "DEC 37",
+    "Settle": 3.823,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "JAN 38",
+    "Settle": 4.088,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "FEB 38",
+    "Settle": 3.938,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "MAR 38",
+    "Settle": 3.738,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "APR 38",
+    "Settle": 3.408,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "MAY 38",
+    "Settle": 3.386,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "JUN 38",
+    "Settle": 3.466,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "JUL 38",
+    "Settle": 3.566,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "AUG 38",
+    "Settle": 3.606,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "SEP 38",
+    "Settle": 3.621,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "OCT 38",
+    "Settle": 3.667,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "NOV 38",
+    "Settle": 3.739,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "DEC 38",
+    "Settle": 3.894,
+    "Change": "+.02500",
+    "Volume": "0",
+    "OI": "0"
+   }
+  ],
+  "GC  Gold": [
+   {
+    "Month": "JUL 26",
+    "Settle": 4012.7,
+    "Change": "+27.1",
+    "Volume": "141",
+    "OI": "1,089"
+   },
+   {
+    "Month": "AUG 26",
+    "Settle": 4018.8,
+    "Change": "+26.7",
+    "Volume": "112,279",
+    "OI": "227,561"
+   },
+   {
+    "Month": "SEP 26",
+    "Settle": 4032.1,
+    "Change": "+26.7",
+    "Volume": "486",
+    "OI": "1,840"
+   },
+   {
+    "Month": "OCT 26",
+    "Settle": 4046.0,
+    "Change": "+26.9",
+    "Volume": "4,238",
+    "OI": "29,100"
+   },
+   {
+    "Month": "NOV 26",
+    "Settle": 4061.5,
+    "Change": "+27.1",
+    "Volume": "66",
+    "OI": "252"
+   },
+   {
+    "Month": "DEC 26",
+    "Settle": 4075.8,
+    "Change": "+27.1",
+    "Volume": "15,691",
+    "OI": "107,116"
+   },
+   {
+    "Month": "JAN 27",
+    "Settle": 4093.0,
+    "Change": "+27.2",
+    "Volume": "15",
+    "OI": "252"
+   },
+   {
+    "Month": "FEB 27",
+    "Settle": 4107.4,
+    "Change": "+27.4",
+    "Volume": "1,279",
+    "OI": "11,234"
+   },
+   {
+    "Month": "MAR 27",
+    "Settle": 4121.8,
+    "Change": "+27.5",
+    "Volume": "2",
+    "OI": "21"
+   },
+   {
+    "Month": "APR 27",
+    "Settle": 4138.2,
+    "Change": "+27.8",
+    "Volume": "388",
+    "OI": "4,417"
+   },
+   {
+    "Month": "MAY 27",
+    "Settle": 4155.0,
+    "Change": "+27.9",
+    "Volume": "0",
+    "OI": "13"
+   },
+   {
+    "Month": "JUN 27",
+    "Settle": 4169.7,
+    "Change": "+28.0",
+    "Volume": "72",
+    "OI": "855"
+   },
+   {
+    "Month": "JUL 27",
+    "Settle": 4186.3,
+    "Change": "+28.1",
+    "Volume": "4",
+    "OI": "8"
+   },
+   {
+    "Month": "AUG 27",
+    "Settle": 4201.6,
+    "Change": "+28.1",
+    "Volume": "25",
+    "OI": "425"
+   },
+   {
+    "Month": "SEP 27",
+    "Settle": 4216.4,
+    "Change": "+28.2",
+    "Volume": "2",
+    "OI": "9"
+   },
+   {
+    "Month": "OCT 27",
+    "Settle": 4233.0,
+    "Change": "+28.2",
+    "Volume": "27",
+    "OI": "78"
+   },
+   {
+    "Month": "NOV 27",
+    "Settle": 4248.6,
+    "Change": "+28.2",
+    "Volume": "0",
+    "OI": "8"
+   },
+   {
+    "Month": "DEC 27",
+    "Settle": 4265.1,
+    "Change": "+28.2",
+    "Volume": "29",
+    "OI": "348"
+   },
+   {
+    "Month": "JAN 28",
+    "Settle": 4280.9,
+    "Change": "+28.2",
+    "Volume": "0",
+    "OI": "6"
+   },
+   {
+    "Month": "FEB 28",
+    "Settle": 4297.4,
+    "Change": "+28.1",
+    "Volume": "13",
+    "OI": "52"
+   },
+   {
+    "Month": "MAR 28",
+    "Settle": 4312.4,
+    "Change": "+28.1",
+    "Volume": "0",
+    "OI": "4"
+   },
+   {
+    "Month": "APR 28",
+    "Settle": 4329.2,
+    "Change": "+28.0",
+    "Volume": "3",
+    "OI": "102"
+   },
+   {
+    "Month": "MAY 28",
+    "Settle": 4345.3,
+    "Change": "+28.0",
+    "Volume": "1",
+    "OI": "4"
+   },
+   {
+    "Month": "JUN 28",
+    "Settle": 4360.4,
+    "Change": "+27.9",
+    "Volume": "2",
+    "OI": "101"
+   },
+   {
+    "Month": "JUL 28",
+    "Settle": 4376.6,
+    "Change": "+27.9",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "AUG 28",
+    "Settle": 4392.1,
+    "Change": "+27.9",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "DEC 28",
+    "Settle": 4455.9,
+    "Change": "+27.9",
+    "Volume": "0",
+    "OI": "125"
+   },
+   {
+    "Month": "JUN 29",
+    "Settle": 4551.8,
+    "Change": "+27.9",
+    "Volume": "0",
+    "OI": "44"
+   },
+   {
+    "Month": "DEC 29",
+    "Settle": 4650.2,
+    "Change": "+27.9",
+    "Volume": "0",
+    "OI": "18"
+   },
+   {
+    "Month": "JUN 30",
+    "Settle": 4718.2,
+    "Change": "+27.9",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "DEC 30",
+    "Settle": 4758.2,
+    "Change": "+27.9",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "JUN 31",
+    "Settle": 4793.4,
+    "Change": "+27.9",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "DEC 31",
+    "Settle": 4829.4,
+    "Change": "+27.9",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "JUN 32",
+    "Settle": 4864.6,
+    "Change": "+27.9",
+    "Volume": "0",
+    "OI": "0"
+   }
+  ],
+  "SI  Silver": [
+   {
+    "Month": "JUL 26",
+    "Settle": 56.038,
+    "Change": "+.140",
+    "Volume": "427",
+    "OI": "2,296"
+   },
+   {
+    "Month": "AUG 26",
+    "Settle": 56.133,
+    "Change": "+.137",
+    "Volume": "628",
+    "OI": "1,933"
+   },
+   {
+    "Month": "SEP 26",
+    "Settle": 56.326,
+    "Change": "+.139",
+    "Volume": "32,270",
+    "OI": "79,550"
+   },
+   {
+    "Month": "OCT 26",
+    "Settle": 56.522,
+    "Change": "+.139",
+    "Volume": "19",
+    "OI": "105"
+   },
+   {
+    "Month": "NOV 26",
+    "Settle": 56.737,
+    "Change": "+.138",
+    "Volume": "0",
+    "OI": "105"
+   },
+   {
+    "Month": "DEC 26",
+    "Settle": 56.941,
+    "Change": "+.139",
+    "Volume": "3,414",
+    "OI": "13,829"
+   },
+   {
+    "Month": "JAN 27",
+    "Settle": 57.188,
+    "Change": "+.135",
+    "Volume": "4",
+    "OI": "87"
+   },
+   {
+    "Month": "FEB 27",
+    "Settle": 57.383,
+    "Change": "+.139",
+    "Volume": "0",
+    "OI": "17"
+   },
+   {
+    "Month": "MAR 27",
+    "Settle": 57.558,
+    "Change": "+.140",
+    "Volume": "323",
+    "OI": "4,029"
+   },
+   {
+    "Month": "APR 27",
+    "Settle": 57.783,
+    "Change": "+.140",
+    "Volume": "0",
+    "OI": "6"
+   },
+   {
+    "Month": "MAY 27",
+    "Settle": 57.991,
+    "Change": "+.140",
+    "Volume": "69",
+    "OI": "1,715"
+   },
+   {
+    "Month": "JUN 27",
+    "Settle": 58.192,
+    "Change": "+.140",
+    "Volume": "0",
+    "OI": "3"
+   },
+   {
+    "Month": "JUL 27",
+    "Settle": 58.416,
+    "Change": "+.139",
+    "Volume": "38",
+    "OI": "664"
+   },
+   {
+    "Month": "AUG 27",
+    "Settle": 58.637,
+    "Change": "+.139",
+    "Volume": "0",
+    "OI": "1"
+   },
+   {
+    "Month": "SEP 27",
+    "Settle": 58.859,
+    "Change": "+.138",
+    "Volume": "17",
+    "OI": "210"
+   },
+   {
+    "Month": "OCT 27",
+    "Settle": 59.091,
+    "Change": "+.138",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "NOV 27",
+    "Settle": 59.319,
+    "Change": "+.137",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "DEC 27",
+    "Settle": 59.544,
+    "Change": "+.135",
+    "Volume": "23",
+    "OI": "87"
+   },
+   {
+    "Month": "JAN 28",
+    "Settle": 59.786,
+    "Change": "+.134",
+    "Volume": "0",
+    "OI": "3"
+   },
+   {
+    "Month": "FEB 28",
+    "Settle": 60.002,
+    "Change": "+.132",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "MAR 28",
+    "Settle": 60.233,
+    "Change": "+.127",
+    "Volume": "24",
+    "OI": "17"
+   },
+   {
+    "Month": "APR 28",
+    "Settle": 60.471,
+    "Change": "+.126",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "MAY 28",
+    "Settle": 60.699,
+    "Change": "+.122",
+    "Volume": "25",
+    "OI": "125"
+   },
+   {
+    "Month": "JUN 28",
+    "Settle": 60.933,
+    "Change": "+.120",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "JUL 28",
+    "Settle": 61.149,
+    "Change": "+.116",
+    "Volume": "11",
+    "OI": "49"
+   },
+   {
+    "Month": "AUG 28",
+    "Settle": 61.317,
+    "Change": "+.083",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "DEC 28",
+    "Settle": 62.214,
+    "Change": "+.091",
+    "Volume": "2",
+    "OI": "55"
+   },
+   {
+    "Month": "JUL 29",
+    "Settle": 67.418,
+    "Change": "-.009",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "DEC 29",
+    "Settle": 68.706,
+    "Change": "-.009",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "JUL 30",
+    "Settle": 69.675,
+    "Change": "-.009",
+    "Volume": "0",
+    "OI": "2"
+   },
+   {
+    "Month": "DEC 30",
+    "Settle": 70.177,
+    "Change": "-.009",
+    "Volume": "0",
+    "OI": "0"
+   }
+  ],
+  "HG  Copper": [
+   {
+    "Month": "JUL 26",
+    "Settle": 6.22,
+    "Change": "-.0760",
+    "Volume": "1,819",
+    "OI": "2,682"
+   },
+   {
+    "Month": "AUG 26",
+    "Settle": 6.2345,
+    "Change": "-.0775",
+    "Volume": "1,324",
+    "OI": "12,308"
+   },
+   {
+    "Month": "SEP 26",
+    "Settle": 6.265,
+    "Change": "-.0770",
+    "Volume": "44,821",
+    "OI": "146,850"
+   },
+   {
+    "Month": "OCT 26",
+    "Settle": 6.2945,
+    "Change": "-.0770",
+    "Volume": "209",
+    "OI": "5,782"
+   },
+   {
+    "Month": "NOV 26",
+    "Settle": 6.325,
+    "Change": "-.0775",
+    "Volume": "109",
+    "OI": "2,996"
+   },
+   {
+    "Month": "DEC 26",
+    "Settle": 6.3555,
+    "Change": "-.0775",
+    "Volume": "9,590",
+    "OI": "62,081"
+   },
+   {
+    "Month": "JAN 27",
+    "Settle": 6.3845,
+    "Change": "-.0775",
+    "Volume": "66",
+    "OI": "2,172"
+   },
+   {
+    "Month": "FEB 27",
+    "Settle": 6.415,
+    "Change": "-.0775",
+    "Volume": "25",
+    "OI": "775"
+   },
+   {
+    "Month": "MAR 27",
+    "Settle": 6.445,
+    "Change": "-.0775",
+    "Volume": "1,841",
+    "OI": "17,191"
+   },
+   {
+    "Month": "APR 27",
+    "Settle": 6.4745,
+    "Change": "-.0770",
+    "Volume": "10",
+    "OI": "293"
+   },
+   {
+    "Month": "MAY 27",
+    "Settle": 6.5025,
+    "Change": "-.0765",
+    "Volume": "376",
+    "OI": "4,110"
+   },
+   {
+    "Month": "JUN 27",
+    "Settle": 6.5305,
+    "Change": "-.0755",
+    "Volume": "7",
+    "OI": "187"
+   },
+   {
+    "Month": "JUL 27",
+    "Settle": 6.557,
+    "Change": "-.0760",
+    "Volume": "67",
+    "OI": "941"
+   },
+   {
+    "Month": "AUG 27",
+    "Settle": 6.584,
+    "Change": "-.0755",
+    "Volume": "2",
+    "OI": "78"
+   },
+   {
+    "Month": "SEP 27",
+    "Settle": 6.608,
+    "Change": "-.0755",
+    "Volume": "74",
+    "OI": "815"
+   },
+   {
+    "Month": "OCT 27",
+    "Settle": 6.635,
+    "Change": "-.0755",
+    "Volume": "5",
+    "OI": "54"
+   },
+   {
+    "Month": "NOV 27",
+    "Settle": 6.659,
+    "Change": "-.0760",
+    "Volume": "4",
+    "OI": "39"
+   },
+   {
+    "Month": "DEC 27",
+    "Settle": 6.677,
+    "Change": "-.0760",
+    "Volume": "44",
+    "OI": "2,030"
+   },
+   {
+    "Month": "JAN 28",
+    "Settle": 6.6995,
+    "Change": "-.0760",
+    "Volume": "0",
+    "OI": "10"
+   },
+   {
+    "Month": "FEB 28",
+    "Settle": 6.7255,
+    "Change": "-.0765",
+    "Volume": "0",
+    "OI": "2"
+   },
+   {
+    "Month": "MAR 28",
+    "Settle": 6.7475,
+    "Change": "-.0765",
+    "Volume": "5",
+    "OI": "142"
+   },
+   {
+    "Month": "APR 28",
+    "Settle": 6.769,
+    "Change": "-.0765",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "MAY 28",
+    "Settle": 6.793,
+    "Change": "-.0765",
+    "Volume": "8",
+    "OI": "104"
+   },
+   {
+    "Month": "JUN 28",
+    "Settle": 6.8145,
+    "Change": "-.0765",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "JUL 28",
+    "Settle": 6.8385,
+    "Change": "-.0765",
+    "Volume": "8",
+    "OI": "178"
+   },
+   {
+    "Month": "AUG 28",
+    "Settle": 6.8595,
+    "Change": "-.0765",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "SEP 28",
+    "Settle": 6.884,
+    "Change": "-.0765",
+    "Volume": "2",
+    "OI": "83"
+   },
+   {
+    "Month": "OCT 28",
+    "Settle": 6.9045,
+    "Change": "-.0765",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "NOV 28",
+    "Settle": 6.93,
+    "Change": "-.0765",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "DEC 28",
+    "Settle": 6.951,
+    "Change": "-.0765",
+    "Volume": "7",
+    "OI": "92"
+   },
+   {
+    "Month": "JAN 29",
+    "Settle": 6.9805,
+    "Change": "-.0765",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "FEB 29",
+    "Settle": 7.0195,
+    "Change": "-.0760",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "MAR 29",
+    "Settle": 7.0155,
+    "Change": "-.0760",
+    "Volume": "0",
+    "OI": "8"
+   },
+   {
+    "Month": "APR 29",
+    "Settle": 7.0295,
+    "Change": "-.0765",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "MAY 29",
+    "Settle": 7.4045,
+    "Change": "-.0765",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "JUN 29",
+    "Settle": 7.4245,
+    "Change": "-.0765",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "JUL 29",
+    "Settle": 7.4395,
+    "Change": "-.0765",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "SEP 29",
+    "Settle": 7.473,
+    "Change": "-.0765",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "DEC 29",
+    "Settle": 7.5235,
+    "Change": "-.0765",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "MAR 30",
+    "Settle": 7.558,
+    "Change": "-.0765",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "MAY 30",
+    "Settle": 7.592,
+    "Change": "-.0765",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "JUL 30",
+    "Settle": 7.626,
+    "Change": "-.0765",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "SEP 30",
+    "Settle": 7.6405,
+    "Change": "-.0765",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "DEC 30",
+    "Settle": 7.6915,
+    "Change": "-.0765",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "MAR 31",
+    "Settle": 7.726,
+    "Change": "-.0765",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "MAY 31",
+    "Settle": 7.76,
+    "Change": "-.0765",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "JUL 31",
+    "Settle": 7.794,
+    "Change": "-.0765",
+    "Volume": "0",
+    "OI": "0"
+   },
+   {
+    "Month": "SEP 31",
+    "Settle": 7.8085,
+    "Change": "-.0765",
+    "Volume": "0",
+    "OI": "0"
+   }
+  ]
+ }
+}
