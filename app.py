@@ -662,7 +662,7 @@ def build_curve_scanner(n: int = 12) -> pd.DataFrame:
             "Front": round(m["front"], 2),
             "Back": round(m["back"], 2),
             "Shape": m["shape"],
-            "Roll ann %": round(m["roll_ann"], 1) if m["roll_ann"] is not None else None,
+            "Current Roll": round(m["roll"], 2) if m["roll"] is not None else None,
             "Carry ann %": round(m["carry_ann"], 1) if m["carry_ann"] is not None else None,
         })
     d = pd.DataFrame(rows)
@@ -681,30 +681,42 @@ def render_curve() -> None:
             return "color:#9ca3af;"
         return "color:#16a34a;font-weight:600;" if v >= 0 else "color:#dc2626;font-weight:600;"
 
-    # --- ranked carry scanner (all symbols, 12M) ---
-    st.markdown("##### Curve scanner — 12M carry, most backwardated first")
-    scan = build_curve_scanner(12)
-    if scan.empty:
-        st.warning("Curve data unavailable — CME may be rate-limiting this "
-                   "server's IP. Try Refresh in a few minutes; if it persists "
-                   "we'll switch to a snapshot fetched via GitHub Actions.")
-    else:
-        st.dataframe(
-            scan.style.map(pct_colour, subset=["Roll ann %", "Carry ann %"])
-            .format({"Roll ann %": lambda v: "—" if v is None or pd.isna(v) else f"{v:+.1f}%",
-                     "Carry ann %": lambda v: "—" if v is None or pd.isna(v) else f"{v:+.1f}%"}),
-            hide_index=True, use_container_width=True,
-        )
+    def fmt_pct(v):
+        return "—" if v is None or pd.isna(v) else f"{v:+.1f}%"
 
-    st.divider()
+    def fmt_roll(v):
+        return "—" if v is None or pd.isna(v) else f"{v:+,.2f}"
 
-    # --- per-symbol detail ---
-    name = st.selectbox("Symbol", ALL_CURVE)
+    # --- input selections on top ---
+    c1, c2 = st.columns([2, 3])
+    with c1:
+        horizon = st.radio("Horizon", ["12M", "24M", "36M", "All"], index=0,
+                           horizontal=True)
+    with c2:
+        name = st.selectbox("Symbol", ALL_CURVE)
     if st.button("🔄 Refresh curve"):
         get_curve.clear()
         get_ice_curve.clear()
         build_curve_scanner.clear()
         st.rerun()
+    n = {"12M": 12, "24M": 24, "36M": 36, "All": 999}[horizon]
+
+    # --- ranked carry scanner (title reflects the selected horizon) ---
+    st.markdown(f"##### Curve scanner — {horizon} carry, most backwardated first")
+    scan = build_curve_scanner(n)
+    if scan.empty:
+        st.warning("Curve data unavailable — CME may be rate-limiting this "
+                   "server's IP. Try Refresh in a few minutes.")
+    else:
+        st.dataframe(
+            scan.style.map(pct_colour, subset=["Current Roll", "Carry ann %"])
+            .format({"Current Roll": fmt_roll, "Carry ann %": fmt_pct}),
+            hide_index=True, use_container_width=True,
+        )
+
+    st.divider()
+
+    # --- per-symbol detail (same horizon) ---
     try:
         df = get_curve_for(name)
     except Exception as e:  # noqa: BLE001
@@ -719,22 +731,17 @@ def render_curve() -> None:
                 st.write(str(e))
         return
 
-    horizon = st.radio("Horizon", ["12M", "24M", "36M", "All"], index=0,
-                       horizontal=True)
-    total = len(df.dropna(subset=["Settle"]))
-    n = {"12M": 12, "24M": 24, "36M": 36, "All": total}[horizon]
     m = _curve_metrics(df, n)
     view = m["view"]
 
-    # one-line hero
+    # one-line hero: Current Roll, then Carry annualized
     arrow = ("↘" if m["shape"] == "Backwardation"
              else "↗" if m["shape"] == "Contango" else "→")
     parts = [f"**{name.split()[0]}**",
              f"{m['fm']} **{m['front']:,.2f}** → {m['bm']} **{m['back']:,.2f}**",
              f"{m['shape']} {arrow} {m['back'] - m['front']:+,.2f}"]
     if m["roll"] is not None:
-        parts += [f"Roll {m['roll']:+,.2f} ({m['roll_pct']:+.2f}%)",
-                  f"Roll ann {m['roll_ann']:+.1f}%",
+        parts += [f"Current roll {m['roll']:+,.2f} ({m['roll_pct']:+.2f}%)",
                   f"Carry ann {m['carry_ann']:+.1f}%"]
     st.markdown("  ·  ".join(parts))
 
