@@ -1,0 +1,38 @@
+name: Fetch market data
+
+on:
+  schedule:
+    # 22:30 UTC on weekdays (~after US futures settle). Cron is UTC.
+    - cron: "30 22 * * 1-5"
+  workflow_dispatch:        # adds a manual "Run workflow" button in the Actions tab
+
+permissions:
+  contents: write           # allow the job to commit the data files
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install deps
+        run: pip install curl_cffi pandas lxml
+
+      - name: Fetch data
+        run: python fetch_data.py
+
+      - name: Commit snapshot
+        run: |
+          git config user.name "sakata-bot"
+          git config user.email "actions@github.com"
+          git add data/
+          if git diff --staged --quiet; then
+            echo "No changes."
+          else
+            git commit -m "data: snapshot $(date -u +%Y-%m-%d)"
+            git push
+          fi

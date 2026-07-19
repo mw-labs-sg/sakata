@@ -580,10 +580,27 @@ def get_ice_curve(mid: int) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+@st.cache_data(ttl=600, show_spinner=False)
+def _load_snapshot() -> dict:
+    """Read data/curves.json committed by the GitHub Action, if present."""
+    import json as _json
+    import os
+    try:
+        with open(os.path.join("data", "curves.json")) as f:
+            return _json.load(f).get("curves", {})
+    except Exception:  # noqa: BLE001
+        return {}
+
+
 def get_curve_for(name: str) -> pd.DataFrame:
+    snap = _load_snapshot()
+    if name in snap and snap[name]:
+        return pd.DataFrame(snap[name])
     if name in CURVE_PRODUCTS:
         return get_curve(CURVE_PRODUCTS[name])
-    return get_ice_curve(ICE_PRODUCTS[name])
+    if name in ICE_PRODUCTS:
+        return get_ice_curve(ICE_PRODUCTS[name])
+    return pd.DataFrame()
 
 
 def get_curve_raw_for(name: str) -> str:
