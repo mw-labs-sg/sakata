@@ -117,8 +117,10 @@ def _norm_ice_month(s):
 
 def fetch_ice(mid):
     try:
-        data = session.get(ICE_URL.format(mid=mid), headers=ICE_HEADERS,
-                           timeout=25).json()
+        r = session.get(ICE_URL.format(mid=mid), headers=ICE_HEADERS, timeout=25)
+        print(f"  ICE {mid}: HTTP {r.status_code}, first 300 chars:")
+        print("  " + repr(r.text[:300]))
+        data = r.json()
     except Exception as e:
         print(f"  ICE {mid} failed: {e}")
         return []
