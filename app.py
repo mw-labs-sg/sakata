@@ -368,25 +368,39 @@ _DATE_FMTS = ["%m/%d/%Y", "%Y-%m-%d", "%Y%m%d"]
 
 
 @st.cache_data(ttl=1800, show_spinner=False)
-def get_curve(pid: int) -> pd.DataFrame:
-    """Try recent trading days / date formats until CME returns the strip."""
+def _resolve_tradedate() -> str | None:
+    """Find one tradeDate string that returns data (probed on CL=425)."""
     import json as _json
-    for day in _recent_business_days():
+    for day in _recent_business_days(5):
         for fmt in _DATE_FMTS:
+            ds = day.strftime(fmt)
             try:
-                raw = _fetch_settlements(pid, day.strftime(fmt))
-                rows = _parse_settlements(_json.loads(raw))
+                rows = _parse_settlements(_json.loads(_fetch_settlements(425, ds)))
                 if rows:
-                    return pd.DataFrame(rows)
+                    return ds
             except Exception:  # noqa: BLE001
                 continue
-    return pd.DataFrame()
+    return None
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def get_curve(pid: int) -> pd.DataFrame:
+    """One request per product using the pre-resolved trade date."""
+    import json as _json
+    ds = _resolve_tradedate()
+    if not ds:
+        return pd.DataFrame()
+    try:
+        return pd.DataFrame(_parse_settlements(_json.loads(_fetch_settlements(pid, ds))))
+    except Exception:  # noqa: BLE001
+        return pd.DataFrame()
 
 
 @st.cache_data(ttl=1800, show_spinner=False)
 def get_curve_raw(pid: int) -> str:
-    """Raw response for the most recent business day (debug)."""
-    return _fetch_settlements(pid, _recent_business_days()[0].strftime("%m/%d/%Y"))
+    """Raw response for debug (uses resolved date, else most recent day)."""
+    ds = _resolve_tradedate() or _recent_business_days(1)[0].strftime("%m/%d/%Y")
+    return _fetch_settlements(pid, ds)
 
 
 def build_events(selected: list) -> pd.DataFrame:
@@ -524,7 +538,10 @@ def _norm_ice_month(s: str) -> str:
 @st.cache_data(ttl=1800, show_spinner=False)
 def get_ice_curve(mid: int) -> pd.DataFrame:
     import json as _json
-    data = _json.loads(get_ice_raw(mid))
+    try:
+        data = _json.loads(get_ice_raw(mid))
+    except Exception:  # noqa: BLE001
+        return pd.DataFrame()
     if isinstance(data, list):
         contracts = data
     elif isinstance(data, dict):
