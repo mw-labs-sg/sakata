@@ -289,18 +289,16 @@ CURVE_PRODUCTS = {
     "ZC  Corn":    300,
     "ZW  Wheat":   323,
     "ZS  Soybean": 320,
-    # NQ, ZB, ZN, 6E, 6J, BTC, ETH: productIds NOT confirmed — my guesses were
-    # wrong (e.g. NQ 129 returned 0.06). Need the real id from each product's
-    # .settlements.html (DevTools > Network > the Settlements/.../{id}/FUT call).
+    "NQ  Nasdaq":  146,
+    # ZB, ZN, 6E, 6J, BTC, ETH: productIds still needed (View Source / Network)
 }
 
 # ICE products — CME's endpoint doesn't carry ICE softs. Sugar marketId from URL.
 ICE_URL = ("https://www.ice.com/marketdata/DelayedMarkets.shtml"
            "?getContractsAsJson=&marketId={mid}")
-ICE_PRODUCTS = {
-    "SB  Sugar": 7537907,
-    "KC  Coffee": 7510986,
-}
+# Softs (SB/KC) removed from Curve: ICE returns non-JSON and Barchart 403s
+# datacenter IPs. They remain on the Board via yfinance front-month.
+ICE_PRODUCTS = {}
 ALL_CURVE = list(CURVE_PRODUCTS) + list(ICE_PRODUCTS)
 
 
