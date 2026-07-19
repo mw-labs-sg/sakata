@@ -849,9 +849,54 @@ def render_curve() -> None:
              .format({"Settle": lambda v: f"{v:,.2f}"}))
 
 
+_CSS = """
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+html, body, [data-testid="stAppViewContainer"], .stMarkdown,
+.stButton, input, textarea, select, [data-baseweb] {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+}
+.block-container { padding-top: 1.4rem; padding-bottom: 2.5rem; max-width: 1180px; }
+
+/* header */
+.sakata-head { display:flex; align-items:baseline; gap:12px; border-bottom:2px solid #0f766e;
+  padding-bottom:8px; margin-bottom:6px; }
+.sakata-title { font-size:1.5rem; font-weight:700; letter-spacing:-0.02em; color:#0f172a; }
+.sakata-sub { font-size:12px; color:#94a3b8; font-weight:500; }
+
+/* tabs */
+.stTabs [data-baseweb="tab-list"] { gap:2px; border-bottom:1px solid #e5e7eb; }
+.stTabs [data-baseweb="tab"] { height:38px; padding:0 20px; font-weight:600; font-size:13px;
+  color:#64748b; letter-spacing:0.02em; }
+.stTabs [aria-selected="true"] { color:#0f766e; }
+.stTabs [data-baseweb="tab-highlight"] { background-color:#0f766e; height:2px; }
+
+/* section subheaders (##### x) -> uppercase eyebrow */
+.stMarkdown h5 { font-size:11px; text-transform:uppercase; letter-spacing:0.08em;
+  color:#64748b; font-weight:700; margin:6px 0 2px; }
+
+/* buttons */
+.stButton>button { border:1px solid #e2e8f0; border-radius:6px; padding:2px 14px;
+  font-size:12.5px; font-weight:500; color:#334155; background:#fff; transition:all .15s; }
+.stButton>button:hover { border-color:#0f766e; color:#0f766e; background:#f0fdfa; }
+
+/* captions + controls */
+[data-testid="stCaptionContainer"] { color:#64748b; font-size:12.5px; line-height:1.5; }
+.stRadio label, .stSelectbox label, .stMultiSelect label { font-size:12px; color:#64748b;
+  font-weight:600; text-transform:uppercase; letter-spacing:0.04em; }
+[data-testid="stDataFrame"] { font-size:13px; border:1px solid #eef2f6; border-radius:8px; }
+hr { margin:0.8rem 0; border-color:#eef2f6; }
+</style>
+"""
+
+
 def main() -> None:
-    st.title("🎋 Sakata")
-    st.caption(f"Refreshed {dt.datetime.now():%Y-%m-%d %H:%M:%S}")
+    st.markdown(_CSS, unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="sakata-head"><span class="sakata-title">🎋 Sakata</span>'
+        f'<span class="sakata-sub">futures terminal · {dt.datetime.now():%Y-%m-%d %H:%M}</span>'
+        f'</div>', unsafe_allow_html=True)
     tab_board, tab_margins, tab_events, tab_curve = st.tabs(
         ["Board", "Margins", "Events", "Curve"]
     )
