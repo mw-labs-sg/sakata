@@ -279,25 +279,30 @@ INSTRUMENTS = ["ES", "NQ", "GC", "SI", "HG", "CL", "NG", "ZC", "ZS", "6E", "6J"]
 CURVE_URL = "https://www.cmegroup.com/CmeWS/mvc/Settlements/Futures/Settlements/{pid}/FUT"
 # Confident productIds first; CL & NG lead the dropdown.
 CURVE_PRODUCTS = {
-    # verified productIds
+    # Indices
     "ES  S&P 500": 133,
-    "CL  Crude":   425,
-    "NG  Nat Gas": 444,
-    "GC  Gold":    437,
-    "SI  Silver":  458,
-    "ZC  Corn":    300,
-    "ZS  Soybean": 320,
-    # best-guess productIds — confirm via each product's settlements page
-    "NQ  Nasdaq":  129,
-    "ZB  T-Bond":  303,
+    "NQ  Nasdaq": 129,
+    # Bonds
+    "ZB  T-Bond": 303,
     "ZN  10Y Note": 316,
-    "6E  Euro":    399,
-    "6J  Yen":     544,
-    "HG  Copper":  438,
-    "ZW  Wheat":   323,
+    # Currencies
+    "6E  Euro": 399,
+    "6J  Yen": 544,
+    # Crypto
     "BTC  Bitcoin": 8215,
-    "ETH  Ether":  8216,
-    # Not on CME settlements: SB & KC (ICE), VIX (Cboe), SR3 (rates)
+    "ETH  Ether": 8216,
+    # Energy
+    "CL  Crude": 425,
+    "NG  Nat Gas": 444,
+    # Metals
+    "GC  Gold": 437,
+    "SI  Silver": 458,
+    "HG  Copper": 438,
+    # Grains
+    "ZC  Corn": 300,
+    "ZW  Wheat": 323,
+    "ZS  Soybean": 320,
+    # Softs (SB/KC) via ICE; VIX (Cboe), SR3 (rates) not covered here
 }
 
 # ICE products — CME's endpoint doesn't carry ICE softs. Sugar marketId from URL.
@@ -305,7 +310,7 @@ ICE_URL = ("https://www.ice.com/marketdata/DelayedMarkets.shtml"
            "?getContractsAsJson=&marketId={mid}")
 ICE_PRODUCTS = {
     "SB  Sugar": 7537907,
-    # "KC  Coffee": <marketId>   # add once confirmed from the ICE coffee page URL
+    "KC  Coffee": 7510986,
 }
 ALL_CURVE = list(CURVE_PRODUCTS) + list(ICE_PRODUCTS)
 
