@@ -49,14 +49,15 @@ AMP_SYMBOLS = {
     "ES  S&P 500": "ES", "NQ  Nasdaq": "NQ",
     "ZB  T-Bond": "ZB", "ZN  10Y Note": "ZN",
     "6E  Euro": "6E", "6J  Yen": "6J",
+    "BTC  Bitcoin": "BTC", "ETH  Ether": "ETH",
     "CL  Crude": "CL", "NG  Nat Gas": "NG",
     "GC  Gold": "GC", "SI  Silver": "SI", "HG  Copper": "HG",
     "ZC  Corn": "ZC", "ZW  Wheat": "ZW", "ZS  Soybean": "ZS",
     "SB  Sugar": "SB", "KC  Coffee": "KC",
 }
-# BTC isn't on AMP's list -> pull from CME's outright CSV by product code.
+# CME outright CSV kept as a BTC fallback if AMP's row is absent.
 CME_URL = "https://www.cmegroup.com/CmeWS/mvc/Margins/OUTRIGHT.csv"
-CME_CODES = {"BTC  Bitcoin": "BTC"}
+CME_CODES = {}
 
 # label -> (yahoo ticker for price, notional multiplier).
 # Multiplier folds in unit conversion so notional = yahoo_price * mult.
@@ -64,13 +65,13 @@ CONTRACT_SPECS = {
     "ES  S&P 500": ("ES=F", 50),      "NQ  Nasdaq": ("NQ=F", 20),
     "ZB  T-Bond": ("ZB=F", 1000),     "ZN  10Y Note": ("ZN=F", 1000),
     "6E  Euro": ("6E=F", 125000),     "6J  Yen": ("6J=F", 12500000),
+    "BTC  Bitcoin": ("BTC-USD", 5),   "ETH  Ether": ("ETH-USD", 50),
     "CL  Crude": ("CL=F", 1000),      "NG  Nat Gas": ("NG=F", 10000),
     "GC  Gold": ("GC=F", 100),        "SI  Silver": ("SI=F", 5000),
     "HG  Copper": ("HG=F", 25000),
     "ZC  Corn": ("ZC=F", 50),         "ZW  Wheat": ("ZW=F", 50),
     "ZS  Soybean": ("ZS=F", 50),
     "SB  Sugar": ("SB=F", 1120),      "KC  Coffee": ("KC=F", 375),
-    "BTC  Bitcoin": ("BTC-USD", 5),
 }
 
 _session = cffi_requests.Session(impersonate="chrome110")
@@ -220,24 +221,24 @@ def build_margins() -> pd.DataFrame:
             "Notional (USD)": f"{notl:,.0f}" if notl else "—",
             "Margin %": f"{margin_pct:.1f}%" if margin_pct else "—",
             "Ann Vol %": f"{ann_vol:.0f}%" if ann_vol else "—",
-            "Marg/Vol": f"{marg_vol:.2f}" if marg_vol else "—",
-            "Days ATR": f"{days_atr:.1f}" if days_atr else "—",
+            "Marg/Vol": marg_vol if marg_vol is not None else float("nan"),
+            "Days ATR": days_atr if days_atr is not None else float("nan"),
             "Source": source,
         }
 
     rows = []
-    for label in list(AMP_SYMBOLS) + list(CME_CODES):
-        if label in AMP_SYMBOLS:
-            sym = AMP_SYMBOLS[label]
-            r = amp.get(sym)
-            rows.append(_row(label, sym, r["maint"] if r else None,
-                             "AMP" if r else "AMP (missing)"))
-        else:
+    for label in AMP_SYMBOLS:
+        sym = AMP_SYMBOLS[label]
+        r = amp.get(sym)
+        maint = r["maint"] if r else None
+        source = "AMP"
+        if not r and label == "BTC  Bitcoin":     # fallback to CME CSV
             try:
-                v = get_cme_btc()
+                maint = get_cme_btc()
+                source = "CME CSV"
             except Exception:  # noqa: BLE001
-                v = None
-            rows.append(_row(label, CME_CODES[label], v, "CME CSV"))
+                maint = None
+        rows.append(_row(label, sym, maint, source if maint else "AMP (missing)"))
     return pd.DataFrame(rows)
 
 
@@ -541,16 +542,23 @@ def render_board() -> None:
 
 def render_margins() -> None:
     st.caption(
-        "Overnight **maintenance** + AMP **day-trade** margin per contract. "
-        "Maintenance is exchange-set (AMP shows the retail figure, ~10% above raw "
-        "CME). BTC comes from CME's CSV. Margins change with volatility — verify "
-        "before sizing a trade."
+        "Overnight **maintenance** per contract (AMP retail figure, ~10% above raw "
+        "CME). **Marg/Vol** = margin % ÷ 20-day annualized vol; **Days ATR** = "
+        "margin ÷ daily $range. Red = thin cushion vs risk (margin-hike candidates)."
     )
     if st.button("🔄 Refresh margins"):
         get_amp_margins.clear()
         get_cme_btc.clear()
+        get_atr.clear()
+        get_ann_vol.clear()
         st.rerun()
-    st.table(build_margins().style.hide(axis="index"))
+    df = build_margins()
+    sty = (df.style
+           .background_gradient(cmap="RdYlGn", subset=["Marg/Vol"], vmin=0.1, vmax=0.9)
+           .background_gradient(cmap="RdYlGn", subset=["Days ATR"], vmin=1.5, vmax=14)
+           .format({"Marg/Vol": lambda v: "—" if pd.isna(v) else f"{v:.2f}",
+                    "Days ATR": lambda v: "—" if pd.isna(v) else f"{v:.1f}"}))
+    st.dataframe(sty, hide_index=True, use_container_width=True, height=670)
 
 
 def render_events() -> None:
