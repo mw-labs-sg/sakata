@@ -49,15 +49,14 @@ AMP_SYMBOLS = {
     "ES  S&P 500": "ES", "NQ  Nasdaq": "NQ",
     "ZB  T-Bond": "ZB", "ZN  10Y Note": "ZN",
     "6E  Euro": "6E", "6J  Yen": "6J",
-    "BTC  Bitcoin": "BTC", "ETH  Ether": "ETH",
     "CL  Crude": "CL", "NG  Nat Gas": "NG",
     "GC  Gold": "GC", "SI  Silver": "SI", "HG  Copper": "HG",
     "ZC  Corn": "ZC", "ZW  Wheat": "ZW", "ZS  Soybean": "ZS",
     "SB  Sugar": "SB", "KC  Coffee": "KC",
 }
-# CME outright CSV kept as a BTC fallback if AMP's row is absent.
+# BTC/ETH aren't on AMP's list -> CME outright CSV by product code.
 CME_URL = "https://www.cmegroup.com/CmeWS/mvc/Margins/OUTRIGHT.csv"
-CME_CODES = {}
+CME_CODES = {"BTC  Bitcoin": "BTC", "ETH  Ether": "ETH"}
 
 # label -> (yahoo ticker for price, notional multiplier).
 # Multiplier folds in unit conversion so notional = yahoo_price * mult.
@@ -150,10 +149,10 @@ def get_amp_margins() -> dict:
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def get_cme_btc() -> float:
-    """Front-month BTC maintenance from CME OUTRIGHT.csv."""
+def get_cme_margin(code: str):
+    """Front-month maintenance for a product code from CME OUTRIGHT.csv."""
     df = pd.read_csv(io.StringIO(_session.get(CME_URL, timeout=25).text))
-    hit = df[df["Product Code"].astype(str).str.strip().str.upper() == "BTC"]
+    hit = df[df["Product Code"].astype(str).str.strip().str.upper() == code.upper()]
     return _money(hit.iloc[0]["Maintenance"]) if not hit.empty else None
 
 
@@ -227,18 +226,18 @@ def build_margins() -> pd.DataFrame:
         }
 
     rows = []
-    for label in AMP_SYMBOLS:
-        sym = AMP_SYMBOLS[label]
-        r = amp.get(sym)
-        maint = r["maint"] if r else None
-        source = "AMP"
-        if not r and label == "BTC  Bitcoin":     # fallback to CME CSV
+    for label in list(AMP_SYMBOLS) + list(CME_CODES):
+        if label in AMP_SYMBOLS:
+            sym = AMP_SYMBOLS[label]
+            r = amp.get(sym)
+            rows.append(_row(label, sym, r["maint"] if r else None,
+                             "AMP" if r else "AMP (missing)"))
+        else:
             try:
-                maint = get_cme_btc()
-                source = "CME CSV"
+                v = get_cme_margin(CME_CODES[label])
             except Exception:  # noqa: BLE001
-                maint = None
-        rows.append(_row(label, sym, maint, source if maint else "AMP (missing)"))
+                v = None
+            rows.append(_row(label, CME_CODES[label], v, "CME CSV" if v else "—"))
     return pd.DataFrame(rows)
 
 
@@ -542,23 +541,25 @@ def render_board() -> None:
 
 def render_margins() -> None:
     st.caption(
-        "Overnight **maintenance** per contract (AMP retail figure, ~10% above raw "
-        "CME). **Marg/Vol** = margin % ÷ 20-day annualized vol; **Days ATR** = "
-        "margin ÷ daily $range. Red = thin cushion vs risk (margin-hike candidates)."
+        "Overnight **maintenance** per contract (AMP retail, ~10% above raw CME; "
+        "BTC/ETH from CME). **Marg/Vol** = margin % ÷ 20-day annualized vol; "
+        "**Days ATR** = margin ÷ daily $range. Click a header to sort — lowest "
+        "Marg/Vol first = thinnest cushion vs risk (margin-hike candidates)."
     )
     if st.button("🔄 Refresh margins"):
         get_amp_margins.clear()
-        get_cme_btc.clear()
+        get_cme_margin.clear()
         get_atr.clear()
         get_ann_vol.clear()
         st.rerun()
     df = build_margins()
-    sty = (df.style
-           .background_gradient(cmap="RdYlGn", subset=["Marg/Vol"], vmin=0.1, vmax=0.9)
-           .background_gradient(cmap="RdYlGn", subset=["Days ATR"], vmin=1.5, vmax=14)
-           .format({"Marg/Vol": lambda v: "—" if pd.isna(v) else f"{v:.2f}",
-                    "Days ATR": lambda v: "—" if pd.isna(v) else f"{v:.1f}"}))
-    st.dataframe(sty, hide_index=True, use_container_width=True, height=670)
+    st.dataframe(
+        df, hide_index=True, use_container_width=True, height=700,
+        column_config={
+            "Marg/Vol": st.column_config.NumberColumn(format="%.2f"),
+            "Days ATR": st.column_config.NumberColumn(format="%.1f"),
+        },
+    )
 
 
 def render_events() -> None:
