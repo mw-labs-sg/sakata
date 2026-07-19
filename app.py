@@ -487,20 +487,95 @@ def _month_to_date(m: str):
         return None
 
 
+def _months_between(d1, d2):
+    return (d2.year - d1.year) * 12 + (d2.month - d1.month)
+
+
+def _curve_metrics(df: pd.DataFrame, n: int):
+    """Front/back, roll and annualized carry for the first n contracts."""
+    d = df.copy()
+    d["_date"] = d["Month"].map(_month_to_date)
+    d = d.dropna(subset=["_date"]).sort_values("_date").reset_index(drop=True)
+    view = d.head(n)
+    if view.empty:
+        return None
+    front, back = view["Settle"].iloc[0], view["Settle"].iloc[-1]
+    fm, bm = view["Month"].iloc[0], view["Month"].iloc[-1]
+    m = {"view": view, "front": front, "back": back, "fm": fm, "bm": bm,
+         "shape": "Backwardation" if back < front else
+                  "Contango" if back > front else "Flat",
+         "roll": None, "roll_pct": None, "roll_ann": None, "carry_ann": None}
+    if len(view) > 1:
+        a, b = view.iloc[0], view.iloc[1]
+        m["roll"] = a["Settle"] - b["Settle"]
+        m["roll_pct"] = m["roll"] / b["Settle"] * 100 if b["Settle"] else 0
+        step = _months_between(a["_date"], b["_date"]) or 1
+        m["roll_ann"] = m["roll_pct"] * (12 / step)
+        span = _months_between(view["_date"].iloc[0], view["_date"].iloc[-1]) or 1
+        m["carry_ann"] = (front - back) / back * (12 / span) * 100 if back else 0
+    return m
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def build_curve_scanner(n: int = 12) -> pd.DataFrame:
+    rows = []
+    for name, pid in CURVE_PRODUCTS.items():
+        try:
+            m = _curve_metrics(get_curve(pid), n)
+        except Exception:  # noqa: BLE001
+            m = None
+        if not m:
+            continue
+        rows.append({
+            "Symbol": name.split()[0],
+            "Front": round(m["front"], 2),
+            "Back": round(m["back"], 2),
+            "Shape": m["shape"],
+            "Roll ann %": round(m["roll_ann"], 1) if m["roll_ann"] is not None else None,
+            "Carry ann %": round(m["carry_ann"], 1) if m["carry_ann"] is not None else None,
+        })
+    d = pd.DataFrame(rows)
+    return d.sort_values("Carry ann %", ascending=False).reset_index(drop=True) \
+        if not d.empty else d
+
+
 def render_curve() -> None:
     st.caption(
-        "Term structure from CME daily settlements (updates after each close). "
-        "Contango = back months higher; backwardation = front months higher."
+        "Term structure from CME settlements. Positive carry = backwardation "
+        "(roll tailwind for longs); negative = contango (roll drag)."
     )
+
+    def pct_colour(v):
+        if v is None or (isinstance(v, float) and pd.isna(v)):
+            return "color:#9ca3af;"
+        return "color:#16a34a;font-weight:600;" if v >= 0 else "color:#dc2626;font-weight:600;"
+
+    # --- ranked carry scanner (all symbols, 12M) ---
+    st.markdown("##### Curve scanner — 12M carry, most backwardated first")
+    scan = build_curve_scanner(12)
+    if scan.empty:
+        st.info("Scanner unavailable (CME fetch).")
+    else:
+        st.dataframe(
+            scan.style.map(pct_colour, subset=["Roll ann %", "Carry ann %"])
+            .format({"Roll ann %": lambda v: "—" if v is None or pd.isna(v) else f"{v:+.1f}%",
+                     "Carry ann %": lambda v: "—" if v is None or pd.isna(v) else f"{v:+.1f}%"}),
+            hide_index=True, use_container_width=True,
+        )
+
+    st.divider()
+
+    # --- per-symbol detail ---
     name = st.selectbox("Symbol", list(CURVE_PRODUCTS.keys()))
     pid = CURVE_PRODUCTS[name]
     if st.button("🔄 Refresh curve"):
         get_curve.clear()
+        build_curve_scanner.clear()
         st.rerun()
     try:
         df = get_curve(pid)
     except Exception as e:  # noqa: BLE001
-        st.error(f"Couldn't load curve (CME may be blocking): {str(e)[:80]}")
+        st.error(f"Couldn't load curve: {str(e)[:80]}")
         return
     if df.empty:
         st.info("No settlement data returned.")
@@ -511,76 +586,48 @@ def render_curve() -> None:
                 st.write(str(e))
         return
 
-    # chronological order (CME lists many illiquid back years)
-    df = df.copy()
-    df["_date"] = df["Month"].map(_month_to_date)
-    df = df.dropna(subset=["_date"]).sort_values("_date").reset_index(drop=True)
-
-    horizon = st.radio("Horizon", ["12M", "24M", "36M", "All"], index=1,
+    horizon = st.radio("Horizon", ["12M", "24M", "36M", "All"], index=0,
                        horizontal=True)
-    n = {"12M": 12, "24M": 24, "36M": 36, "All": len(df)}[horizon]
-    view = df.head(n)
+    total = len(df.dropna(subset=["Settle"]))
+    n = {"12M": 12, "24M": 24, "36M": 36, "All": total}[horizon]
+    m = _curve_metrics(df, n)
+    view = m["view"]
 
-    front, back = view["Settle"].iloc[0], view["Settle"].iloc[-1]
-    shape = ("Contango ↗" if back > front else
-             "Backwardation ↘" if back < front else "Flat →")
-    c1, c2, c3 = st.columns(3)
-    c1.metric(f"Front ({view['Month'].iloc[0]})", f"{front:,.2f}")
-    c2.metric(f"Back ({view['Month'].iloc[-1]})", f"{back:,.2f}")
-    c3.metric(shape, f"{back - front:+,.2f}")
+    # one-line hero
+    arrow = ("↘" if m["shape"] == "Backwardation"
+             else "↗" if m["shape"] == "Contango" else "→")
+    parts = [f"**{name.split()[0]}**",
+             f"{m['fm']} **{m['front']:,.2f}** → {m['bm']} **{m['back']:,.2f}**",
+             f"{m['shape']} {arrow} {m['back'] - m['front']:+,.2f}"]
+    if m["roll"] is not None:
+        parts += [f"Roll {m['roll']:+,.2f} ({m['roll_pct']:+.2f}%)",
+                  f"Roll ann {m['roll_ann']:+.1f}%",
+                  f"Carry ann {m['carry_ann']:+.1f}%"]
+    st.markdown("  ·  ".join(parts))
 
-    # --- roll / cost of carry ---
-    def _months_between(d1, d2):
-        return (d2.year - d1.year) * 12 + (d2.month - d1.month)
-
-    if len(view) > 1:
-        m1, m2 = view.iloc[0], view.iloc[1]
-        roll = m1["Settle"] - m2["Settle"]            # >0 = backwardation
-        roll_pct = roll / m2["Settle"] * 100 if m2["Settle"] else 0
-        step = _months_between(m1["_date"], m2["_date"]) or 1
-        roll_ann = roll_pct * (12 / step)
-        span = _months_between(view["_date"].iloc[0], view["_date"].iloc[-1]) or 1
-        carry_ann = (front - back) / back * (12 / span) * 100 if back else 0
-        d1, d2, d3 = st.columns(3)
-        d1.metric(f"Next roll ({m1['Month']}→{m2['Month']})",
-                  f"{roll:+,.2f}", f"{roll_pct:+.2f}%")
-        d2.metric("Roll annualized", f"{roll_ann:+.1f}%")
-        d3.metric(f"Carry annualized (→{view['Month'].iloc[-1]})",
-                  f"{carry_ann:+.1f}%")
-        st.caption(
-            "Positive = backwardation (roll tailwind for longs); "
-            "negative = contango (roll drag). Roll = front − 2nd month."
-        )
-
-    # --- chart: settle line over OI bars (dual axis) ---
+    # chart: settle line over OI bars
     view = view.copy()
     view["OI_num"] = view["OI"].map(_num)
-    view["Vol_num"] = view["Volume"].map(_num)
     lo, hi = view["Settle"].min(), view["Settle"].max()
     pad = max((hi - lo) * 0.15, 0.5)
     order = list(view["Month"])
-
     base = alt.Chart(view).encode(
         x=alt.X("Month:N", sort=order, title=None,
-                axis=alt.Axis(labelAngle=-45, labelFontSize=10))
-    )
+                axis=alt.Axis(labelAngle=-45, labelFontSize=10)))
     bars = base.mark_bar(color="#cbd5e1", opacity=0.5).encode(
         y=alt.Y("OI_num:Q", axis=alt.Axis(title="Open interest", orient="right",
                                           grid=False)),
-        tooltip=["Month", "Settle", "OI", "Volume"],
-    )
+        tooltip=["Month", "Settle", "OI", "Volume"])
     line = base.mark_line(point=alt.OverlayMarkDef(size=35, filled=True),
                           color="#0d9488", strokeWidth=2.5).encode(
         y=alt.Y("Settle:Q", axis=alt.Axis(title="Settle", orient="left"),
                 scale=alt.Scale(domain=[lo - pad, hi + pad])),
-        tooltip=["Month", "Settle", "OI", "Volume"],
-    )
+        tooltip=["Month", "Settle", "OI", "Volume"])
     chart = (alt.layer(bars, line).resolve_scale(y="independent")
-             .properties(height=360)
-             .configure_view(strokeWidth=0)
+             .properties(height=340).configure_view(strokeWidth=0)
              .configure_axis(labelColor="#6b7280", titleColor="#6b7280"))
     st.altair_chart(chart, use_container_width=True)
-    st.table(view.drop(columns="_date").style.hide(axis="index")
+    st.table(view.drop(columns=["_date", "OI_num"]).style.hide(axis="index")
              .format({"Settle": lambda v: f"{v:,.2f}"}))
 
 
