@@ -279,18 +279,29 @@ INSTRUMENTS = ["ES", "NQ", "GC", "SI", "HG", "CL", "NG", "ZC", "ZS", "6E", "6J"]
 CURVE_URL = "https://www.cmegroup.com/CmeWS/mvc/Settlements/Futures/Settlements/{pid}/FUT"
 # Confident productIds first; CL & NG lead the dropdown.
 CURVE_PRODUCTS = {
-    # CONFIRMED correct productIds (verified returning real data)
+    # Indices
     "ES  S&P 500": 133,
+    "NQ  Nasdaq":  146,
+    # Bonds
+    "ZB  T-Bond":  307,
+    "ZN  10Y Note": 316,
+    # Currencies
+    "6E  Euro":    58,
+    "6J  Yen":     69,
+    # Crypto
+    "BTC  Bitcoin": 8478,
+    "ETH  Ether":  8995,
+    # Energy
     "CL  Crude":   425,
     "NG  Nat Gas": 444,
+    # Metals
     "GC  Gold":    437,
     "SI  Silver":  458,
     "HG  Copper":  438,
+    # Grains
     "ZC  Corn":    300,
     "ZW  Wheat":   323,
     "ZS  Soybean": 320,
-    "NQ  Nasdaq":  146,
-    # ZB, ZN, 6E, 6J, BTC, ETH: productIds still needed (View Source / Network)
 }
 
 # ICE products — CME's endpoint doesn't carry ICE softs. Sugar marketId from URL.
