@@ -156,6 +156,21 @@ def get_cme_btc() -> float:
     return _money(hit.iloc[0]["Maintenance"]) if not hit.empty else None
 
 
+@st.cache_data(ttl=3600, show_spinner=False)
+def get_atr(ticker: str, period: int = 14):
+    """ATR(14) on daily bars, for 'days of range' margin coverage."""
+    try:
+        h = yf.Ticker(ticker, session=_session).history(period="2mo", interval="1d")
+        if len(h) < period + 1:
+            return None
+        hi, lo, cl = h["High"], h["Low"], h["Close"]
+        pc = cl.shift(1)
+        tr = pd.concat([(hi - lo), (hi - pc).abs(), (lo - pc).abs()], axis=1).max(axis=1)
+        return float(tr.rolling(period).mean().iloc[-1])
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def _notional(label):
     spec = CONTRACT_SPECS.get(label)
     if not spec:
@@ -175,11 +190,19 @@ def build_margins() -> pd.DataFrame:
 
     def _row(label, sym, maint, source):
         notl = _notional(label)
+        spec = CONTRACT_SPECS.get(label)
+        days_atr = None
+        if spec and maint:
+            atr = get_atr(spec[0])
+            drange = atr * spec[1] if atr else None
+            if drange:
+                days_atr = maint / drange
         return {
             "Instrument": label, "Sym": sym,
             "Maint (USD)": f"{maint:,.0f}" if maint else "—",
             "Notional (USD)": f"{notl:,.0f}" if notl else "—",
             "Margin %": f"{maint / notl * 100:.1f}%" if (maint and notl) else "—",
+            "Days ATR": f"{days_atr:.1f}" if days_atr else "—",
             "Source": source,
         }
 
@@ -662,7 +685,7 @@ def build_curve_scanner(n: int = 12) -> pd.DataFrame:
             "Front": round(m["front"], 2),
             "Back": round(m["back"], 2),
             "Shape": m["shape"],
-            "Current Roll": round(m["roll"], 2) if m["roll"] is not None else None,
+            "Roll %": round(m["roll_pct"], 2) if m["roll_pct"] is not None else None,
             "Carry ann %": round(m["carry_ann"], 1) if m["carry_ann"] is not None else None,
         })
     d = pd.DataFrame(rows)
@@ -687,6 +710,9 @@ def render_curve() -> None:
     def fmt_roll(v):
         return "—" if v is None or pd.isna(v) else f"{v:+,.2f}"
 
+    def fmt_pct2(v):
+        return "—" if v is None or pd.isna(v) else f"{v:+.2f}%"
+
     # --- input selections on top ---
     c1, c2 = st.columns([2, 3])
     with c1:
@@ -709,8 +735,8 @@ def render_curve() -> None:
                    "server's IP. Try Refresh in a few minutes.")
     else:
         st.dataframe(
-            scan.style.map(pct_colour, subset=["Current Roll", "Carry ann %"])
-            .format({"Current Roll": fmt_roll, "Carry ann %": fmt_pct}),
+            scan.style.map(pct_colour, subset=["Roll %", "Carry ann %"])
+            .format({"Roll %": fmt_pct2, "Carry ann %": fmt_pct}),
             hide_index=True, use_container_width=True,
         )
 
@@ -741,7 +767,7 @@ def render_curve() -> None:
              f"{m['fm']} **{m['front']:,.2f}** → {m['bm']} **{m['back']:,.2f}**",
              f"{m['shape']} {arrow} {m['back'] - m['front']:+,.2f}"]
     if m["roll"] is not None:
-        parts += [f"Current roll {m['roll']:+,.2f} ({m['roll_pct']:+.2f}%)",
+        parts += [f"Current roll {m['roll_pct']:+.2f}%",
                   f"Carry ann {m['carry_ann']:+.1f}%"]
     st.markdown("  ·  ".join(parts))
 
