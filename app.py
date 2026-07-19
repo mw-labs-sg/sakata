@@ -279,30 +279,19 @@ INSTRUMENTS = ["ES", "NQ", "GC", "SI", "HG", "CL", "NG", "ZC", "ZS", "6E", "6J"]
 CURVE_URL = "https://www.cmegroup.com/CmeWS/mvc/Settlements/Futures/Settlements/{pid}/FUT"
 # Confident productIds first; CL & NG lead the dropdown.
 CURVE_PRODUCTS = {
-    # Indices
+    # CONFIRMED correct productIds (verified returning real data)
     "ES  S&P 500": 133,
-    "NQ  Nasdaq": 129,
-    # Bonds
-    "ZB  T-Bond": 303,
-    "ZN  10Y Note": 316,
-    # Currencies
-    "6E  Euro": 399,
-    "6J  Yen": 544,
-    # Crypto
-    "BTC  Bitcoin": 8215,
-    "ETH  Ether": 8216,
-    # Energy
-    "CL  Crude": 425,
+    "CL  Crude":   425,
     "NG  Nat Gas": 444,
-    # Metals
-    "GC  Gold": 437,
-    "SI  Silver": 458,
-    "HG  Copper": 438,
-    # Grains
-    "ZC  Corn": 300,
-    "ZW  Wheat": 323,
+    "GC  Gold":    437,
+    "SI  Silver":  458,
+    "HG  Copper":  438,
+    "ZC  Corn":    300,
+    "ZW  Wheat":   323,
     "ZS  Soybean": 320,
-    # Softs (SB/KC) via ICE; VIX (Cboe), SR3 (rates) not covered here
+    # NQ, ZB, ZN, 6E, 6J, BTC, ETH: productIds NOT confirmed — my guesses were
+    # wrong (e.g. NQ 129 returned 0.06). Need the real id from each product's
+    # .settlements.html (DevTools > Network > the Settlements/.../{id}/FUT call).
 }
 
 # ICE products — CME's endpoint doesn't carry ICE softs. Sugar marketId from URL.
