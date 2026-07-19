@@ -26,43 +26,22 @@ from curl_cffi import requests as cffi_requests
 st.set_page_config(page_title="Sakata", page_icon="🎋", layout="centered")
 
 # Board: name -> (yahoo_ticker, decimals)
-# Board grouped by market (like Barchart). group -> {name: (yahoo_ticker, decimals)}
-BOARD_GROUPS = {
-    "Financials": {
-        "ES  (S&P 500)":  ("ES=F", 2),
-        "NQ  (Nasdaq)":   ("NQ=F", 2),
-        "VIX (Vol)":      ("^VIX", 2),
-        "6E  (Euro FX)":  ("6E=F", 4),
-        "6J  (Yen)":      ("6J=F", 7),
-        "ZB  (T-Bond)":   ("ZB=F", 3),
-        "ZN  (10Y Note)": ("ZN=F", 3),
-        "SR3 (SOFR)":     ("SR3=F", 4),
-    },
-    "Crypto": {
-        "BTC (Bitcoin)":  ("BTC-USD", 0),
-        "ETH (Ether)":    ("ETH-USD", 2),
-    },
-    "Energy": {
-        "CL  (Crude Oil)": ("CL=F", 2),
-        "NG  (Nat Gas)":   ("NG=F", 3),
-    },
-    "Metals": {
-        "GC  (Gold)":   ("GC=F", 1),
-        "SI  (Silver)": ("SI=F", 3),
-        "HG  (Copper)": ("HG=F", 4),
-    },
-    "Grains": {
-        "ZC  (Corn)":     ("ZC=F", 2),
-        "ZW  (Wheat)":    ("ZW=F", 2),
-        "ZS  (Soybeans)": ("ZS=F", 2),
-    },
-    "Softs": {
-        "SB  (Sugar)":  ("SB=F", 2),
-        "KC  (Coffee)": ("KC=F", 2),
-    },
+# Scanner sectors. sector -> {name: (yahoo_ticker, decimals)}
+SECTORS = {
+    "Indices":    {"ES  S&P 500": ("ES=F", 2), "NQ  Nasdaq": ("NQ=F", 2)},
+    "Volatility": {"VIX  Vol": ("^VIX", 2)},
+    "Bonds":      {"ZB  T-Bond": ("ZB=F", 3), "ZN  10Y Note": ("ZN=F", 3),
+                   "SR3  SOFR": ("SR3=F", 4)},
+    "Currencies": {"6E  Euro": ("6E=F", 4), "6J  Yen": ("6J=F", 7)},
+    "Crypto":     {"BTC  Bitcoin": ("BTC-USD", 0), "ETH  Ether": ("ETH-USD", 2)},
+    "Energy":     {"CL  Crude": ("CL=F", 2), "NG  Nat Gas": ("NG=F", 3)},
+    "Metals":     {"GC  Gold": ("GC=F", 1), "SI  Silver": ("SI=F", 3),
+                   "HG  Copper": ("HG=F", 4)},
+    "Grains":     {"ZC  Corn": ("ZC=F", 2), "ZW  Wheat": ("ZW=F", 2),
+                   "ZS  Soybean": ("ZS=F", 2)},
+    "Softs":      {"SB  Sugar": ("SB=F", 2), "KC  Coffee": ("KC=F", 2)},
 }
-# flat view kept for code that iterates a single dict
-SYMBOLS = {k: v for g in BOARD_GROUPS.values() for k, v in g.items()}
+SYMBOLS = {k: v for g in SECTORS.values() for k, v in g.items()}
 
 # Margins from AMP: instrument -> AMP symbol
 AMP_URL = "https://www.ampfutures.com/trading-info/margins"
@@ -103,19 +82,16 @@ def get_quote(ticker: str, attempts: int = 3) -> dict:
     return {"last": None, "chg": None, "pct": None, "err": last_err}
 
 
-def build_board(group: dict) -> pd.DataFrame:
+def build_scanner() -> pd.DataFrame:
     rows = []
-    for name, (ticker, dec) in group.items():
-        q = get_quote(ticker)
-        if q["last"] is None:
-            rows.append({"Instrument": name, "Last": "—", "Chg": "—", "Chg %": None})
-        else:
-            rows.append({
-                "Instrument": name,
-                "Last": f"{q['last']:,.{dec}f}",
-                "Chg": f"{q['chg']:+.{dec}f}",
-                "Chg %": round(q["pct"], 2),
-            })
+    for sector, members in SECTORS.items():
+        for name, (ticker, dec) in members.items():
+            q = get_quote(ticker)
+            last = None if q["last"] is None else f"{q['last']:,.{dec}f}"
+            chg = None if q["chg"] is None else f"{q['chg']:+.{dec}f}"
+            pct = float("nan") if q["pct"] is None else round(q["pct"], 2)
+            rows.append({"Instrument": name.strip(), "Sector": sector,
+                         "Last": last or "—", "Chg": chg or "—", "Chg %": pct})
     return pd.DataFrame(rows)
 
 
@@ -400,23 +376,50 @@ def render_board() -> None:
         st.cache_data.clear()
         st.rerun()
 
-    def colour(v):
-        if v is None or pd.isna(v):
-            return ""
-        return "color: #4ade80;" if v >= 0 else "color: #f87171;"
+    df = build_scanner()
 
-    for group, members in BOARD_GROUPS.items():
-        df = build_board(members)
-        # group day-change average (ignoring blanks) for the header
-        pcts = [p for p in df["Chg %"] if p is not None and not pd.isna(p)]
-        avg = sum(pcts) / len(pcts) if pcts else None
-        tag = f"  ·  {avg:+.2f}%" if avg is not None else ""
-        st.markdown(f"**{group}**{tag}")
-        st.table(
-            df.style.map(colour, subset=["Chg %"])
-            .format({"Chg %": lambda v: "—" if v is None or pd.isna(v) else f"{v:+.2f}%"})
-            .hide(axis="index")
-        )
+    def pct_colour(v):
+        if v is None or (isinstance(v, float) and pd.isna(v)):
+            return "color:#9ca3af;"
+        return "color:#16a34a;font-weight:600;" if v >= 0 else "color:#dc2626;font-weight:600;"
+
+    def chg_colour(s):
+        s = str(s)
+        if s.startswith("-"):
+            return "color:#dc2626;"
+        if s.startswith("+"):
+            return "color:#16a34a;"
+        return "color:#9ca3af;"
+
+    def fmt_pct(v):
+        return "—" if v is None or pd.isna(v) else f"{v:+.2f}%"
+
+    # --- sector performance aggregate (top) ---
+    agg = (df.dropna(subset=["Chg %"]).groupby("Sector", sort=False)["Chg %"]
+           .mean().reset_index().sort_values("Chg %", ascending=False))
+    agg.columns = ["Sector", "Avg %"]
+    st.markdown("##### Sector performance")
+    st.dataframe(
+        agg.style.map(pct_colour, subset=["Avg %"]).format({"Avg %": fmt_pct}),
+        hide_index=True, use_container_width=True,
+        column_config={"Sector": st.column_config.TextColumn(width="medium"),
+                       "Avg %": st.column_config.TextColumn(width="small")},
+    )
+
+    # --- full scanner (bottom) ---
+    st.markdown("##### Scanner")
+    st.dataframe(
+        df.style.map(pct_colour, subset=["Chg %"])
+        .map(chg_colour, subset=["Chg"]).format({"Chg %": fmt_pct}),
+        hide_index=True, use_container_width=True, height=770,
+        column_config={
+            "Instrument": st.column_config.TextColumn(width="medium"),
+            "Sector": st.column_config.TextColumn(width="small"),
+            "Last": st.column_config.TextColumn(width="small"),
+            "Chg": st.column_config.TextColumn(width="small"),
+            "Chg %": st.column_config.TextColumn(width="small"),
+        },
+    )
 
 
 def render_margins() -> None:
