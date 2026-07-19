@@ -171,6 +171,19 @@ def get_atr(ticker: str, period: int = 14):
         return None
 
 
+@st.cache_data(ttl=3600, show_spinner=False)
+def get_ann_vol(ticker: str, window: int = 20):
+    """Annualized realized vol from the last `window` daily returns (× √252)."""
+    try:
+        h = yf.Ticker(ticker, session=_session).history(period="3mo", interval="1d")
+        rets = h["Close"].pct_change().dropna()
+        if len(rets) < window:
+            return None
+        return float(rets.tail(window).std() * (252 ** 0.5) * 100)
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def _notional(label):
     spec = CONTRACT_SPECS.get(label)
     if not spec:
@@ -191,17 +204,23 @@ def build_margins() -> pd.DataFrame:
     def _row(label, sym, maint, source):
         notl = _notional(label)
         spec = CONTRACT_SPECS.get(label)
-        days_atr = None
+        margin_pct = (maint / notl * 100) if (maint and notl) else None
+        days_atr = ann_vol = marg_vol = None
         if spec and maint:
             atr = get_atr(spec[0])
             drange = atr * spec[1] if atr else None
             if drange:
                 days_atr = maint / drange
+            ann_vol = get_ann_vol(spec[0])
+            if ann_vol and margin_pct:
+                marg_vol = margin_pct / ann_vol
         return {
             "Instrument": label, "Sym": sym,
             "Maint (USD)": f"{maint:,.0f}" if maint else "—",
             "Notional (USD)": f"{notl:,.0f}" if notl else "—",
-            "Margin %": f"{maint / notl * 100:.1f}%" if (maint and notl) else "—",
+            "Margin %": f"{margin_pct:.1f}%" if margin_pct else "—",
+            "Ann Vol %": f"{ann_vol:.0f}%" if ann_vol else "—",
+            "Marg/Vol": f"{marg_vol:.2f}" if marg_vol else "—",
             "Days ATR": f"{days_atr:.1f}" if days_atr else "—",
             "Source": source,
         }
