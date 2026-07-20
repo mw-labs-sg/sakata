@@ -42,6 +42,16 @@ SECTORS = {
 }
 SYMBOLS = {k: v for g in SECTORS.values() for k, v in g.items()}
 
+# News: first cut — six symbols. JY (old floor code) = 6J Yen on Yahoo.
+NEWS_SYMBOLS = {
+    "ES  S&P 500": "ES=F",
+    "ZB  T-Bond":  "ZB=F",
+    "6J  Yen":     "6J=F",
+    "CL  Crude":   "CL=F",
+    "GC  Gold":    "GC=F",
+    "ZS  Soybean": "ZS=F",
+}
+
 # Margins from AMP: instrument -> AMP symbol (sector order, matching the board)
 AMP_URL = "https://www.ampfutures.com/trading-info/margins"
 AMP_SYMBOLS = {
@@ -527,6 +537,68 @@ def build_events(selected: list) -> pd.DataFrame:
 
 
 
+# --------------------------------------------------------------------------- #
+# News — Yahoo headlines per instrument (same feed that carries Barchart /
+# MarketBeat / MT Newswires bylines; no direct Barchart/TE hit to get 403'd).
+# --------------------------------------------------------------------------- #
+@st.cache_data(ttl=900, show_spinner=False)
+def get_news(ticker: str, limit: int = 6) -> list:
+    """Latest Yahoo headlines. Handles the 2025 nested `content` schema
+    (title/provider/pubDate under item['content']); flat items still parse."""
+    try:
+        raw = yf.Ticker(ticker, session=_session).news or []
+    except Exception:  # noqa: BLE001
+        return []
+    out = []
+    for it in raw[:limit]:
+        c = it.get("content", it)
+        title = c.get("title") or ""
+        if not title:
+            continue
+        prov = (c.get("provider") or {}).get("displayName") or c.get("publisher", "")
+        url = ((c.get("canonicalUrl") or c.get("clickThroughUrl") or {}).get("url")
+               or it.get("link", ""))
+        ts = c.get("pubDate") or c.get("displayTime") or ""
+        when = ""
+        if ts:
+            try:  # 2026-02-10T19:21:00Z -> "10 Feb 19:21"
+                d = dt.datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+                when = d.strftime("%d %b %H:%M")
+            except Exception:  # noqa: BLE001
+                when = str(ts)[:10]
+        out.append({"title": title, "prov": prov, "url": url, "when": when})
+    return out
+
+
+def render_news() -> None:
+    st.caption(
+        "Latest Yahoo Finance headlines per instrument — the feed that carries "
+        "Barchart / MarketBeat / MT Newswires bylines. Cached 15 min. Futures "
+        "symbols (ZB, 6J, ZS) can run thin."
+    )
+    picks = list(NEWS_SYMBOLS)
+    sel = st.multiselect("Filter", picks, default=[])
+    if st.button("Refresh", key="rn"):
+        get_news.clear()
+        st.rerun()
+
+    for label in (sel or picks):
+        items = get_news(NEWS_SYMBOLS[label])
+        st.markdown(f"##### {label}")
+        if not items:
+            st.caption("— no headlines returned (Yahoo is thin on this symbol)")
+            st.divider()
+            continue
+        for n in items:
+            meta = "  ·  ".join(x for x in (n["prov"], n["when"]) if x)
+            link = f"[{n['title']}]({n['url']})" if n["url"] else n["title"]
+            st.markdown(
+                f"{link}  \n<span style='color:#94a3b8;font-size:11px'>{meta}</span>",
+                unsafe_allow_html=True,
+            )
+        st.divider()
+
+
 def render_board() -> None:
     df = build_scanner()
     horizons = ["Day %", "WTD %", "MTD %", "QTD %", "YTD %"]
@@ -941,8 +1013,8 @@ def main() -> None:
         f'<span class="sakata-title">Sakata</span>'
         f'<span class="sakata-sub">futures terminal · {dt.datetime.now():%Y-%m-%d %H:%M}</span>'
         f'</div>', unsafe_allow_html=True)
-    tab_board, tab_margins, tab_events, tab_curve = st.tabs(
-        ["Board", "Margins", "Events", "Curve"]
+    tab_board, tab_margins, tab_events, tab_news, tab_curve = st.tabs(
+        ["Board", "Margins", "Events", "News", "Curve"]
     )
     with tab_board:
         render_board()
@@ -950,6 +1022,8 @@ def main() -> None:
         render_margins()
     with tab_events:
         render_events()
+    with tab_news:
+        render_news()
     with tab_curve:
         render_curve()
 
