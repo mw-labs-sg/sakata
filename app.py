@@ -42,14 +42,17 @@ SECTORS = {
 }
 SYMBOLS = {k: v for g in SECTORS.values() for k, v in g.items()}
 
-# News: first cut — six symbols. JY (old floor code) = 6J Yen on Yahoo.
-NEWS_SYMBOLS = {
-    "ES  S&P 500": "ES=F",
-    "ZB  T-Bond":  "ZB=F",
-    "6J  Yen":     "6J=F",
-    "CL  Crude":   "CL=F",
-    "GC  Gold":    "GC=F",
-    "ZS  Soybean": "ZS=F",
+# News: overnight commentary blurb scraped per market from Trading Economics.
+TE_NEWS = {
+    "ES  S&P 500": "https://tradingeconomics.com/united-states/stock-market",
+    "NKD  Nikkei": "https://tradingeconomics.com/japan/stock-market",
+    "6E  Euro":    "https://tradingeconomics.com/euro-area/currency",
+    "6J  Yen":     "https://tradingeconomics.com/japan/currency",
+    "ZB  T-Bond":  "https://tradingeconomics.com/united-states/government-bond-yield",
+    "CL  Crude":   "https://tradingeconomics.com/commodity/crude-oil",
+    "NG  Nat Gas": "https://tradingeconomics.com/commodity/natural-gas",
+    "GC  Gold":    "https://tradingeconomics.com/commodity/gold",
+    "ZS  Soybean": "https://tradingeconomics.com/commodity/soybeans",
 }
 
 # Margins from AMP: instrument -> AMP symbol (sector order, matching the board)
@@ -538,64 +541,82 @@ def build_events(selected: list) -> pd.DataFrame:
 
 
 # --------------------------------------------------------------------------- #
-# News — Yahoo headlines per instrument (same feed that carries Barchart /
-# MarketBeat / MT Newswires bylines; no direct Barchart/TE hit to get 403'd).
+# News — overnight commentary blurb per market, scraped from Trading Economics.
+# Every TE market page is server-rendered and its lead paragraph == the first
+# item in its News Stream, so one parser handles all URLs (no API key). The
+# curl_cffi chrome session clears TE's bot wall — same trick that beats AMP.
 # --------------------------------------------------------------------------- #
 @st.cache_data(ttl=900, show_spinner=False)
-def get_news(ticker: str, limit: int = 6) -> list:
-    """Latest Yahoo headlines. Handles the 2025 nested `content` schema
-    (title/provider/pubDate under item['content']); flat items still parse."""
+def get_te_commentary(url: str) -> dict:
+    """Return the overnight commentary blurb (+ headline, date, link) from a TE
+    market page — the body of the first /news/<id> item, which is the same text
+    as the page's lead summary paragraph."""
+    import re
+    html = _session.get(url, timeout=25).text
     try:
-        raw = yf.Ticker(ticker, session=_session).news or []
-    except Exception:  # noqa: BLE001
-        return []
-    out = []
-    for it in raw[:limit]:
-        c = it.get("content", it)
-        title = c.get("title") or ""
-        if not title:
-            continue
-        prov = (c.get("provider") or {}).get("displayName") or c.get("publisher", "")
-        url = ((c.get("canonicalUrl") or c.get("clickThroughUrl") or {}).get("url")
-               or it.get("link", ""))
-        ts = c.get("pubDate") or c.get("displayTime") or ""
-        when = ""
-        if ts:
-            try:  # 2026-02-10T19:21:00Z -> "10 Feb 19:21"
-                d = dt.datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
-                when = d.strftime("%d %b %H:%M")
-            except Exception:  # noqa: BLE001
-                when = str(ts)[:10]
-        out.append({"title": title, "prov": prov, "url": url, "when": when})
-    return out
+        from bs4 import BeautifulSoup
+    except ImportError:
+        return {"headline": "", "blurb": "", "date": "", "url": url,
+                "err": "pip install beautifulsoup4"}
+    soup = BeautifulSoup(html, "html.parser")
+
+    anchor = None
+    for a in soup.select("a[href*='/news/']"):
+        if re.search(r"/news/\d+", a.get("href", "")) and a.get_text(strip=True):
+            anchor = a
+            break
+    if anchor is None:
+        return {"headline": "", "blurb": "", "date": "", "url": url}
+
+    headline = anchor.get_text(strip=True)
+    href = anchor.get("href", "")
+    link = href if href.startswith("http") else "https://tradingeconomics.com" + href
+
+    blurb, date, node = "", "", anchor
+    for _ in range(5):          # climb until one item is bracketed by headline..date
+        node = node.find_parent()
+        if node is None:
+            break
+        txt = node.get_text(" ", strip=True)
+        i = txt.find(headline)
+        after = txt[i + len(headline):] if i >= 0 else txt
+        if (dm := re.search(r"(20\d\d-\d\d-\d\d)", after)) and dm.start() > 40:
+            blurb = after[:dm.start()].strip()
+            date = dm.group(1)
+            break
+    return {"headline": headline, "blurb": blurb, "date": date, "url": link}
 
 
 def render_news() -> None:
     st.caption(
-        "Latest Yahoo Finance headlines per instrument — the feed that carries "
-        "Barchart / MarketBeat / MT Newswires bylines. Cached 15 min. Futures "
-        "symbols (ZB, 6J, ZS) can run thin."
+        "Overnight commentary per market — the lead blurb scraped from each "
+        "Trading Economics page. Cached 15 min. Locally your chrome session "
+        "clears TE's bot wall; blanks on the deploy mean the datacenter IP."
     )
-    picks = list(NEWS_SYMBOLS)
+    picks = list(TE_NEWS)
     sel = st.multiselect("Filter", picks, default=[])
     if st.button("Refresh", key="rn"):
-        get_news.clear()
+        get_te_commentary.clear()
         st.rerun()
 
     for label in (sel or picks):
-        items = get_news(NEWS_SYMBOLS[label])
         st.markdown(f"##### {label}")
-        if not items:
-            st.caption("— no headlines returned (Yahoo is thin on this symbol)")
+        try:
+            d = get_te_commentary(TE_NEWS[label])
+        except Exception as e:  # noqa: BLE001
+            st.caption(f"— fetch failed: {str(e)[:60]}")
             st.divider()
             continue
-        for n in items:
-            meta = "  ·  ".join(x for x in (n["prov"], n["when"]) if x)
-            link = f"[{n['title']}]({n['url']})" if n["url"] else n["title"]
-            st.markdown(
-                f"{link}  \n<span style='color:#94a3b8;font-size:11px'>{meta}</span>",
-                unsafe_allow_html=True,
-            )
+        if not d.get("blurb"):
+            hint = d.get("err") or "nothing parsed (likely bot-blocked on this IP)"
+            st.caption(f"— {hint}")
+            st.divider()
+            continue
+        st.markdown(d["blurb"])
+        meta = "  ·  ".join(x for x in (d.get("date", ""),
+                            f"[Trading Economics]({d['url']})") if x)
+        st.markdown(f"<span style='color:#94a3b8;font-size:11px'>{meta}</span>",
+                    unsafe_allow_html=True)
         st.divider()
 
 
