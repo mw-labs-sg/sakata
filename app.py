@@ -52,7 +52,10 @@ TE_NEWS = {
     "CL  Crude":   "https://tradingeconomics.com/commodity/crude-oil",
     "NG  Nat Gas": "https://tradingeconomics.com/commodity/natural-gas",
     "GC  Gold":    "https://tradingeconomics.com/commodity/gold",
+    "SI  Silver":  "https://tradingeconomics.com/commodity/silver",
+    "HG  Copper":  "https://tradingeconomics.com/commodity/copper",
     "ZS  Soybean": "https://tradingeconomics.com/commodity/soybeans",
+    "ZW  Wheat":   "https://tradingeconomics.com/commodity/wheat",
 }
 
 # Margins from AMP: instrument -> AMP symbol (sector order, matching the board)
@@ -589,35 +592,32 @@ def get_te_commentary(url: str) -> dict:
 
 def render_news() -> None:
     st.caption(
-        "Overnight commentary per market — the lead blurb scraped from each "
-        "Trading Economics page. Cached 15 min. Locally your chrome session "
-        "clears TE's bot wall; blanks on the deploy mean the datacenter IP."
+        "Overnight commentary per market — the lead blurb scraped from the "
+        "selected Trading Economics page. Cached 15 min. Locally your chrome "
+        "session clears TE's bot wall; a blank means the datacenter IP."
     )
-    picks = list(TE_NEWS)
-    sel = st.multiselect("Filter", picks, default=[])
-    if st.button("Refresh", key="rn"):
-        get_te_commentary.clear()
-        st.rerun()
+    c1, c2 = st.columns([4, 1])
+    with c1:
+        label = st.selectbox("Symbol", list(TE_NEWS), label_visibility="collapsed")
+    with c2:
+        if st.button("Refresh", key="rn"):
+            get_te_commentary.clear()
+            st.rerun()
 
-    for label in (sel or picks):
-        st.markdown(f"##### {label}")
-        try:
-            d = get_te_commentary(TE_NEWS[label])
-        except Exception as e:  # noqa: BLE001
-            st.caption(f"— fetch failed: {str(e)[:60]}")
-            st.divider()
-            continue
-        if not d.get("blurb"):
-            hint = d.get("err") or "nothing parsed (likely bot-blocked on this IP)"
-            st.caption(f"— {hint}")
-            st.divider()
-            continue
-        st.markdown(d["blurb"])
-        meta = "  ·  ".join(x for x in (d.get("date", ""),
-                            f"[Trading Economics]({d['url']})") if x)
-        st.markdown(f"<span style='color:#94a3b8;font-size:11px'>{meta}</span>",
-                    unsafe_allow_html=True)
-        st.divider()
+    st.markdown(f"##### {label}")
+    try:
+        d = get_te_commentary(TE_NEWS[label])
+    except Exception as e:  # noqa: BLE001
+        st.caption(f"— fetch failed: {str(e)[:60]}")
+        return
+    if not d.get("blurb"):
+        st.caption(f"— {d.get('err') or 'nothing parsed (likely bot-blocked on this IP)'}")
+        return
+    st.markdown(d["blurb"])
+    meta = "  ·  ".join(x for x in (d.get("date", ""),
+                        f"[Trading Economics]({d['url']})") if x)
+    st.markdown(f"<span style='color:#94a3b8;font-size:11px'>{meta}</span>",
+                unsafe_allow_html=True)
 
 
 def render_board() -> None:
