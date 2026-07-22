@@ -1420,13 +1420,13 @@ TV_SYM = {
 TV_DEFAULT = "AMEX:SPY"
 
 
-def ta_tv_chart(tv_symbol, interval, cid):
+def ta_tv_chart(tv_symbol, interval, cid, height=500):
     return (
         '<div class="tradingview-widget-container">'
         f'<div id="{cid}"></div>'
         '<script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>'
         '<script type="text/javascript">new TradingView.widget({'
-        '"width":"100%","height":540,'
+        f'"width":"100%","height":{height},'
         f'"symbol":"{tv_symbol}","interval":"{interval}",'
         '"timezone":"Asia/Singapore","theme":"light","style":"1","locale":"en",'
         '"hide_side_toolbar":false,"allow_symbol_change":true,"withdateranges":true,'
@@ -1479,23 +1479,12 @@ def render_ta() -> None:
     # basket read (full width)
     st.markdown(ta_matrix_read(rows, col_tot, grand), unsafe_allow_html=True)
 
-    # instrument that drives the side chart + the levels strip (strongest conviction first)
-    order = [r["name"] for r in rows]
-    asset = st.selectbox("Chart / drill instrument", order, index=0, key="ta_asset")
-
-    # matrix left · chart right
-    cL, cR = st.columns([1.08, 1])
-    with cL:
-        st.markdown("##### Alignment matrix · Day → Year")
-        st.markdown(f"<div style='overflow-x:auto'>{table_html}</div>", unsafe_allow_html=True)
-    with cR:
-        tv = TV_SYM.get(asset, TV_DEFAULT)
-        st.markdown(f"##### {asset} · <span style='color:#94a3b8;font-weight:500'>{tv}</span>",
-                    unsafe_allow_html=True)
-        components.html(ta_tv_chart(tv, "D", "tv_main"), height=500)
+    # 1 — MATRIX (full width)
+    st.markdown("##### Alignment matrix · Day → Year · hover a cell for detail")
+    st.markdown(f"<div style='overflow-x:auto'>{table_html}</div>", unsafe_allow_html=True)
 
     st.markdown("---")
-    # timeframe breakdown
+    # 2 — TIMEFRAME BREAKDOWN (full width)
     st.markdown("##### Timeframe breakdown · full read at one horizon, strongest first")
     tf = st.radio("Horizon", TA_ORDER, index=0, horizontal=True,
                   format_func=lambda x: TA_SHORT[x], label_visibility="collapsed", key="ta_tf")
@@ -1510,8 +1499,17 @@ def render_ta() -> None:
         st.warning(f"No data on {TA_SHORT[tf]} for this basket.")
 
     st.markdown("---")
-    # levels for the selected instrument across every horizon
-    st.markdown(f"##### Levels · {asset} across every horizon")
+    # 3 — INSTRUMENT FOCUS (selector drives chart + levels, all full width)
+    st.markdown("##### Instrument focus")
+    order = [r["name"] for r in rows]  # strongest conviction first
+    asset = st.selectbox("Instrument", order, index=0, key="ta_asset")
+
+    tv = TV_SYM.get(asset, TV_DEFAULT)
+    st.markdown(f"<div style='font-size:12px;font-weight:700;color:{TA_INK};margin:2px 0 4px'>"
+                f"{asset} \u00b7 <span style='color:#94a3b8;font-weight:500'>{tv}</span></div>",
+                unsafe_allow_html=True)
+    components.html(ta_tv_chart(tv, "D", "tv_main", 520), height=522)
+
     sym, dec = SYMBOLS[asset][0], SYMBOLS[asset][1]
     arows = []
     for h in TA_ORDER:
@@ -1520,8 +1518,8 @@ def render_ta() -> None:
             continue
         arows.append(_ta_row(h, TA_LADDER[h]["note"], dec, o, r))
     if arows:
-        st.markdown("<div style='overflow-x:auto'>"
-                    + ta_scanner_html(arows, f"{asset} — range scanner", first_col="Horizon")
+        st.markdown("<div style='overflow-x:auto;margin-top:10px'>"
+                    + ta_scanner_html(arows, f"Levels · {asset} across every horizon", first_col="Horizon")
                     + "</div>", unsafe_allow_html=True)
     else:
         st.warning(f"No usable data for {asset}.")
