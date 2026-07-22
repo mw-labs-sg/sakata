@@ -504,15 +504,14 @@ def ta_render_drill(label):
 # --------------------------------------------------------------- tab entry
 def render_ta() -> None:
     st.caption(
-        "Range-levels engine. Each horizon scores three legs — **range regime**, "
-        "**retrace rails** (RB/RS), **MA100/200 trend** — into a −3…+3 bias. Screen the basket in the "
-        "**matrix** (Day → Year), chart any name beside it, rank one horizon in the **breakdown**, "
-        "then read exact levels below."
+        "Full read — every instrument, every horizon. Five tables (**Day → Year**), each the "
+        "complete scanner for the whole basket; alignment **matrix** on top for the overview, "
+        "**chart** at the base. Built to copy wholesale into an LLM."
     )
     all_labels = list(SYMBOLS)
     c1, c2 = st.columns([5, 1])
     with c1:
-        basket = st.multiselect("Basket", all_labels, default=TA_DEFAULT,
+        basket = st.multiselect("Basket", all_labels, default=all_labels,
                                 label_visibility="collapsed", key="ta_basket")
     with c2:
         if st.button("Refresh", key="rta"):
@@ -529,47 +528,31 @@ def render_ta() -> None:
     # basket read (full width)
     st.markdown(ta_matrix_read(rows, col_tot, grand), unsafe_allow_html=True)
 
-    # 1 — MATRIX (full width)
+    # 1 — MATRIX (overview, full width)
     st.markdown("##### Alignment matrix · Day → Year · hover a cell for detail")
     st.markdown(f"<div style='overflow-x:auto'>{table_html}</div>", unsafe_allow_html=True)
 
     st.markdown("---")
-    # 2 — TIMEFRAME BREAKDOWN (full width)
-    st.markdown("##### Timeframe breakdown · full read at one horizon, strongest first")
-    tf = st.radio("Horizon", TA_ORDER, index=0, horizontal=True,
-                  format_func=lambda x: TA_SHORT[x], label_visibility="collapsed", key="ta_tf")
-    with st.spinner(f"Scanning {TA_SHORT[tf]}…"):
-        srows = ta_scan_rows(basket, tf)
-    if srows:
-        tf_title = f"{tf} ({TA_LADDER[tf]['note']})"
-        st.markdown("<div style='overflow-x:auto'>"
-                    + ta_scanner_html(srows, tf_title, first_col="Instrument")
-                    + "</div>", unsafe_allow_html=True)
-    else:
-        st.warning(f"No data on {TA_SHORT[tf]} for this basket.")
+    # 2 — FIVE FULL TABLES, one per horizon (Day → Year), all instruments
+    st.markdown("##### Full scanner · every horizon, all instruments, strongest first")
+    for tf in TA_ORDER:
+        with st.spinner(f"Scanning {TA_SHORT[tf]}…"):
+            srows = ta_scan_rows(basket, tf)
+        if srows:
+            tf_title = f"{tf} ({TA_LADDER[tf]['note']})"
+            st.markdown("<div style='overflow-x:auto'>"
+                        + ta_scanner_html(srows, tf_title, first_col="Instrument")
+                        + "</div>", unsafe_allow_html=True)
+        else:
+            st.warning(f"No data on {TA_SHORT[tf]} for this basket.")
 
     st.markdown("---")
-    # 3 — INSTRUMENT FOCUS (selector drives chart + levels, all full width)
-    st.markdown("##### Instrument focus")
+    # 3 — CHART (instrument focus)
+    st.markdown("##### Chart")
     order = [r["name"] for r in rows]  # strongest conviction first
     asset = st.selectbox("Instrument", order, index=0, key="ta_asset")
-
     tv = TV_SYM.get(asset, TV_DEFAULT)
     st.markdown(f"<div style='font-size:12px;font-weight:700;color:{TA_INK};margin:2px 0 4px'>"
                 f"{asset} \u00b7 <span style='color:#94a3b8;font-weight:500'>{tv}</span></div>",
                 unsafe_allow_html=True)
     components.html(ta_tv_chart(tv, "D", "tv_main", 520), height=522)
-
-    sym, dec = SYMBOLS[asset][0], SYMBOLS[asset][1]
-    arows = []
-    for h in TA_ORDER:
-        o, r = _ta_last(sym, h)
-        if r is None:
-            continue
-        arows.append(_ta_row(h, TA_LADDER[h]["note"], dec, o, r))
-    if arows:
-        st.markdown("<div style='overflow-x:auto;margin-top:10px'>"
-                    + ta_scanner_html(arows, f"Levels · {asset} across every horizon", first_col="Horizon")
-                    + "</div>", unsafe_allow_html=True)
-    else:
-        st.warning(f"No usable data for {asset}.")
