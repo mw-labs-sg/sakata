@@ -20,6 +20,7 @@ import time
 import altair as alt
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 import yfinance as yf
 from curl_cffi import requests as cffi_requests
 
@@ -1130,38 +1131,34 @@ def ta_scanner_html(rows, title, first_col="Asset"):
          '<table style="border-collapse:separate;border-spacing:0;box-shadow:0 1px 4px '
          'rgba(20,40,80,.08);border-radius:8px;overflow:hidden;"><thead><tr>']
     heads = [(first_col, "left"), ("Last", "right"), ("Chg %", "right"),
-             ("Rng Hi", "right"), ("Rng Lo", "right"), ("Rng %", "right"), ("In Rng %", "right"),
-             ("Mid", "right"), ("RB", "right"), ("RS", "right"), ("MA100", "right"), ("MA200", "right"),
+             ("Rng Hi", "right"), ("Rng Lo", "right"), ("In Rng %", "right"),
+             ("RB", "right"), ("RS", "right"),
              ("Regime", "left"), ("Retrace", "left"), ("Trend", "left"), ("Score", "right"),
              ("Bias", "left"), ("R:R Ret", "right"), ("R:R Rng", "right")]
     for c, a in heads:
-        h.append(f'<th style="background:{TA_INK};color:#9fb4cd;text-align:{a};font-size:8.5px;'
-                 f'font-weight:600;letter-spacing:.04em;text-transform:uppercase;'
-                 f'padding:6px 9px;white-space:nowrap;">{c}</th>')
+        h.append(f'<th style="background:{TA_INK};color:#9fb4cd;text-align:{a};font-size:8px;'
+                 f'font-weight:600;letter-spacing:.03em;text-transform:uppercase;'
+                 f'padding:4px 6px;white-space:nowrap;">{c}</th>')
     h.append('</tr></thead><tbody>')
 
     for r in rows:
         d = r["dec"]
         def td(v, a="right", col="#20242b", w="600", extra=""):
-            return (f'<td style="padding:6px 9px;text-align:{a};font-size:10.5px;color:{col};'
+            return (f'<td style="padding:4px 6px;text-align:{a};font-size:9.5px;color:{col};'
                     f'font-weight:{w};white-space:nowrap;border-bottom:1px solid #eef1f5;{extra}">{v}</td>')
         h.append("<tr>"
             + td(f'{r["rung"]}<span style="color:{TA_GREY};font-weight:500;"> \u00b7 {r["note"]}</span>',
                  "left", "#20242b", "700", "border-right:1px solid #e7ebf0;")
             + td(fnum(r["close"], d), "right", "#141922", "800",
-                 f'font-size:11.5px;background:{chg_hex(r.get("chg", np.nan))};')
+                 f'font-size:10.5px;background:{chg_hex(r.get("chg", np.nan))};')
             + td(chg_txt(r.get("chg", np.nan)), "right", chgc(r.get("chg", np.nan)), "700",
                  "border-right:2px solid #e3e8ef;")
             + td(fnum(r["high"], d), col=TA_GREEN)
             + td(fnum(r["low"], d),  col=TA_RED)
-            + td(f'{r["rngpct"]:,.1f}', col="#697683")
             + td(f'{r["pos"]:,.0f}', "right", "#20242b", "700",
                  f'background:{to_hex(TA_HEAT(posn(r["pos"])))};border-right:1px solid #e7ebf0;')
-            + td(fnum(r["mid"], d), col="#697683")
             + td(fnum(r["rb"], d),  col="#17608f")
-            + td(fnum(r["rs"], d),  col="#8a6008")
-            + td(fnum(r["ma100"], d), "right", mc(r["v100"]))
-            + td(fnum(r["ma200"], d), "right", mc(r["v200"]), "600", "border-right:1px solid #e7ebf0;")
+            + td(fnum(r["rs"], d),  col="#8a6008", extra="border-right:1px solid #e7ebf0;")
             + td(r["regime"],  "left", rc[r["regime"]], "700")
             + td(r["retrace"], "left", sig(r["retrace"]), "700")
             + td(r["trend"],   "left", sig(r["trend"]), "700")
@@ -1406,27 +1403,54 @@ def ta_chart_fig(o, name, dec, rr):
     return fig
 
 
-def ta_render_drill(label, n):
+# TradingView continuous-contract / spot symbols (crypto defaults to spot to match BTC-USD feed).
+TV_SYM = {
+    "ES  S&P 500": "CME_MINI:ES1!", "NQ  Nasdaq": "CME_MINI:NQ1!",
+    "ZB  T-Bond": "CBOT:ZB1!", "ZN  10Y Note": "CBOT:ZN1!", "SR3  SOFR": "CME:SR31!",
+    "6E  Euro": "CME:6E1!", "6J  Yen": "CME:6J1!",
+    "BTC  Bitcoin": "BINANCE:BTCUSDT", "ETH  Ether": "BINANCE:ETHUSDT",
+    "CL  Crude": "NYMEX:CL1!", "NG  Nat Gas": "NYMEX:NG1!",
+    "GC  Gold": "COMEX:GC1!", "SI  Silver": "COMEX:SI1!", "HG  Copper": "COMEX:HG1!",
+    "ZC  Corn": "CBOT:ZC1!", "ZW  Wheat": "CBOT:ZW1!", "ZS  Soybean": "CBOT:ZS1!",
+    "SB  Sugar": "ICEUS:SB1!", "KC  Coffee": "ICEUS:KC1!",
+}
+# One chart per ladder bar (Day & Week both 1H, so intervals are deduped).
+TV_INTERVALS = [("60", "1H \u00b7 intraday"), ("240", "4H"), ("D", "Daily"), ("W", "Weekly")]
+
+
+def ta_tv_chart(tv_symbol, interval, cid):
+    return (
+        '<div class="tradingview-widget-container">'
+        f'<div id="{cid}"></div>'
+        '<script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>'
+        '<script type="text/javascript">new TradingView.widget({'
+        '"width":"100%","height":450,'
+        f'"symbol":"{tv_symbol}","interval":"{interval}",'
+        '"timezone":"Asia/Singapore","theme":"light","style":"1","locale":"en",'
+        '"hide_side_toolbar":false,"allow_symbol_change":true,"withdateranges":true,'
+        f'"container_id":"{cid}"' '});</script></div>'
+    )
+
+
+def ta_render_drill(label):
     sym, dec = SYMBOLS[label][0], SYMBOLS[label][1]
-    rows, book, rrs = [], {}, {}
+    rows = []
     for tf in TA_ORDER:
         o, r = _ta_last(sym, tf)
         if r is None:
             continue
-        book[tf] = o; rrs[tf] = ta_rr(r)
         rows.append(_ta_row(tf, TA_LADDER[tf]["note"], dec, o, r))
-    if not book:
-        st.warning(f"No usable data for {label}."); return
-    st.markdown(ta_scanner_html(rows, f"{label} — range scanner", first_col="Horizon"),
-                unsafe_allow_html=True)
-    for tf, o in book.items():
-        t = ta_seg_table(o, n)
-        cap = f"{tf} \u00b7 {TA_LADDER[tf]['note']}"
-        st.markdown(
-            "<div style='overflow-x:auto;margin-top:14px'>"
-            + ta_style_grid(t, cap, dec).to_html()
-            + "</div>", unsafe_allow_html=True)
-        st.pyplot(ta_chart_fig(o, f"{label} \u00b7 {tf}", dec, rrs[tf]), clear_figure=True)
+    if rows:
+        st.markdown(ta_scanner_html(rows, f"{label} — range scanner", first_col="Horizon"),
+                    unsafe_allow_html=True)
+    tv = TV_SYM.get(label)
+    if not tv:
+        st.info(f"No TradingView symbol mapped for {label}."); return
+    for interval, tag in TV_INTERVALS:
+        st.markdown(f"<div style='font-size:11px;font-weight:700;color:{TA_INK};"
+                    f"margin:14px 0 4px 2px'>{tag} \u00b7 <span style='color:{TA_GREY}'>{tv}</span></div>",
+                    unsafe_allow_html=True)
+        components.html(ta_tv_chart(tv, interval, f"tv_{interval}"), height=470)
 
 
 # --------------------------------------------------------------- tab entry
@@ -1476,15 +1500,11 @@ def render_ta() -> None:
 
     st.markdown("---")
     # 3 — DRILL-DOWN
-    st.markdown("##### Drill-down · one instrument across every horizon")
-    d1, d2 = st.columns([3, 2])
-    with d1:
-        idx = all_labels.index(basket[0]) if basket else 0
-        asset = st.selectbox("Instrument", all_labels, index=idx, key="ta_asset")
-    with d2:
-        segs = st.slider("Segments of history", 4, 16, 6, key="ta_segs")
-    with st.spinner(f"Building ladder for {asset}…"):
-        ta_render_drill(asset, segs)
+    st.markdown("##### Drill-down · one instrument, live TradingView charts by horizon")
+    idx = all_labels.index(basket[0]) if basket else 0
+    asset = st.selectbox("Instrument", all_labels, index=idx, key="ta_asset")
+    with st.spinner(f"Loading {asset}…"):
+        ta_render_drill(asset)
 
 
 _CSS = """
