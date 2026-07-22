@@ -1,0 +1,92 @@
+"""News tab — overnight commentary blurb per market from Trading Economics."""
+import streamlit as st
+
+from common import _session
+
+
+# News: overnight commentary blurb scraped per market from Trading Economics.
+TE_NEWS = {
+    "ES  S&P 500": "https://tradingeconomics.com/united-states/stock-market",
+    "NKD  Nikkei": "https://tradingeconomics.com/japan/stock-market",
+    "6E  Euro":    "https://tradingeconomics.com/euro-area/currency",
+    "6J  Yen":     "https://tradingeconomics.com/japan/currency",
+    "ZB  T-Bond":  "https://tradingeconomics.com/united-states/government-bond-yield",
+    "CL  Crude":   "https://tradingeconomics.com/commodity/crude-oil",
+    "NG  Nat Gas": "https://tradingeconomics.com/commodity/natural-gas",
+    "GC  Gold":    "https://tradingeconomics.com/commodity/gold",
+    "SI  Silver":  "https://tradingeconomics.com/commodity/silver",
+    "HG  Copper":  "https://tradingeconomics.com/commodity/copper",
+    "ZS  Soybean": "https://tradingeconomics.com/commodity/soybeans",
+    "ZW  Wheat":   "https://tradingeconomics.com/commodity/wheat",
+}
+
+
+@st.cache_data(ttl=900, show_spinner=False)
+def get_te_commentary(url: str) -> dict:
+    """Return the overnight commentary blurb (+ headline, date, link) from a TE
+    market page — the body of the first /news/<id> item, which is the same text
+    as the page's lead summary paragraph."""
+    import re
+    html = _session.get(url, timeout=25).text
+    try:
+        from bs4 import BeautifulSoup
+    except ImportError:
+        return {"headline": "", "blurb": "", "date": "", "url": url,
+                "err": "pip install beautifulsoup4"}
+    soup = BeautifulSoup(html, "html.parser")
+
+    anchor = None
+    for a in soup.select("a[href*='/news/']"):
+        if re.search(r"/news/\d+", a.get("href", "")) and a.get_text(strip=True):
+            anchor = a
+            break
+    if anchor is None:
+        return {"headline": "", "blurb": "", "date": "", "url": url}
+
+    headline = anchor.get_text(strip=True)
+    href = anchor.get("href", "")
+    link = href if href.startswith("http") else "https://tradingeconomics.com" + href
+
+    blurb, date, node = "", "", anchor
+    for _ in range(5):          # climb until one item is bracketed by headline..date
+        node = node.find_parent()
+        if node is None:
+            break
+        txt = node.get_text(" ", strip=True)
+        i = txt.find(headline)
+        after = txt[i + len(headline):] if i >= 0 else txt
+        if (dm := re.search(r"(20\d\d-\d\d-\d\d)", after)) and dm.start() > 40:
+            blurb = after[:dm.start()].strip()
+            date = dm.group(1)
+            break
+    return {"headline": headline, "blurb": blurb, "date": date, "url": link}
+
+
+def render_news() -> None:
+    st.caption(
+        "Overnight commentary per market — the lead blurb scraped from the "
+        "selected Trading Economics page. Cached 15 min. Locally your chrome "
+        "session clears TE's bot wall; a blank means the datacenter IP."
+    )
+    c1, c2 = st.columns([4, 1])
+    with c1:
+        label = st.selectbox("Symbol", list(TE_NEWS), label_visibility="collapsed")
+    with c2:
+        if st.button("Refresh", key="rn"):
+            get_te_commentary.clear()
+            st.rerun()
+
+    st.markdown(f"##### {label}")
+    try:
+        d = get_te_commentary(TE_NEWS[label])
+    except Exception as e:  # noqa: BLE001
+        st.caption(f"— fetch failed: {str(e)[:60]}")
+        return
+    if not d.get("blurb"):
+        st.caption(f"— {d.get('err') or 'nothing parsed (likely bot-blocked on this IP)'}")
+        return
+    st.markdown(d["blurb"])
+    meta = "  ·  ".join(x for x in (d.get("date", ""),
+                        f"[Trading Economics]({d['url']})") if x)
+    st.markdown(f"<span style='color:#94a3b8;font-size:11px'>{meta}</span>",
+                unsafe_allow_html=True)
