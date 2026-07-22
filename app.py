@@ -1403,19 +1403,21 @@ def ta_chart_fig(o, name, dec, rr):
     return fig
 
 
-# TradingView continuous-contract / spot symbols (crypto defaults to spot to match BTC-USD feed).
+# The free TradingView embed can't show CME/ICE futures data ("only available on
+# TradingView"), so each instrument maps to a freely-embeddable proxy: US-listed
+# ETF, spot, FX, or a TVC continuous index. Close enough for chart-reading; switch
+# to the real contract in the chart's own search box if you have a TV data plan.
 TV_SYM = {
-    "ES  S&P 500": "CME_MINI:ES1!", "NQ  Nasdaq": "CME_MINI:NQ1!",
-    "ZB  T-Bond": "CBOT:ZB1!", "ZN  10Y Note": "CBOT:ZN1!", "SR3  SOFR": "CME:SR31!",
-    "6E  Euro": "CME:6E1!", "6J  Yen": "CME:6J1!",
+    "ES  S&P 500": "AMEX:SPY",   "NQ  Nasdaq": "NASDAQ:QQQ",
+    "ZB  T-Bond": "NASDAQ:TLT",  "ZN  10Y Note": "NASDAQ:IEF", "SR3  SOFR": "AMEX:SHV",
+    "6E  Euro": "FX:EURUSD",     "6J  Yen": "FX:USDJPY",
     "BTC  Bitcoin": "BINANCE:BTCUSDT", "ETH  Ether": "BINANCE:ETHUSDT",
-    "CL  Crude": "NYMEX:CL1!", "NG  Nat Gas": "NYMEX:NG1!",
-    "GC  Gold": "COMEX:GC1!", "SI  Silver": "COMEX:SI1!", "HG  Copper": "COMEX:HG1!",
-    "ZC  Corn": "CBOT:ZC1!", "ZW  Wheat": "CBOT:ZW1!", "ZS  Soybean": "CBOT:ZS1!",
-    "SB  Sugar": "ICEUS:SB1!", "KC  Coffee": "ICEUS:KC1!",
+    "CL  Crude": "TVC:USOIL",    "NG  Nat Gas": "AMEX:UNG",
+    "GC  Gold": "TVC:GOLD",      "SI  Silver": "TVC:SILVER", "HG  Copper": "AMEX:CPER",
+    "ZC  Corn": "AMEX:CORN",     "ZW  Wheat": "AMEX:WEAT",   "ZS  Soybean": "AMEX:SOYB",
+    "SB  Sugar": "AMEX:CANE",    "KC  Coffee": "AMEX:JO",
 }
-# One chart per ladder bar (Day & Week both 1H, so intervals are deduped).
-TV_INTERVALS = [("60", "1H \u00b7 intraday"), ("240", "4H"), ("D", "Daily"), ("W", "Weekly")]
+TV_DEFAULT = "AMEX:SPY"
 
 
 def ta_tv_chart(tv_symbol, interval, cid):
@@ -1424,7 +1426,7 @@ def ta_tv_chart(tv_symbol, interval, cid):
         f'<div id="{cid}"></div>'
         '<script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>'
         '<script type="text/javascript">new TradingView.widget({'
-        '"width":"100%","height":450,'
+        '"width":"100%","height":540,'
         f'"symbol":"{tv_symbol}","interval":"{interval}",'
         '"timezone":"Asia/Singapore","theme":"light","style":"1","locale":"en",'
         '"hide_side_toolbar":false,"allow_symbol_change":true,"withdateranges":true,'
@@ -1443,23 +1445,19 @@ def ta_render_drill(label):
     if rows:
         st.markdown(ta_scanner_html(rows, f"{label} — range scanner", first_col="Horizon"),
                     unsafe_allow_html=True)
-    tv = TV_SYM.get(label)
-    if not tv:
-        st.info(f"No TradingView symbol mapped for {label}."); return
-    for interval, tag in TV_INTERVALS:
-        st.markdown(f"<div style='font-size:11px;font-weight:700;color:{TA_INK};"
-                    f"margin:14px 0 4px 2px'>{tag} \u00b7 <span style='color:{TA_GREY}'>{tv}</span></div>",
-                    unsafe_allow_html=True)
-        components.html(ta_tv_chart(tv, interval, f"tv_{interval}"), height=470)
+    tv = TV_SYM.get(label, TV_DEFAULT)
+    st.caption(f"Chart proxy: **{tv}** — switch symbol or timeframe in the chart toolbar. "
+               "Range-scanner numbers above are the live Yahoo read for the actual contract.")
+    components.html(ta_tv_chart(tv, "D", "tv_main"), height=560)
 
 
 # --------------------------------------------------------------- tab entry
 def render_ta() -> None:
     st.caption(
-        "Range-levels engine. Each horizon scores three independent legs — **range regime** "
-        "(breakout/breakdown), **retrace rails** (RB/RS), **MA100/200 trend** — into a −3…+3 bias. "
-        "Screen the basket in the **matrix** (Day → Year), rank one horizon in the **breakdown**, "
-        "then open one instrument in the **drill-down**."
+        "Range-levels engine. Each horizon scores three legs — **range regime**, "
+        "**retrace rails** (RB/RS), **MA100/200 trend** — into a −3…+3 bias. Screen the basket in the "
+        "**matrix** (Day → Year), chart any name beside it, rank one horizon in the **breakdown**, "
+        "then read exact levels below."
     )
     all_labels = list(SYMBOLS)
     c1, c2 = st.columns([5, 1])
@@ -1472,18 +1470,32 @@ def render_ta() -> None:
     if not basket:
         st.info("Pick at least one instrument to scan."); return
 
-    # 1 — MATRIX
-    st.markdown("##### Alignment matrix · Day → Year · hover a cell for detail")
     with st.spinner("Building matrix…"):
         grid = {lbl: ta_grid_for(lbl) for lbl in basket}
     table_html, rows, col_tot, grand = ta_matrix_html(grid)
     if not rows:
         st.warning("No data returned for the current basket."); return
+
+    # basket read (full width)
     st.markdown(ta_matrix_read(rows, col_tot, grand), unsafe_allow_html=True)
-    st.markdown(f"<div style='overflow-x:auto'>{table_html}</div>", unsafe_allow_html=True)
+
+    # instrument that drives the side chart + the levels strip (strongest conviction first)
+    order = [r["name"] for r in rows]
+    asset = st.selectbox("Chart / drill instrument", order, index=0, key="ta_asset")
+
+    # matrix left · chart right
+    cL, cR = st.columns([1.08, 1])
+    with cL:
+        st.markdown("##### Alignment matrix · Day → Year")
+        st.markdown(f"<div style='overflow-x:auto'>{table_html}</div>", unsafe_allow_html=True)
+    with cR:
+        tv = TV_SYM.get(asset, TV_DEFAULT)
+        st.markdown(f"##### {asset} · <span style='color:#94a3b8;font-weight:500'>{tv}</span>",
+                    unsafe_allow_html=True)
+        components.html(ta_tv_chart(tv, "D", "tv_main"), height=500)
 
     st.markdown("---")
-    # 2 — TIMEFRAME BREAKDOWN
+    # timeframe breakdown
     st.markdown("##### Timeframe breakdown · full read at one horizon, strongest first")
     tf = st.radio("Horizon", TA_ORDER, index=0, horizontal=True,
                   format_func=lambda x: TA_SHORT[x], label_visibility="collapsed", key="ta_tf")
@@ -1491,20 +1503,28 @@ def render_ta() -> None:
         srows = ta_scan_rows(basket, tf)
     if srows:
         tf_title = f"{tf} ({TA_LADDER[tf]['note']})"
-        st.markdown(
-            "<div style='overflow-x:auto'>"
-            + ta_scanner_html(srows, tf_title, first_col="Instrument")
-            + "</div>", unsafe_allow_html=True)
+        st.markdown("<div style='overflow-x:auto'>"
+                    + ta_scanner_html(srows, tf_title, first_col="Instrument")
+                    + "</div>", unsafe_allow_html=True)
     else:
         st.warning(f"No data on {TA_SHORT[tf]} for this basket.")
 
     st.markdown("---")
-    # 3 — DRILL-DOWN
-    st.markdown("##### Drill-down · one instrument, live TradingView charts by horizon")
-    idx = all_labels.index(basket[0]) if basket else 0
-    asset = st.selectbox("Instrument", all_labels, index=idx, key="ta_asset")
-    with st.spinner(f"Loading {asset}…"):
-        ta_render_drill(asset)
+    # levels for the selected instrument across every horizon
+    st.markdown(f"##### Levels · {asset} across every horizon")
+    sym, dec = SYMBOLS[asset][0], SYMBOLS[asset][1]
+    arows = []
+    for h in TA_ORDER:
+        o, r = _ta_last(sym, h)
+        if r is None:
+            continue
+        arows.append(_ta_row(h, TA_LADDER[h]["note"], dec, o, r))
+    if arows:
+        st.markdown("<div style='overflow-x:auto'>"
+                    + ta_scanner_html(arows, f"{asset} — range scanner", first_col="Horizon")
+                    + "</div>", unsafe_allow_html=True)
+    else:
+        st.warning(f"No usable data for {asset}.")
 
 
 _CSS = """
@@ -1591,7 +1611,7 @@ def main() -> None:
         f'<span class="sakata-sub">futures terminal · {dt.datetime.now():%Y-%m-%d %H:%M}</span>'
         f'</div>', unsafe_allow_html=True)
     tab_board, tab_ta, tab_margins, tab_events, tab_news, tab_curve = st.tabs(
-        ["Board", "Technical Analysis", "Margins", "Events", "News", "Curve"]
+        ["Board", "Technical", "Margins", "Events", "News", "Curve"]
     )
     with tab_board:
         render_board()
