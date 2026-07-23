@@ -1,7 +1,21 @@
-"""News tab — overnight commentary blurb per market from Trading Economics."""
+"""News tab — overnight commentary blurb per market from Trading Economics,
+plus a live crypto headline wire from CoinDesk RSS."""
+import html as _html
+import re as _re
+import xml.etree.ElementTree as _ET
+from email.utils import parsedate_to_datetime
+
 import streamlit as st
 
 from common import _session
+
+
+# Crypto wire: RSS 2.0 feeds. Parsed with stdlib xml.etree — no extra dependency.
+RSS_FEEDS = {
+    "CoinDesk": "https://www.coindesk.com/arc/outboundfeeds/rss/",
+}
+RSS_N = 15  # headlines per feed
+RSS_SUMMARY_CHARS = 260  # truncate summaries; full story lives at the link
 
 
 # News: overnight commentary blurb scraped per market from Trading Economics.
@@ -74,6 +88,99 @@ def get_te_commentary(url: str) -> dict:
     return {"headline": headline, "blurb": blurb, "date": date, "url": link}
 
 
+def _strip_html(s: str) -> str:
+    """RSS descriptions often carry HTML; reduce to plain text."""
+    s = _re.sub(r"<[^>]+>", " ", s or "")
+    s = _html.unescape(s)
+    return _re.sub(r"\s+", " ", s).strip()
+
+
+@st.cache_data(ttl=900, show_spinner=False)
+def get_rss(url: str, n: int = RSS_N) -> list:
+    """Parse an RSS 2.0 (or Atom) feed into [{title, link, when, summary}]."""
+    xml = _session.get(url, timeout=25).text
+    try:
+        root = _ET.fromstring(xml)
+    except _ET.ParseError:
+        return []
+
+    # RSS 2.0 uses channel/item; Atom uses entry (namespaced).
+    nodes = root.findall(".//item")
+    atom = False
+    if not nodes:
+        nodes = root.findall(".//{http://www.w3.org/2005/Atom}entry")
+        atom = True
+    if not nodes:
+        return []
+
+    def txt(node, *tags):
+        for t in tags:
+            el = node.find(t)
+            if el is not None:
+                if el.text:
+                    return el.text
+                # Atom <link href="..."/> carries no text
+                href = el.get("href")
+                if href:
+                    return href
+        return ""
+
+    out = []
+    for it in nodes[:n]:
+        if atom:
+            a = "{http://www.w3.org/2005/Atom}"
+            title = txt(it, f"{a}title")
+            link = txt(it, f"{a}link")
+            raw_date = txt(it, f"{a}updated", f"{a}published")
+            summary = txt(it, f"{a}summary", f"{a}content")
+        else:
+            title = txt(it, "title")
+            link = txt(it, "link")
+            raw_date = txt(it, "pubDate")
+            summary = txt(it, "description")
+
+        when = ""
+        if raw_date:
+            try:
+                when = parsedate_to_datetime(raw_date).strftime("%Y-%m-%d %H:%M")
+            except Exception:  # noqa: BLE001
+                when = raw_date[:16]
+
+        summary = _strip_html(summary)
+        if len(summary) > RSS_SUMMARY_CHARS:
+            summary = summary[:RSS_SUMMARY_CHARS].rsplit(" ", 1)[0] + "\u2026"
+
+        title = _strip_html(title)
+        if title:
+            out.append({"title": title, "link": link.strip(),
+                        "when": when, "summary": summary})
+    return out
+
+
+def render_wire() -> None:
+    """Crypto headline wire — fills the BTC/ETH gap in the TE market pages."""
+    for name, url in RSS_FEEDS.items():
+        st.markdown(f"##### Crypto wire · {name}")
+        try:
+            items = get_rss(url)
+        except Exception as e:  # noqa: BLE001
+            st.caption(f"— feed unavailable: {str(e)[:60]}")
+            continue
+        if not items:
+            st.caption("— nothing parsed (feed may have moved or be blocked on this IP)")
+            continue
+        for it in items:
+            head = (f"[{it['title']}]({it['link']})" if it["link"] else it["title"])
+            st.markdown(f"**{head}**")
+            if it["summary"]:
+                st.markdown(f"<span style='color:#475569;font-size:12.5px'>{it['summary']}</span>",
+                            unsafe_allow_html=True)
+            if it["when"]:
+                st.markdown(f"<span style='color:#94a3b8;font-size:11px'>{it['when']}</span>",
+                            unsafe_allow_html=True)
+            st.markdown("")
+
+
 def render_news() -> None:
     st.caption(
         "Overnight commentary per market — the lead blurb from each Trading Economics "
@@ -84,13 +191,17 @@ def render_news() -> None:
     c1, c2 = st.columns([5, 1])
     with c1:
         picks = st.multiselect("Markets", all_labels, default=all_labels,
-                               label_visibility="collapsed", key="news_pick")
+                               label_visibility="collapsed")
     with c2:
         if st.button("Refresh", key="rn"):
             get_te_commentary.clear()
             st.rerun()
     if not picks:
         st.info("Pick at least one market."); return
+
+    if st.checkbox("Show crypto wire (CoinDesk headlines)", value=True):
+        render_wire()
+        st.markdown("---")
 
     with st.spinner("Fetching commentary…"):
         for label in picks:
