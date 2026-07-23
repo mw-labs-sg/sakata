@@ -6,18 +6,30 @@ from common import _session
 
 # News: overnight commentary blurb scraped per market from Trading Economics.
 TE_NEWS = {
-    "ES  S&P 500": "https://tradingeconomics.com/united-states/stock-market",
-    "NKD  Nikkei": "https://tradingeconomics.com/japan/stock-market",
-    "6E  Euro":    "https://tradingeconomics.com/euro-area/currency",
-    "6J  Yen":     "https://tradingeconomics.com/japan/currency",
-    "ZB  T-Bond":  "https://tradingeconomics.com/united-states/government-bond-yield",
-    "CL  Crude":   "https://tradingeconomics.com/commodity/crude-oil",
-    "NG  Nat Gas": "https://tradingeconomics.com/commodity/natural-gas",
-    "GC  Gold":    "https://tradingeconomics.com/commodity/gold",
-    "SI  Silver":  "https://tradingeconomics.com/commodity/silver",
-    "HG  Copper":  "https://tradingeconomics.com/commodity/copper",
-    "ZS  Soybean": "https://tradingeconomics.com/commodity/soybeans",
-    "ZW  Wheat":   "https://tradingeconomics.com/commodity/wheat",
+    # Indices
+    "ES  S&P 500":  "https://tradingeconomics.com/united-states/stock-market",
+    "NKD  Nikkei":  "https://tradingeconomics.com/japan/stock-market",
+    # Bonds
+    "ZB  T-Bond":   "https://tradingeconomics.com/united-states/government-bond-yield",
+    # Currencies
+    "6E  Euro":     "https://tradingeconomics.com/euro-area/currency",
+    "6J  Yen":      "https://tradingeconomics.com/japan/currency",
+    # Crypto — note the :cur URL pattern, not /commodity/
+    "BTC  Bitcoin": "https://tradingeconomics.com/btcusd:cur",
+    # Energy
+    "CL  Crude":    "https://tradingeconomics.com/commodity/crude-oil",
+    "NG  Nat Gas":  "https://tradingeconomics.com/commodity/natural-gas",
+    # Metals
+    "GC  Gold":     "https://tradingeconomics.com/commodity/gold",
+    "SI  Silver":   "https://tradingeconomics.com/commodity/silver",
+    "HG  Copper":   "https://tradingeconomics.com/commodity/copper",
+    # Grains
+    "ZC  Corn":     "https://tradingeconomics.com/commodity/corn",
+    "ZW  Wheat":    "https://tradingeconomics.com/commodity/wheat",
+    "ZS  Soybean":  "https://tradingeconomics.com/commodity/soybeans",
+    # Softs
+    "SB  Sugar":    "https://tradingeconomics.com/commodity/sugar",
+    "KC  Coffee":   "https://tradingeconomics.com/commodity/coffee",
 }
 
 
