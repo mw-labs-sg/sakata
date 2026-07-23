@@ -64,29 +64,37 @@ def get_te_commentary(url: str) -> dict:
 
 def render_news() -> None:
     st.caption(
-        "Overnight commentary per market — the lead blurb scraped from the "
-        "selected Trading Economics page. Cached 15 min. Locally your chrome "
-        "session clears TE's bot wall; a blank means the datacenter IP."
+        "Overnight commentary per market — the lead blurb from each Trading Economics "
+        "page. Cached 15 min. Locally your chrome session clears TE's bot wall; a blank "
+        "means the datacenter IP. Built to copy wholesale into an LLM."
     )
-    c1, c2 = st.columns([4, 1])
+    all_labels = list(TE_NEWS)
+    c1, c2 = st.columns([5, 1])
     with c1:
-        label = st.selectbox("Symbol", list(TE_NEWS), label_visibility="collapsed")
+        picks = st.multiselect("Markets", all_labels, default=all_labels,
+                               label_visibility="collapsed", key="news_pick")
     with c2:
         if st.button("Refresh", key="rn"):
             get_te_commentary.clear()
             st.rerun()
+    if not picks:
+        st.info("Pick at least one market."); return
 
-    st.markdown(f"##### {label}")
-    try:
-        d = get_te_commentary(TE_NEWS[label])
-    except Exception as e:  # noqa: BLE001
-        st.caption(f"— fetch failed: {str(e)[:60]}")
-        return
-    if not d.get("blurb"):
-        st.caption(f"— {d.get('err') or 'nothing parsed (likely bot-blocked on this IP)'}")
-        return
-    st.markdown(d["blurb"])
-    meta = "  ·  ".join(x for x in (d.get("date", ""),
-                        f"[Trading Economics]({d['url']})") if x)
-    st.markdown(f"<span style='color:#94a3b8;font-size:11px'>{meta}</span>",
-                unsafe_allow_html=True)
+    with st.spinner("Fetching commentary…"):
+        for label in picks:
+            st.markdown(f"##### {label}")
+            try:
+                d = get_te_commentary(TE_NEWS[label])
+            except Exception as e:  # noqa: BLE001
+                st.caption(f"— fetch failed: {str(e)[:60]}")
+                st.markdown("---")
+                continue
+            if not d.get("blurb"):
+                st.caption(f"— {d.get('err') or 'nothing parsed (likely bot-blocked on this IP)'}")
+                st.markdown("---")
+                continue
+            st.markdown(d["blurb"])
+            if d.get("date"):
+                st.markdown(f"<span style='color:#94a3b8;font-size:11px'>{d['date']}</span>",
+                            unsafe_allow_html=True)
+            st.markdown("---")
