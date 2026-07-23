@@ -247,10 +247,10 @@ def ta_matrix_html(grid):
             continue
         rtot = sum(scores)
         signs = [_ta_sign(s) for s in scores if s != 0]
-        if   not signs:                 tag, tagc = "flat",          TA_GREY
-        elif all(v > 0 for v in signs): tag, tagc = "aligned long",  TA_GREEN
-        elif all(v < 0 for v in signs): tag, tagc = "aligned short", TA_RED
-        else:                           tag, tagc = "mixed",         TA_AMBER
+        if   not signs:                 tag, tagc = "Flat",          TA_GREY
+        elif all(v > 0 for v in signs): tag, tagc = "Aligned Long",  TA_GREEN
+        elif all(v < 0 for v in signs): tag, tagc = "Aligned Short", TA_RED
+        else:                           tag, tagc = "Mixed",         TA_AMBER
         for tf in tfs:
             c = cells.get(tf)
             if c: col_tot[tf] += c["score"]
@@ -259,9 +259,9 @@ def ta_matrix_html(grid):
     grand = sum(col_tot.values())
 
     def th(txt, a="center"):
-        return (f'<th style="background:{TA_INK};color:#9fb4cd;text-align:{a};font-size:8.5px;'
-                f'font-weight:600;letter-spacing:.04em;text-transform:uppercase;'
-                f'padding:7px 10px;white-space:nowrap;">{txt}</th>')
+        return (f'<th style="background:{TA_INK};color:#cbd5e1;text-align:{a};font-size:9.5px;'
+                f'font-weight:700;letter-spacing:.09em;text-transform:uppercase;'
+                f'padding:9px 13px;white-space:nowrap;border-bottom:2px solid {TA_TEAL};">{txt}</th>')
 
     h = [f'<div style="font-family:{TA_FONT};font-variant-numeric:tabular-nums;'
          f'border-left:3px solid {TA_TEAL};padding-left:10px;margin-bottom:6px;">',
@@ -276,38 +276,40 @@ def ta_matrix_html(grid):
     for row in rows:
         cells = row["cells"]
         h.append("<tr>")
-        h.append(f'<td style="padding:7px 11px;text-align:left;font-size:10.5px;font-weight:700;'
-                 f'color:#20242b;white-space:nowrap;border-bottom:1px solid #eef1f5;'
+        h.append(f'<td style="padding:8px 13px;text-align:left;font-size:10.5px;font-weight:700;'
+                 f'color:#1e293b;white-space:nowrap;border-bottom:1px solid #eef1f5;'
                  f'border-right:1px solid #e7ebf0;">{row["name"]}</td>')
         for tf in tfs:
             c = cells.get(tf)
             if not c:
-                h.append(f'<td style="padding:7px 10px;text-align:center;color:{TA_GREY};'
+                h.append(f'<td style="padding:8px 10px;text-align:center;color:{TA_GREY};'
                          f'font-size:10px;border-bottom:1px solid #eef1f5;">{TA_DASH}</td>')
                 continue
             bg  = to_hex(TA_HEAT(scorn(c["score"])))
             tip = f'{c["bias"]} \u00b7 {c["regime"]} \u00b7 {c["pos"]:.0f}% in range'
-            h.append(f'<td title="{tip}" style="padding:7px 10px;text-align:center;font-size:11px;'
+            h.append(f'<td title="{tip}" style="padding:8px 10px;text-align:center;font-size:11px;'
                      f'font-weight:800;color:#141922;background:{bg};'
                      f'border-bottom:1px solid #eef1f5;cursor:default;">{c["score"]:+d}</td>')
-        h.append(f'<td style="padding:7px 10px;text-align:center;font-size:11px;font-weight:800;'
+        h.append(f'<td style="padding:8px 10px;text-align:center;font-size:11px;font-weight:800;'
                  f'color:#141922;background:{to_hex(TA_HEAT(rown(row["rtot"])))};'
                  f'border-left:1px solid #e7ebf0;border-bottom:1px solid #eef1f5;">{row["rtot"]:+d}</td>')
-        h.append(f'<td style="padding:7px 11px;text-align:left;font-size:10px;font-weight:700;'
-                 f'color:{row["tagc"]};white-space:nowrap;border-bottom:1px solid #eef1f5;">'
-                 f'{row["tag"]}</td>')
+        h.append(f'<td style="padding:8px 13px;text-align:left;font-size:10.5px;font-weight:700;'
+                 f'letter-spacing:.01em;color:{row["tagc"]};white-space:nowrap;'
+                 f'border-bottom:1px solid #eef1f5;">{row["tag"]}</td>')
         h.append("</tr>")
 
-    h.append(f'<tr><td style="padding:7px 11px;text-align:left;font-size:9px;font-weight:700;'
-             f'letter-spacing:.04em;text-transform:uppercase;color:#9fb4cd;background:{TA_INK};">'
-             f'Breadth</td>')
+    h.append(f'<tr><td style="padding:9px 13px;text-align:left;font-size:9.5px;font-weight:700;'
+             f'letter-spacing:.09em;text-transform:uppercase;color:#cbd5e1;background:{TA_INK};'
+             f'border-top:2px solid {TA_TEAL};">Breadth</td>')
     for tf in tfs:
         v = col_tot[tf]
-        h.append(f'<td style="padding:7px 10px;text-align:center;font-size:10.5px;font-weight:800;'
-                 f'color:#141922;background:{to_hex(TA_HEAT(coln(v)))};">{v:+d}</td>')
-    h.append(f'<td style="padding:7px 10px;text-align:center;font-size:11px;font-weight:800;'
-             f'color:white;background:{TA_INK};">{grand:+d}</td>')
-    h.append(f'<td style="background:{TA_INK};"></td></tr></tbody></table></div>')
+        h.append(f'<td style="padding:8px 10px;text-align:center;font-size:10.5px;font-weight:800;'
+                 f'color:#141922;background:{to_hex(TA_HEAT(coln(v)))};'
+                 f'border-top:2px solid {TA_TEAL};">{v:+d}</td>')
+    h.append(f'<td style="padding:8px 10px;text-align:center;font-size:11px;font-weight:800;'
+             f'color:white;background:{TA_INK};border-top:2px solid {TA_TEAL};">{grand:+d}</td>')
+    h.append(f'<td style="background:{TA_INK};border-top:2px solid {TA_TEAL};">'
+             f'</td></tr></tbody></table></div>')
     return "".join(h), rows, col_tot, grand
 
 
@@ -315,7 +317,7 @@ def ta_matrix_read(rows, col_tot, grand):
     tfs = TA_ORDER
     longs  = [r for r in rows if r["rtot"] > 0]
     shorts = [r for r in rows if r["rtot"] < 0]
-    mixed  = [r for r in rows if r["tag"] == "mixed"]
+    mixed  = [r for r in rows if r["tag"] == "Mixed"]
     top_long  = rows[0]  if rows and rows[0]["rtot"]  > 0 else None
     top_short = rows[-1] if rows and rows[-1]["rtot"] < 0 else None
     most_conf = min(mixed, key=lambda r: abs(r["rtot"])) if mixed else None
@@ -504,9 +506,10 @@ def ta_render_drill(label):
 # --------------------------------------------------------------- tab entry
 def render_ta() -> None:
     st.caption(
-        "Full read — every instrument, every horizon. Five tables (**Day → Year**), each the "
-        "complete scanner for the whole basket; alignment **matrix** on top for the overview, "
-        "**chart** at the base. Built to copy wholesale into an LLM."
+        "Full read — every instrument, every horizon. Alignment **matrix** on top, then toggle the "
+        "grouping: **Timeframe breakdown** (one table per horizon, Day → Year, all instruments each) "
+        "or **Instrument focus** (one table per name, all horizons). Both show everything; **chart** "
+        "at the base. Built to copy wholesale into an LLM."
     )
     all_labels = list(SYMBOLS)
     c1, c2 = st.columns([5, 1])
@@ -533,24 +536,45 @@ def render_ta() -> None:
     st.markdown(f"<div style='overflow-x:auto'>{table_html}</div>", unsafe_allow_html=True)
 
     st.markdown("---")
-    # 2 — FIVE FULL TABLES, one per horizon (Day → Year), all instruments
-    st.markdown("##### Full scanner · every horizon, all instruments, strongest first")
-    for tf in TA_ORDER:
-        with st.spinner(f"Scanning {TA_SHORT[tf]}…"):
-            srows = ta_scan_rows(basket, tf)
-        if srows:
-            tf_title = f"{tf} ({TA_LADDER[tf]['note']})"
-            st.markdown("<div style='overflow-x:auto'>"
-                        + ta_scanner_html(srows, tf_title, first_col="Instrument")
-                        + "</div>", unsafe_allow_html=True)
-        else:
-            st.warning(f"No data on {TA_SHORT[tf]} for this basket.")
+    # 2 — SCANNER: toggle grouping; either mode renders every table
+    mode = st.radio("Group by", ["Timeframe breakdown", "Instrument focus"],
+                    index=0, horizontal=True, label_visibility="collapsed", key="ta_mode")
+    conviction = [r["name"] for r in rows]  # matrix order, strongest first
+
+    if mode == "Timeframe breakdown":
+        st.markdown("##### Timeframe breakdown · one table per horizon, all instruments, strongest first")
+        for tf in TA_ORDER:
+            with st.spinner(f"Scanning {TA_SHORT[tf]}…"):
+                srows = ta_scan_rows(basket, tf)
+            if srows:
+                tf_title = f"{tf} ({TA_LADDER[tf]['note']})"
+                st.markdown("<div style='overflow-x:auto'>"
+                            + ta_scanner_html(srows, tf_title, first_col="Instrument")
+                            + "</div>", unsafe_allow_html=True)
+            else:
+                st.warning(f"No data on {TA_SHORT[tf]} for this basket.")
+    else:
+        st.markdown("##### Instrument focus · one table per name, every horizon (Day → Year)")
+        for label in conviction:
+            sym, dec = SYMBOLS[label][0], SYMBOLS[label][1]
+            with st.spinner(f"Scanning {label}…"):
+                arows = []
+                for tf in TA_ORDER:
+                    o, r = _ta_last(sym, tf)
+                    if r is None:
+                        continue
+                    arows.append(_ta_row(tf, TA_LADDER[tf]["note"], dec, o, r))
+            if arows:
+                st.markdown("<div style='overflow-x:auto'>"
+                            + ta_scanner_html(arows, f"{label} · across every horizon", first_col="Horizon")
+                            + "</div>", unsafe_allow_html=True)
+            else:
+                st.warning(f"No usable data for {label}.")
 
     st.markdown("---")
     # 3 — CHART (instrument focus)
     st.markdown("##### Chart")
-    order = [r["name"] for r in rows]  # strongest conviction first
-    asset = st.selectbox("Instrument", order, index=0, key="ta_asset")
+    asset = st.selectbox("Instrument", conviction, index=0, key="ta_asset")
     tv = TV_SYM.get(asset, TV_DEFAULT)
     st.markdown(f"<div style='font-size:12px;font-weight:700;color:{TA_INK};margin:2px 0 4px'>"
                 f"{asset} \u00b7 <span style='color:#94a3b8;font-weight:500'>{tv}</span></div>",
