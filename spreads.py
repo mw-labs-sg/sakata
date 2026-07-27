@@ -291,8 +291,9 @@ def render_spread_table(pairs, theme, top_n=10):
 # SHARED CHART RENDERER
 # =============================================================================
 
-def render_spread_charts(pairs, data, theme, mobile=False, tick_fmt='%d %b'):
-    top_n = min(6, len(pairs))
+def render_spread_charts(pairs, data, theme, mobile=False, tick_fmt='%d %b',
+                         max_charts=6):
+    top_n = min(max_charts, len(pairs))
     if top_n == 0: return
 
     _pbg = theme.get('plot_bg', '#ffffff'); _grd = theme.get('grid', '#eef2f6')
