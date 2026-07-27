@@ -6,7 +6,6 @@ import streamlit as st
 from board import render_board
 from technical import render_ta
 from spreads import render_spreads_tab
-from sectors import render_sectors_tab
 from portfolio import render_portfolio_tab
 from margins import render_margins
 from events import render_events
@@ -99,9 +98,9 @@ def main() -> None:
         f'<span class="sakata-title">Sakata</span>'
         f'<span class="sakata-sub">futures terminal · {dt.datetime.now():%Y-%m-%d %H:%M}</span>'
         f'</div>', unsafe_allow_html=True)
-    (tab_board, tab_ta, tab_spreads, tab_sectors, tab_port, tab_margins,
+    (tab_board, tab_ta, tab_spreads, tab_port, tab_margins,
      tab_events, tab_news, tab_curve) = st.tabs(
-        ["Board", "Technical", "Spreads", "Sectors", "Portfolio", "Margins",
+        ["Board", "Technical", "Spreads", "Portfolio", "Margins",
          "Events", "News", "Curve"]
     )
     with tab_board:
@@ -110,8 +109,6 @@ def main() -> None:
         render_ta()
     with tab_spreads:
         render_spreads_tab(is_mobile=False)
-    with tab_sectors:
-        render_sectors_tab(is_mobile=False)
     with tab_port:
         render_portfolio_tab(is_mobile=False)
     with tab_margins:

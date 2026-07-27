@@ -55,25 +55,31 @@ def _spread_r2(returns):
 # =============================================================================
 
 LOOKBACK_OPTIONS = {
-    'YTD': 0,
-    '30 Days': 30,
-    '60 Days': 60,
-    '120 Days': 120,
-    '240 Days': 240,
-    '520 Days': 520,
+    '1 Day': 1, '5 Days': 5, '10 Days': 10, '20 Days': 20, '30 Days': 30,
+    '60 Days': 60, '120 Days': 120, '240 Days': 240, '520 Days': 520, 'YTD': 0,
 }
 
-# Yahoo has no native 4h bar — it is resampled from 1h. 1h history is capped
-# at ~730 days, so intraday bars only make sense on short lookbacks.
-BAR_OPTIONS = {'Auto': None, '4 Hour': '4h', '1 Hour': '1h', 'Daily': '1d'}
-_INTRADAY = ('1h', '4h')
+# Yahoo intraday limits: 15m/30m reach back ~60 days, 1h ~730 days. There is no
+# native 4h bar — it is resampled from 1h.
+BAR_OPTIONS = {'Auto': None, '15 Min': '15m', '30 Min': '30m', '1 Hour': '1h',
+               '4 Hour': '4h', 'Daily': '1d'}
+_INTRADAY = ('15m', '30m', '1h', '4h')
+_NATIVE = {'15m': '15m', '30m': '30m', '1h': '1h', '4h': '1h', '1d': '1d'}
+_MAX_BACK = {'15m': 55, '30m': 55, '1h': 700, '4h': 700, '1d': None}
+
+# lookback (days) -> bar size, coarsening as the window widens so every window
+# lands in the low hundreds of observations rather than tens.
+_LADDER = ((2, '15m'), (7, '30m'), (20, '1h'), (60, '4h'))
 
 
 def auto_interval(lookback_days):
-    """Short windows get intraday bars — 30 daily closes is not a sample."""
+    """Short windows get finer bars — 30 daily closes is not a sample."""
     if lookback_days == 0:
         return '1d'
-    return '4h' if lookback_days <= 60 else '1d'
+    for limit, interval in _LADDER:
+        if lookback_days <= limit:
+            return interval
+    return '1d'
 
 
 def ann_factor_for(index):
@@ -104,14 +110,16 @@ def fetch_spread_data(symbols_tuple, lookback_days=0, interval='1d'):
     if len(symbols) < 2:
         return None
     intraday = interval in _INTRADAY
-    yf_interval = '1h' if intraday else '1d'
+    yf_interval = _NATIVE[interval]
 
     if lookback_days == 0:
         start = datetime.now().replace(month=1, day=1)
     else:
-        start = datetime.now() - pd.Timedelta(days=int(lookback_days * 1.5))
-    if intraday:   # Yahoo serves at most ~730 days of hourly bars
-        start = max(start, datetime.now() - pd.Timedelta(days=700))
+        pad = 3 if lookback_days <= 5 else 1.5   # short windows need weekend slack
+        start = datetime.now() - pd.Timedelta(days=int(lookback_days * pad) + 2)
+    cap = _MAX_BACK.get(interval)
+    if cap:   # respect Yahoo's per-interval history limit
+        start = max(start, datetime.now() - pd.Timedelta(days=cap))
 
     data = pd.DataFrame()
     for sym in symbols:
@@ -370,33 +378,38 @@ def render_spreads_tab(is_mobile: bool = False) -> None:
     theme = THEMES.get(st.session_state.get("theme", "Light"), THEMES["Dark"])
 
     st.caption(
-        "Every long/short pair on the board, ranked. Each leg is rebased to 100 "
-        "and the spread is the daily return difference. Sign is auto-flipped so "
-        "Sharpe reads positive — the LONG column is the leg to be long. "
-        "**vs LONG** marks pairs that beat the best single outright. "
-        "Bars default to 4-hour for lookbacks of 60 days or less — 30 daily "
-        "closes is too thin to rank on. Intraday rows are inner-joined, not "
-        "forward-filled, so mixing 24h and session-bound markets "
-        "keeps only the overlapping bars; check the bar count below."
+        "Every long/short pair on the board, ranked — 171 combinations across "
+        "19 instruments. Each leg is rebased to 100 and the spread is the "
+        "return difference. Sign is auto-flipped so Sharpe reads positive, so "
+        "the LONG column is the leg to be long; **vs LONG** marks pairs that "
+        "beat the best single outright. On Auto the bar size follows the "
+        "window: 15m under 2 days, 30m to a week, hourly to 20 days, 4-hour to "
+        "60, daily beyond. Intraday rows are inner-joined rather than "
+        "forward-filled, so mixing 24h and session-bound markets keeps only "
+        "the overlapping bars — watch the bar count in the summary line."
     )
 
-    c2, c3, c4, c5 = st.columns([2, 2, 2, 1])
-    with c2:
+    c1, c2, c3, c4, c5 = st.columns([2, 2, 2, 1, 1])
+    with c1:
         st.markdown("##### Lookback")
-        lb_label = st.selectbox("Lookback", list(LOOKBACK_OPTIONS), index=3,
+        lb_label = st.selectbox("Lookback", list(LOOKBACK_OPTIONS), index=4,
                                 key="spr_lookback", label_visibility="collapsed")
-    with c3:
+    with c2:
         st.markdown("##### Bars")
         bar_label = st.selectbox("Bars", list(BAR_OPTIONS), index=0, key="spr_bars",
                                  label_visibility="collapsed")
-    with c4:
+    with c3:
         st.markdown("##### Sort by")
         sort_by = st.selectbox("Sort", list(SORT_KEYS), index=0, key="spr_sort",
                                label_visibility="collapsed")
-    with c5:
+    with c4:
         st.markdown("##### Show")
-        top_n = st.selectbox("Show", [10, 25, 50, 100], index=1, key="spr_topn",
-                             label_visibility="collapsed")
+        show = st.selectbox("Show", ["10", "25", "50", "100", "All"], index=4,
+                            key="spr_topn", label_visibility="collapsed")
+    with c5:
+        st.markdown("##### Charts")
+        n_charts = st.selectbox("Charts", [6, 12, 24, 48], index=0,
+                                key="spr_charts", label_visibility="collapsed")
 
     if st.button("Refresh", key="rs"):
         fetch_spread_data.clear()
@@ -406,7 +419,8 @@ def render_spreads_tab(is_mobile: bool = False) -> None:
 
     lb_days = LOOKBACK_OPTIONS[lb_label]
     interval = BAR_OPTIONS[bar_label] or auto_interval(lb_days)
-    bar_name = {'4h': '4-hour', '1h': 'hourly', '1d': 'daily'}[interval]
+    bar_name = {'15m': '15-minute', '30m': '30-minute', '1h': 'hourly',
+                '4h': '4-hour', '1d': 'daily'}[interval]
 
     n_pairs = len(symbols) * (len(symbols) - 1) // 2
     with st.spinner(f"Pricing {n_pairs} pairs across {len(symbols)} instruments "
@@ -439,9 +453,20 @@ def render_spreads_tab(is_mobile: bool = False) -> None:
         f"{n_beat} beat the best outright ({outright} {best['best_long_sharpe']:.2f})"
     )
 
-    st.markdown(f"##### Ranked pairs — top {min(top_n, len(pairs))} by {sort_by}")
+    if len(data) < 100:
+        st.warning(
+            f"**{len(data)} bars is a thin sample.** Annualised Sharpe carries a "
+            f"standard error of roughly {(ann / len(data)) ** 0.5:.1f} here, and "
+            f"{len(pairs)} pairs were tested — the top of the table will look "
+            f"strong from noise alone. Widen the lookback or use finer bars."
+        )
+
+    top_n = len(pairs) if show == "All" else int(show)
+    st.markdown(f"##### Ranked pairs — {min(top_n, len(pairs))} of {len(pairs)} "
+                f"by {sort_by}")
     render_spread_table(pairs, theme, top_n=top_n)
 
-    st.markdown("##### Top 6 — legs vs spread (rebased to 100)")
-    render_spread_charts(pairs, data, theme, mobile=is_mobile,
+    st.markdown(f"##### Top {min(n_charts, len(pairs))} — legs vs spread "
+                f"(rebased to 100)")
+    render_spread_charts(pairs, data, theme, mobile=is_mobile, max_charts=n_charts,
                          tick_fmt='%d %b %H:%M' if interval in _INTRADAY else '%d %b')
