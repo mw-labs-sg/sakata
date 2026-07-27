@@ -5,6 +5,8 @@ import streamlit as st
 
 from board import render_board
 from technical import render_ta
+from spreads import render_spreads_tab
+from portfolio import render_portfolio_tab
 from margins import render_margins
 from events import render_events
 from news import render_news
@@ -30,8 +32,9 @@ html, body, [data-testid="stAppViewContainer"], .stMarkdown,
   margin-left:auto; text-transform:uppercase; }
 
 /* tabs */
-.stTabs [data-baseweb="tab-list"] { gap:2px; border-bottom:1px solid #e5e7eb; }
-.stTabs [data-baseweb="tab"] { height:38px; padding:0 20px; font-weight:600; font-size:13px;
+.stTabs [data-baseweb="tab-list"] { gap:2px; border-bottom:1px solid #e5e7eb;
+  flex-wrap:wrap; }
+.stTabs [data-baseweb="tab"] { height:38px; padding:0 16px; font-weight:600; font-size:13px;
   color:#64748b; letter-spacing:0.02em; }
 .stTabs [aria-selected="true"] { color:#0f766e; }
 .stTabs [data-baseweb="tab-highlight"] { background-color:#0f766e; height:2px; }
@@ -95,13 +98,19 @@ def main() -> None:
         f'<span class="sakata-title">Sakata</span>'
         f'<span class="sakata-sub">futures terminal · {dt.datetime.now():%Y-%m-%d %H:%M}</span>'
         f'</div>', unsafe_allow_html=True)
-    tab_board, tab_ta, tab_margins, tab_events, tab_news, tab_curve = st.tabs(
-        ["Board", "Technical", "Margins", "Events", "News", "Curve"]
+    (tab_board, tab_ta, tab_spreads, tab_port, tab_margins,
+     tab_events, tab_news, tab_curve) = st.tabs(
+        ["Board", "Technical", "Spreads", "Portfolio", "Margins",
+         "Events", "News", "Curve"]
     )
     with tab_board:
         render_board()
     with tab_ta:
         render_ta()
+    with tab_spreads:
+        render_spreads_tab(is_mobile=False)
+    with tab_port:
+        render_portfolio_tab(is_mobile=False)
     with tab_margins:
         render_margins()
     with tab_events:
