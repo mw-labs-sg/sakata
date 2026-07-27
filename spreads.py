@@ -299,6 +299,17 @@ def render_spread_table(pairs, theme, top_n=10):
 # SHARED CHART RENDERER
 # =============================================================================
 
+def _tick_fmt(index):
+    """Short axis labels. A 10-day hourly window still wants day labels, not
+    'DD Mon HH:MM' on every tick — long strings collide with the right axis."""
+    span_h = (index[-1] - index[0]).total_seconds() / 3600
+    if span_h <= 30:
+        return '%H:%M'
+    if span_h <= 72:
+        return '%d %b %H:%M'
+    return '%d %b'
+
+
 def render_spread_charts(pairs, data, theme, mobile=False, tick_fmt='%d %b',
                          max_charts=6):
     top_n = min(max_charts, len(pairs))
@@ -319,8 +330,12 @@ def render_spread_charts(pairs, data, theme, mobile=False, tick_fmt='%d %b',
         subtitles.append(f"<span style='color:{lc}'>■</span> {ln}  <span style='color:{sc}'>■</span> {sn}  <span style='color:#0f172a'>■</span> Spread")
     while len(subtitles) < n_rows * n_cols: subtitles.append("")
 
-    # plotly hard-caps spacing at 1/(rows-1); tall grids must scale it down
-    v_space = min(0.08 if mobile else 0.18, 0.8 / max(n_rows - 1, 1))
+    # vertical_spacing is a fraction of TOTAL figure height, so a fixed fraction
+    # balloons into hundreds of px on tall grids. Work in pixels instead, then
+    # respect plotly's 1/(rows-1) ceiling.
+    chart_h = (350 if mobile else 220) * n_rows
+    gap_px = 60 if mobile else 78
+    v_space = min(gap_px / chart_h, 0.9 / max(n_rows - 1, 1))
     h_space = min(0.06, 0.8 / max(n_cols - 1, 1))
     fig = make_subplots(rows=n_rows, cols=n_cols, subplot_titles=subtitles,
         horizontal_spacing=h_space, vertical_spacing=v_space)
@@ -346,9 +361,15 @@ def render_spread_charts(pairs, data, theme, mobile=False, tick_fmt='%d %b',
             showarrow=False, font=dict(size=12, color=_mut, family=FONTS),
             xanchor='left', yanchor='top')
 
-        n_ticks = 4; idx_step = max(1, len(data) // n_ticks)
+        n_ticks = 3 if n_cols > 1 else 4
+        idx_step = max(1, len(data) // n_ticks)
         tick_vals = list(range(0, len(data), idx_step))
-        if (len(data) - 1) not in tick_vals: tick_vals.append(len(data) - 1)
+        last = len(data) - 1
+        # only pin the final bar if it is not sitting on the previous tick
+        if last - tick_vals[-1] > idx_step * 0.5:
+            tick_vals.append(last)
+        else:
+            tick_vals[-1] = last
         tick_text = [data.index[j].strftime(tick_fmt) for j in tick_vals if j < len(data)]
         tick_vals = tick_vals[:len(tick_text)]
         axis_key = 'xaxis' if axis_idx == 1 else f'xaxis{axis_idx}'
@@ -359,7 +380,6 @@ def render_spread_charts(pairs, data, theme, mobile=False, tick_fmt='%d %b',
         if 'domain' not in xref_str:
             ann['font'] = dict(size=10, family=FONTS)
 
-    chart_h = 350 * n_rows if mobile else 220 * n_rows
     fig.update_layout(
         template='plotly_white', height=chart_h,
         margin=dict(l=40, r=40, t=45, b=30),
@@ -472,4 +492,4 @@ def render_spreads_tab(is_mobile: bool = False) -> None:
     st.markdown(f"##### Top {min(n_charts, len(pairs))} — legs vs spread "
                 f"(rebased to 100)")
     render_spread_charts(pairs, data, theme, mobile=is_mobile, max_charts=n_charts,
-                         tick_fmt='%d %b %H:%M' if interval in _INTRADAY else '%d %b')
+                         tick_fmt=_tick_fmt(data.index))
