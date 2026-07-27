@@ -1,9 +1,8 @@
-"""Bridge between Sakata's instrument universe and the ported SANPO modules.
+"""Shared universe and palette for the Spreads and Portfolio tabs.
 
-The spreads/portfolio code came out of SANPO, where it imported FUTURES_GROUPS,
-SYMBOL_NAMES, THEMES, FONTS and clean_symbol from a `config` module. Rather than
-carry SANPO's config across, this derives everything from Sakata's own SECTORS
-so there is still exactly one place (common.py) that defines the universe.
+Everything here is derived from SECTORS in common.py, so common.py stays the
+single place that defines which instruments Sakata covers. Named separately
+from .streamlit/config.toml, which is Streamlit's own theme file.
 """
 from common import SECTORS
 
@@ -32,6 +31,17 @@ SYMBOL_LABELS = {
     ticker: " ".join(name.split())
     for members in SECTORS.values()
     for name, (ticker, _dec) in members.items()
+}
+
+
+# Every instrument on the board — the scan universe.
+ALL_SYMBOLS = [t for members in SECTORS.values() for t, _dec in members.values()]
+
+# ticker -> sector, for tagging scan rows
+SYMBOL_SECTOR = {
+    ticker: sector
+    for sector, members in SECTORS.items()
+    for _name, (ticker, _dec) in members.items()
 }
 
 

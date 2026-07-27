@@ -10,7 +10,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import logging
 
-from sanpo_config import FUTURES_GROUPS, THEMES, SYMBOL_NAMES, FONTS, clean_symbol
+from sakata_config import ALL_SYMBOLS, THEMES, SYMBOL_NAMES, FONTS, clean_symbol
 
 logger = logging.getLogger(__name__)
 
@@ -63,34 +63,86 @@ LOOKBACK_OPTIONS = {
     '520 Days': 520,
 }
 
-@st.cache_data(ttl=1800, show_spinner=False)
-def fetch_sector_spread_data(sector, lookback_days=0):
-    symbols = FUTURES_GROUPS.get(sector, [])
-    if not symbols: return None
+# Yahoo has no native 4h bar — it is resampled from 1h. 1h history is capped
+# at ~730 days, so intraday bars only make sense on short lookbacks.
+BAR_OPTIONS = {'Auto': None, '4 Hour': '4h', '1 Hour': '1h', 'Daily': '1d'}
+_INTRADAY = ('1h', '4h')
+
+
+def auto_interval(lookback_days):
+    """Short windows get intraday bars — 30 daily closes is not a sample."""
     if lookback_days == 0:
-        start = datetime.now().replace(month=1, day=1).strftime('%Y-%m-%d')
+        return '1d'
+    return '4h' if lookback_days <= 60 else '1d'
+
+
+def ann_factor_for(index):
+    """Bars per year, measured off the data rather than assumed.
+
+    Self-calibrating: a year of daily closes gives ~252, a 30-day window of 4h
+    bars gives ~1500. Keeps Sharpe/Sortino/vol comparable across bar types.
+    """
+    if len(index) < 3:
+        return 252.0
+    span_yrs = (index[-1] - index[0]).total_seconds() / (365.25 * 24 * 3600)
+    if span_yrs <= 0:
+        return 252.0
+    return float(np.clip(len(index) / span_yrs, 12, 8760))
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def fetch_spread_data(symbols_tuple, lookback_days=0, interval='1d'):
+    """Rebased (=100) close matrix for an arbitrary set of tickers.
+
+    Daily bars are forward-filled then aligned. Intraday bars are NOT
+    forward-filled — a stale grain price carried through a closed session
+    would show as a zero return and flatter the vol and Sharpe. Instead the
+    columns are inner-joined, so every row is a genuinely simultaneous
+    observation across all legs.
+    """
+    symbols = list(symbols_tuple)
+    if len(symbols) < 2:
+        return None
+    intraday = interval in _INTRADAY
+    yf_interval = '1h' if intraday else '1d'
+
+    if lookback_days == 0:
+        start = datetime.now().replace(month=1, day=1)
     else:
-        start = (datetime.now() - pd.Timedelta(days=int(lookback_days * 1.5))).strftime('%Y-%m-%d')
+        start = datetime.now() - pd.Timedelta(days=int(lookback_days * 1.5))
+    if intraday:   # Yahoo serves at most ~730 days of hourly bars
+        start = max(start, datetime.now() - pd.Timedelta(days=700))
+
     data = pd.DataFrame()
     for sym in symbols:
         try:
             ticker = yf.Ticker(sym, session=_session)
-            hist = ticker.history(start=start)
-            if not hist.empty:
-                closes = hist['Close'].copy()
-                closes.index = closes.index.tz_localize(None) if closes.index.tz else closes.index
+            hist = ticker.history(start=start.strftime('%Y-%m-%d'),
+                                  interval=yf_interval)
+            if hist.empty:
+                continue
+            closes = hist['Close'].copy()
+            closes.index = closes.index.tz_localize(None) if closes.index.tz else closes.index
+            if intraday:
+                if interval == '4h':
+                    closes = closes.resample('4h').last().dropna()
+            else:
                 closes.index = closes.index.normalize()
-                closes = closes.groupby(closes.index).last()
-                data[sym] = closes
+            closes = closes.groupby(closes.index).last()
+            data[sym] = closes
         except Exception as e:
             logger.debug(f"[{sym}] spread data fetch error: {e}")
-    if data.empty or len(data.columns) < 2: return None
-    data = data.ffill().dropna()
-    if lookback_days > 0 and len(data) > lookback_days:
-        data = data.iloc[-lookback_days:]
-    if len(data) < 2: return None
-    data = 100 * (data / data.iloc[0])
-    return data
+
+    if data.empty or len(data.columns) < 2:
+        return None
+    data = data.dropna() if intraday else data.ffill().dropna()
+    if lookback_days > 0 and not data.empty:
+        cutoff = data.index.max() - pd.Timedelta(days=lookback_days)
+        data = data[data.index >= cutoff]
+    if len(data) < 10:
+        return None
+    return 100 * (data / data.iloc[0])
+
 
 # =============================================================================
 # SPREAD COMPUTATION
@@ -239,7 +291,7 @@ def render_spread_table(pairs, theme, top_n=10):
 # SHARED CHART RENDERER
 # =============================================================================
 
-def render_spread_charts(pairs, data, theme, mobile=False):
+def render_spread_charts(pairs, data, theme, mobile=False, tick_fmt='%d %b'):
     top_n = min(6, len(pairs))
     if top_n == 0: return
 
@@ -285,7 +337,7 @@ def render_spread_charts(pairs, data, theme, mobile=False):
         n_ticks = 4; idx_step = max(1, len(data) // n_ticks)
         tick_vals = list(range(0, len(data), idx_step))
         if (len(data) - 1) not in tick_vals: tick_vals.append(len(data) - 1)
-        tick_text = [data.index[j].strftime('%d %b') for j in tick_vals if j < len(data)]
+        tick_text = [data.index[j].strftime(tick_fmt) for j in tick_vals if j < len(data)]
         tick_vals = tick_vals[:len(tick_text)]
         axis_key = 'xaxis' if axis_idx == 1 else f'xaxis{axis_idx}'
         fig.update_layout(**{axis_key: dict(tickmode='array', tickvals=tick_vals, ticktext=tick_text)})
@@ -310,37 +362,85 @@ def render_spread_charts(pairs, data, theme, mobile=False):
         'scrollZoom': True, 'displayModeBar': False, 'responsive': True})
 
 # =============================================================================
-# MAIN RENDER — sub-tabs
+# MAIN RENDER — one scan across the whole board
 # =============================================================================
 
-def render_spreads_tab(is_mobile):
-    from spreads_sector import render_sector_tab
-    from spreads_scan import render_scan_tab
+def render_spreads_tab(is_mobile: bool = False) -> None:
+    theme = THEMES.get(st.session_state.get("theme", "Light"), THEMES["Dark"])
 
-    # Green underline on nested sub-tabs only (inside a tab panel)
-    st.markdown(f"""<style>
-        .stTabs .stTabs [data-baseweb="tab-list"] button {{
-            font-family: {FONTS};
-            font-size: 11px;
-            font-weight: 600;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-            color: #64748b;
-            padding: 8px 20px;
-        }}
-        .stTabs .stTabs [data-baseweb="tab-list"] button[aria-selected="true"] {{
-            color: #0f766e;
-            border-bottom: 2px solid #0f766e !important;
-        }}
-        .stTabs .stTabs [data-baseweb="tab-highlight"] {{
-            background-color: #0f766e !important;
-        }}
-    </style>""", unsafe_allow_html=True)
+    st.caption(
+        "Every long/short pair on the board, ranked. Each leg is rebased to 100 "
+        "and the spread is the daily return difference. Sign is auto-flipped so "
+        "Sharpe reads positive — the LONG column is the leg to be long. "
+        "**vs LONG** marks pairs that beat the best single outright. "
+        "Bars default to 4-hour for lookbacks of 60 days or less — 30 daily "
+        "closes is too thin to rank on. Intraday rows are inner-joined, not "
+        "forward-filled, so mixing 24h and session-bound markets "
+        "keeps only the overlapping bars; check the bar count below."
+    )
 
-    tab_sector, tab_scan = st.tabs(['Sector', 'All'])
+    c2, c3, c4, c5 = st.columns([2, 2, 2, 1])
+    with c2:
+        st.markdown("##### Lookback")
+        lb_label = st.selectbox("Lookback", list(LOOKBACK_OPTIONS), index=3,
+                                key="spr_lookback", label_visibility="collapsed")
+    with c3:
+        st.markdown("##### Bars")
+        bar_label = st.selectbox("Bars", list(BAR_OPTIONS), index=0, key="spr_bars",
+                                 label_visibility="collapsed")
+    with c4:
+        st.markdown("##### Sort by")
+        sort_by = st.selectbox("Sort", list(SORT_KEYS), index=0, key="spr_sort",
+                               label_visibility="collapsed")
+    with c5:
+        st.markdown("##### Show")
+        top_n = st.selectbox("Show", [10, 25, 50, 100], index=1, key="spr_topn",
+                             label_visibility="collapsed")
 
-    with tab_sector:
-        render_sector_tab(is_mobile)
+    if st.button("Refresh", key="rs"):
+        fetch_spread_data.clear()
+        st.rerun()
 
-    with tab_scan:
-        render_scan_tab(is_mobile)
+    symbols = ALL_SYMBOLS
+
+    lb_days = LOOKBACK_OPTIONS[lb_label]
+    interval = BAR_OPTIONS[bar_label] or auto_interval(lb_days)
+    bar_name = {'4h': '4-hour', '1h': 'hourly', '1d': 'daily'}[interval]
+
+    n_pairs = len(symbols) * (len(symbols) - 1) // 2
+    with st.spinner(f"Pricing {n_pairs} pairs across {len(symbols)} instruments "
+                    f"on {bar_name} bars…"):
+        data = fetch_spread_data(tuple(symbols), lb_days, interval)
+
+    if data is None or len(data.columns) < 2:
+        st.warning(f"Not enough price history over {lb_label}. "
+                   "Yahoo may be throttling — try Refresh in a minute.")
+        return
+
+    ann = ann_factor_for(data.index)
+    pairs = compute_sector_spreads(data, ann)
+    if not pairs:
+        st.info("No pairs computed.")
+        return
+
+    pairs = sort_spread_pairs(pairs, sort_by)
+    best = pairs[0]
+    bl = SYMBOL_NAMES.get(best["long"], clean_symbol(best["long"]))
+    bs = SYMBOL_NAMES.get(best["short"], clean_symbol(best["short"]))
+    outright = SYMBOL_NAMES.get(best["best_long_sym"],
+                                clean_symbol(best["best_long_sym"]))
+    n_beat = sum(1 for p in pairs if p["beats_long"])
+    st.markdown(
+        f"**{len(pairs)} pairs** from {len(data.columns)} instruments  ·  "
+        f"{len(data)} {bar_name} bars over {lb_label} (annualised ×{ann:,.0f})  ·  "
+        f"top by {sort_by}: "
+        f"**long {bl} / short {bs}** at Sharpe **{best['Sharpe']:.2f}**  ·  "
+        f"{n_beat} beat the best outright ({outright} {best['best_long_sharpe']:.2f})"
+    )
+
+    st.markdown(f"##### Ranked pairs — top {min(top_n, len(pairs))} by {sort_by}")
+    render_spread_table(pairs, theme, top_n=top_n)
+
+    st.markdown("##### Top 6 — legs vs spread (rebased to 100)")
+    render_spread_charts(pairs, data, theme, mobile=is_mobile,
+                         tick_fmt='%d %b %H:%M' if interval in _INTRADAY else '%d %b')
