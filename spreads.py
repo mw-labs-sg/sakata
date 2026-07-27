@@ -319,8 +319,11 @@ def render_spread_charts(pairs, data, theme, mobile=False, tick_fmt='%d %b',
         subtitles.append(f"<span style='color:{lc}'>■</span> {ln}  <span style='color:{sc}'>■</span> {sn}  <span style='color:#0f172a'>■</span> Spread")
     while len(subtitles) < n_rows * n_cols: subtitles.append("")
 
+    # plotly hard-caps spacing at 1/(rows-1); tall grids must scale it down
+    v_space = min(0.08 if mobile else 0.18, 0.8 / max(n_rows - 1, 1))
+    h_space = min(0.06, 0.8 / max(n_cols - 1, 1))
     fig = make_subplots(rows=n_rows, cols=n_cols, subplot_titles=subtitles,
-        horizontal_spacing=0.06, vertical_spacing=0.18 if not mobile else 0.08)
+        horizontal_spacing=h_space, vertical_spacing=v_space)
 
     for i in range(top_n):
         p = pairs[i]; row = i // n_cols + 1; col = i % n_cols + 1
