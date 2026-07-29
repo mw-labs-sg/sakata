@@ -4,6 +4,7 @@ import yfinance as yf
 from common import _session
 import pandas as pd
 import numpy as np
+import datetime as _dt
 from datetime import datetime
 from itertools import combinations
 import plotly.graph_objects as go
@@ -15,21 +16,25 @@ from sakata_config import ALL_SYMBOLS, THEMES, SYMBOL_NAMES, FONTS, clean_symbol
 logger = logging.getLogger(__name__)
 
 # =============================================================================
-# SPREAD STATISTICS
+# STATISTICS
 # =============================================================================
 
-def _spread_sharpe(returns, ann_factor=252):
-    if returns.std() == 0 or len(returns) < 5: return 0.0
+def _sharpe(returns, ann_factor=252):
+    if len(returns) < 5 or returns.std() == 0:
+        return 0.0
     return float((returns.mean() / returns.std()) * np.sqrt(ann_factor))
 
-def _spread_sortino(returns, ann_factor=252):
-    if returns.std() == 0 or len(returns) < 5: return 0.0
+
+def _sortino(returns, ann_factor=252):
+    if len(returns) < 5 or returns.std() == 0:
+        return 0.0
     ann_ret = returns.mean() * ann_factor
     down = returns[returns < 0]
-    down_std = np.sqrt(np.mean(down**2)) * np.sqrt(ann_factor) if len(down) > 0 else 0
+    down_std = np.sqrt(np.mean(down ** 2)) * np.sqrt(ann_factor) if len(down) > 0 else 0
     return float(ann_ret / down_std) if down_std else 0.0
 
-def _spread_drawdowns(returns):
+
+def _drawdowns(returns):
     cum = (1 + returns).cumprod()
     peak = cum.cummax()
     dd = (cum - peak) / peak
@@ -37,8 +42,11 @@ def _spread_drawdowns(returns):
     add = float(dd[dd < 0].mean() * 100) if (dd < 0).any() else 0.0
     return mdd, add
 
-def _spread_r2(returns):
-    if len(returns) < 5: return 0.0
+
+def _r2(returns):
+    """Signed R² of the equity curve against a straight line."""
+    if len(returns) < 5:
+        return 0.0
     cum = (1 + returns).cumprod().values
     x = np.arange(len(cum))
     xm, ym = x.mean(), cum.mean()
@@ -50,25 +58,72 @@ def _spread_r2(returns):
     r2 = float(np.clip(r2, 0, 1))
     return r2 if slope > 0 else -r2
 
+
+def _efficiency(returns):
+    """Kaufman efficiency ratio on the equity curve: |net move| / path length.
+
+    1.0 = a perfectly straight line, 0.0 = pure chop that goes nowhere.
+    Signed so a smooth DOWNtrend scores -1.0 rather than +1.0. Unlike R² this
+    is scale-free and makes no linearity assumption — it only asks how much of
+    the distance travelled was actually retained.
+    """
+    if len(returns) < 5:
+        return 0.0
+    cum = (1 + returns).cumprod().values
+    path = np.abs(np.diff(cum)).sum()
+    if path == 0:
+        return 0.0
+    net = cum[-1] - cum[0]
+    er = abs(net) / path
+    return float(er if net >= 0 else -er)
+
+
+def series_stats(returns, ann_factor=252):
+    """Every metric for one return stream. Used for outrights AND pairs, so the
+    two are measured identically and can be ranked in a single field."""
+    mdd, add = _drawdowns(returns)
+    ann = float(returns.mean() * ann_factor * 100)
+    return {
+        'Sharpe': _sharpe(returns, ann_factor),
+        'Sortino': _sortino(returns, ann_factor),
+        'MAR': float(ann / abs(add)) if add != 0 else 0.0,
+        'R²': _r2(returns),
+        'ER': _efficiency(returns),
+        'Tot%': float(((1 + returns).cumprod().iloc[-1] - 1) * 100),
+        'Ann%': ann,
+        'Vol%': float(returns.std() * np.sqrt(ann_factor) * 100),
+        'MDD%': mdd, 'ADD%': add,
+        'Win%': float((returns > 0).sum() / len(returns) * 100) if len(returns) else 50.0,
+    }
+
+
 # =============================================================================
-# DATA FETCHING
+# LOOKBACK PERIODS AND BARS
 # =============================================================================
 
-LOOKBACK_OPTIONS = {
+# Calendar-anchored periods -> the bar size each one defaults to. These are
+# anchors, not rolling windows: QTD on 1 July is 1 day long, not 90.
+PERIOD_BARS = {'WTD': '1h', 'MTD': '4h', 'QTD': '1d', 'YTD': '1wk'}
+
+# Rolling windows, kept for finer-grained work.
+ROLLING_DAYS = {
     '1 Day': 1, '5 Days': 5, '10 Days': 10, '20 Days': 20, '30 Days': 30,
-    '60 Days': 60, '120 Days': 120, '240 Days': 240, '520 Days': 520, 'YTD': 0,
+    '60 Days': 60, '120 Days': 120, '240 Days': 240, '520 Days': 520,
 }
+LOOKBACK_OPTIONS = list(PERIOD_BARS) + list(ROLLING_DAYS)
 
 # Yahoo intraday limits: 15m/30m reach back ~60 days, 1h ~730 days. There is no
 # native 4h bar — it is resampled from 1h.
 BAR_OPTIONS = {'Auto': None, '15 Min': '15m', '30 Min': '30m', '1 Hour': '1h',
-               '4 Hour': '4h', 'Daily': '1d'}
+               '4 Hour': '4h', 'Daily': '1d', 'Weekly': '1wk'}
 _INTRADAY = ('15m', '30m', '1h', '4h')
-_NATIVE = {'15m': '15m', '30m': '30m', '1h': '1h', '4h': '1h', '1d': '1d'}
-_MAX_BACK = {'15m': 55, '30m': 55, '1h': 700, '4h': 700, '1d': None}
+_NATIVE = {'15m': '15m', '30m': '30m', '1h': '1h', '4h': '1h',
+           '1d': '1d', '1wk': '1wk'}
+_MAX_BACK = {'15m': 55, '30m': 55, '1h': 700, '4h': 700, '1d': None, '1wk': None}
+BAR_NAMES = {'15m': '15-minute', '30m': '30-minute', '1h': 'hourly',
+             '4h': '4-hour', '1d': 'daily', '1wk': 'weekly'}
 
-# lookback (days) -> bar size, coarsening as the window widens so every window
-# lands in the low hundreds of observations rather than tens.
+# rolling lookback (days) -> bar size, coarsening as the window widens.
 _LADDER = ((2, '15m'), (7, '30m'), (20, '1h'), (60, '4h'))
 
 
@@ -82,11 +137,26 @@ def auto_interval(lookback_days):
     return '1d'
 
 
+def period_start(period, now=None):
+    """Calendar anchor for WTD / MTD / QTD / YTD, at midnight."""
+    now = (now or datetime.now()).replace(hour=0, minute=0, second=0, microsecond=0)
+    if period == 'WTD':
+        return now - _dt.timedelta(days=now.weekday())      # Monday
+    if period == 'MTD':
+        return now.replace(day=1)
+    if period == 'QTD':
+        return now.replace(month=((now.month - 1) // 3) * 3 + 1, day=1)
+    if period == 'YTD':
+        return now.replace(month=1, day=1)
+    return None
+
+
 def ann_factor_for(index):
     """Bars per year, measured off the data rather than assumed.
 
     Self-calibrating: a year of daily closes gives ~252, a 30-day window of 4h
-    bars gives ~1500. Keeps Sharpe/Sortino/vol comparable across bar types.
+    bars gives ~1500, weekly gives ~52. Keeps Sharpe/Sortino/vol comparable
+    across bar types.
     """
     if len(index) < 3:
         return 252.0
@@ -96,15 +166,21 @@ def ann_factor_for(index):
     return float(np.clip(len(index) / span_yrs, 12, 8760))
 
 
+# =============================================================================
+# DATA FETCHING
+# =============================================================================
+
 @st.cache_data(ttl=1800, show_spinner=False)
-def fetch_spread_data(symbols_tuple, lookback_days=0, interval='1d'):
+def fetch_spread_data(symbols_tuple, lookback_days=0, interval='1d', start_iso=None):
     """Rebased (=100) close matrix for an arbitrary set of tickers.
 
-    Daily bars are forward-filled then aligned. Intraday bars are NOT
-    forward-filled — a stale grain price carried through a closed session
-    would show as a zero return and flatter the vol and Sharpe. Instead the
-    columns are inner-joined, so every row is a genuinely simultaneous
-    observation across all legs.
+    Daily/weekly bars are forward-filled then aligned. Intraday bars are NOT
+    forward-filled — a stale grain price carried through a closed session would
+    show as a zero return and flatter the vol and Sharpe. Instead the columns
+    are inner-joined, so every row is a genuinely simultaneous observation.
+
+    start_iso pins an absolute calendar start (the WTD/MTD/QTD/YTD anchors) and
+    takes precedence over lookback_days.
     """
     symbols = list(symbols_tuple)
     if len(symbols) < 2:
@@ -112,7 +188,9 @@ def fetch_spread_data(symbols_tuple, lookback_days=0, interval='1d'):
     intraday = interval in _INTRADAY
     yf_interval = _NATIVE[interval]
 
-    if lookback_days == 0:
+    if start_iso:
+        start = datetime.fromisoformat(start_iso)
+    elif lookback_days == 0:
         start = datetime.now().replace(month=1, day=1)
     else:
         pad = 3 if lookback_days <= 5 else 1.5   # short windows need weekend slack
@@ -144,7 +222,9 @@ def fetch_spread_data(symbols_tuple, lookback_days=0, interval='1d'):
     if data.empty or len(data.columns) < 2:
         return None
     data = data.dropna() if intraday else data.ffill().dropna()
-    if lookback_days > 0 and not data.empty:
+    if start_iso:
+        data = data[data.index >= pd.Timestamp(start_iso)]
+    elif lookback_days > 0 and not data.empty:
         cutoff = data.index.max() - pd.Timedelta(days=lookback_days)
         data = data[data.index >= cutoff]
     if len(data) < 10:
@@ -153,103 +233,176 @@ def fetch_spread_data(symbols_tuple, lookback_days=0, interval='1d'):
 
 
 # =============================================================================
-# SPREAD COMPUTATION
+# CANDIDATE CONSTRUCTION — outrights and pairs, measured the same way
 # =============================================================================
 
-def compute_sector_spreads(data, ann_factor=252):
-    if data is None or len(data.columns) < 2: return []
+METRICS = ['Sharpe', 'Sortino', 'MAR', 'R²', 'ER']
 
-    asset_sharpes = {}
+
+def compute_outrights(data, ann_factor=252):
+    """Every single instrument as a standalone long. The benchmark field."""
+    out = []
     for sym in data.columns:
         ret = data[sym].pct_change().dropna()
-        asset_sharpes[sym] = _spread_sharpe(ret, ann_factor)
-    best_long_sym = max(asset_sharpes, key=asset_sharpes.get)
-    best_long_sharpe = asset_sharpes[best_long_sym]
+        if len(ret) < 5:
+            continue
+        row = series_stats(ret, ann_factor)
+        row.update({'long': sym, 'short': None, 'kind': 'outright',
+                    'Corr': float('nan'), 'cum_long': data[sym],
+                    'cum_short': None, 'cum_spread': data[sym]})
+        out.append(row)
+    return out
 
+
+def compute_pairs(data, ann_factor=252):
+    """Every long/short combination, sign-oriented so Sharpe reads positive."""
     pairs = []
     for s1, s2 in combinations(data.columns.tolist(), 2):
         r1 = data[s1].pct_change().dropna()
         r2 = data[s2].pct_change().dropna()
         spread_ret = (r1 - r2).dropna()
+        if len(spread_ret) < 5:
+            continue
 
-        sh = _spread_sharpe(spread_ret, ann_factor)
-        so = _spread_sortino(spread_ret, ann_factor)
-
-        if sh < 0:
+        # Orient on Sharpe, then recompute EVERYTHING on the oriented series.
+        # Negating Sortino/ER/R² directly is wrong: reversing the series turns
+        # the old upside into the new downside, so the denominators change.
+        if _sharpe(spread_ret, ann_factor) < 0:
             spread_ret = -spread_ret
-            sh, so = -sh, -so
             s1, s2 = s2, s1
 
-        mdd, add = _spread_drawdowns(spread_ret)
-        cum_spread = (1 + spread_ret).cumprod()
-        total = float((cum_spread.iloc[-1] - 1) * 100)
-        ann = float(spread_ret.mean() * ann_factor * 100)
-        vol = float(spread_ret.std() * np.sqrt(ann_factor) * 100)
-        mar = float(ann / abs(add)) if add != 0 else 0.0
-        r2_val = _spread_r2(spread_ret)
-        corr = float(r1.corr(r2))
-        win_rate = float((spread_ret > 0).sum() / len(spread_ret) * 100) if len(spread_ret) > 0 else 50.0
+        row = series_stats(spread_ret, ann_factor)
 
-        cum1 = data[s1]
-        cum2 = data[s2]
         cum_sp = pd.Series(100.0, index=data.index[:1])
         cum_sp = pd.concat([cum_sp, 100 * (1 + spread_ret).cumprod()])
         cum_sp = cum_sp[~cum_sp.index.duplicated(keep='last')]
 
-        pairs.append({
-            'long': s1, 'short': s2,
-            'Sharpe': sh, 'Sortino': so, 'MAR': mar, 'R²': r2_val,
-            'Tot%': total, 'Ann%': ann, 'Vol%': vol, 'MDD%': mdd, 'ADD%': add,
-            'Corr': corr, 'Win%': win_rate, 'beats_long': sh > best_long_sharpe,
-            'cum_long': cum1, 'cum_short': cum2, 'cum_spread': cum_sp,
-        })
-
-    n = len(pairs)
-    if n == 0: return []
-    for metric in ['Sharpe', 'Sortino', 'MAR', 'R²']:
-        vals = [p[metric] for p in pairs]
-        order = sorted(range(n), key=lambda i: -vals[i])
-        for rank, idx in enumerate(order): pairs[idx][f'_{metric}_rank'] = rank + 1
-    for p in pairs:
-        p['_score'] = np.mean([p[f'_{m}_rank'] for m in ['Sharpe', 'Sortino', 'MAR', 'R²']])
-    pairs.sort(key=lambda x: -x['Sharpe'])
-
-    for p in pairs:
-        p['best_long_sym'] = best_long_sym
-        p['best_long_sharpe'] = best_long_sharpe
-
+        row.update({'long': s1, 'short': s2, 'kind': 'pair',
+                    'Corr': float(r1.corr(r2)),
+                    'cum_long': data[s1], 'cum_short': data[s2],
+                    'cum_spread': cum_sp})
+        pairs.append(row)
     return pairs
 
+
 # =============================================================================
-# SORTING
+# RANKING — one combined field so "is the pair better?" has an answer
 # =============================================================================
 
 SORT_KEYS = {
     'Composite': '_score', 'Sharpe': 'Sharpe', 'Sortino': 'Sortino',
-    'MAR': 'MAR', 'R²': 'R²', 'Total': 'Tot%', 'Win Rate': 'Win%'
+    'MAR': 'MAR', 'R² (linearity)': 'R²', 'ER (efficiency)': 'ER',
+    'Total': 'Tot%', 'Win Rate': 'Win%',
 }
+LOWER_IS_BETTER = ('_score',)
 
-def sort_spread_pairs(pairs, sort_key='Composite', ascending=False):
+
+def rank_field(candidates):
+    """Rank outrights and pairs together on every metric, then average the
+    ranks into a composite. Because both sides sit in one pool, an outright
+    landing at composite rank 3 of 190 is a direct statement that spreading
+    added nothing over that window."""
+    n = len(candidates)
+    if n == 0:
+        return
+    for metric in METRICS:
+        vals = [c[metric] for c in candidates]
+        order = sorted(range(n), key=lambda i: -vals[i])
+        for rank, idx in enumerate(order):
+            candidates[idx][f'_{metric}_rank'] = rank + 1
+    for c in candidates:
+        c['_score'] = float(np.mean([c[f'_{m}_rank'] for m in METRICS]))
+
+
+def apply_field_rank(candidates, sort_key):
+    """Position of each candidate in the combined field on the chosen fitness."""
     key = SORT_KEYS.get(sort_key, sort_key)
-    default_reverse = (key != '_score')
+    lower = key in LOWER_IS_BETTER
+    order = sorted(range(len(candidates)),
+                   key=lambda i: candidates[i].get(key, 0), reverse=not lower)
+    for rank, idx in enumerate(order):
+        candidates[idx]['_field'] = rank + 1
+    return key, lower
+
+
+def sort_candidates(cands, sort_key='Composite', ascending=False):
+    key = SORT_KEYS.get(sort_key, sort_key)
+    default_reverse = key not in LOWER_IS_BETTER
     reverse = not default_reverse if ascending else default_reverse
-    return sorted(pairs, key=lambda x: x.get(key, 0), reverse=reverse)
+    return sorted(cands, key=lambda x: x.get(key, 0), reverse=reverse)
+
+
+def fitness_of(c, key):
+    return c.get(key, 0)
+
 
 # =============================================================================
-# SHARED TABLE RENDERER
+# TABLE RENDERERS
 # =============================================================================
+
+def _table_shell(theme):
+    _bdr = theme.get('border', '#e2e8f0')
+    th = (f"padding:4px 8px;border-bottom:1px solid {_bdr};color:#475569;"
+          "font-weight:600;font-size:9px;text-transform:uppercase;letter-spacing:0.06em;")
+    td = f"padding:5px 8px;border-bottom:1px solid {_bdr}22;"
+    return th, td, _bdr
+
+
+def render_outright_table(outs, theme, key, top_n=25):
+    """The benchmark leaderboard: every instrument as a plain long."""
+    pos_c = theme['pos']; neg_c = theme['neg']
+    _bg3 = theme.get('bg3', '#f8fafc')
+    _txt2 = theme.get('text2', '#64748b'); _mut = theme.get('muted', '#94a3b8')
+    th, td, _bdr = _table_shell(theme)
+
+    cols = ['RANK', 'FIELD #', 'INSTRUMENT', 'SCORE', 'SHARPE', 'SORTINO', 'MAR',
+            'R²', 'ER', 'WIN%', 'TOT%', 'VOL%', 'MDD%']
+    head = ''.join(
+        f"<th style='{th}text-align:{'left' if c in ('RANK', 'INSTRUMENT') else 'right'}'>{c}</th>"
+        for c in cols)
+    html = (f"<div style='overflow-x:auto;border:1px solid {_bdr};border-radius:6px'>"
+            f"<table style='border-collapse:collapse;font-family:{FONTS};font-size:11px;"
+            f"width:100%;line-height:1.3'><thead style='background:{_bg3}'><tr>{head}"
+            "</tr></thead><tbody>")
+
+    for rank, p in enumerate(outs[:top_n], 1):
+        nm = SYMBOL_NAMES.get(p['long'], clean_symbol(p['long']))
+        sh_c = pos_c if p['Sharpe'] >= 0 else neg_c
+        tot_c = pos_c if p['Tot%'] >= 0 else neg_c
+        tot_s = '+' if p['Tot%'] >= 0 else ''
+        win_c = pos_c if p['Win%'] >= 55 else (neg_c if p['Win%'] < 45 else _txt2)
+        er_c = pos_c if p['ER'] >= 0.30 else (_txt2 if p['ER'] >= 0.12 else _mut)
+        score = p.get('_score', 0)
+        html += f"""<tr>
+            <td style='{td}color:{_mut};text-align:left'>{rank}</td>
+            <td style='{td}color:{_txt2};text-align:right'>{p.get('_field', '—')}</td>
+            <td style='{td}color:{pos_c};font-weight:600;text-align:left'>{nm}</td>
+            <td style='{td}text-align:right;color:{_txt2};font-weight:600'>{score:.1f}</td>
+            <td style='{td}text-align:right'><span style='color:{sh_c};font-weight:700'>{p["Sharpe"]:.2f}</span></td>
+            <td style='{td}text-align:right;color:{_txt2}'>{p["Sortino"]:.2f}</td>
+            <td style='{td}text-align:right;color:{_txt2}'>{p["MAR"]:.2f}</td>
+            <td style='{td}text-align:right;color:{_txt2}'>{p["R²"]:.3f}</td>
+            <td style='{td}text-align:right'><span style='color:{er_c};font-weight:600'>{p["ER"]:.3f}</span></td>
+            <td style='{td}text-align:right'><span style='color:{win_c};font-weight:600'>{p["Win%"]:.0f}%</span></td>
+            <td style='{td}text-align:right'><span style='color:{tot_c};font-weight:600'>{tot_s}{p["Tot%"]:.1f}%</span></td>
+            <td style='{td}text-align:right;color:{_txt2}'>{p["Vol%"]:.1f}%</td>
+            <td style='{td}text-align:right;color:{neg_c}'>{p["MDD%"]:.1f}%</td>
+        </tr>"""
+    html += "</tbody></table></div>"
+    st.markdown(html, unsafe_allow_html=True)
+
 
 def render_spread_table(pairs, theme, top_n=10):
     show = pairs[:top_n]
     pos_c = theme['pos']; neg_c = theme['neg']; short_c = theme['short']
-    _bg3 = theme.get('bg3', '#f8fafc'); _bdr = theme.get('border', '#e2e8f0')
-    _txt = theme.get('text', '#334155'); _txt2 = theme.get('text2', '#64748b'); _mut = theme.get('muted', '#94a3b8')
-    th = f"padding:4px 8px;border-bottom:1px solid {_bdr};color:#475569;font-weight:600;font-size:9px;text-transform:uppercase;letter-spacing:0.06em;"
-    td = f"padding:5px 8px;border-bottom:1px solid {_bdr}22;"
+    _bg3 = theme.get('bg3', '#f8fafc')
+    _txt2 = theme.get('text2', '#64748b'); _mut = theme.get('muted', '#94a3b8')
+    th, td, _bdr = _table_shell(theme)
 
     html = f"""<div style='overflow-x:auto;border:1px solid {_bdr};border-radius:6px'><table style='border-collapse:collapse;font-family:{FONTS};font-size:11px;width:100%;line-height:1.3'>
         <thead style='background:{_bg3}'><tr>
             <th style='{th}text-align:left'>RANK</th>
+            <th style='{th}text-align:right'>FIELD #</th>
             <th style='{th}text-align:left'>LONG</th>
             <th style='{th}text-align:left'>SHORT</th>
             <th style='{th}text-align:right'>SCORE</th>
@@ -257,12 +410,13 @@ def render_spread_table(pairs, theme, top_n=10):
             <th style='{th}text-align:right'>SORTINO</th>
             <th style='{th}text-align:right'>MAR</th>
             <th style='{th}text-align:right'>R²</th>
+            <th style='{th}text-align:right'>ER</th>
             <th style='{th}text-align:right'>WIN%</th>
             <th style='{th}text-align:right'>TOT%</th>
             <th style='{th}text-align:right'>VOL%</th>
             <th style='{th}text-align:right'>MDD%</th>
             <th style='{th}text-align:right'>CORR</th>
-            <th style='{th}text-align:center'>vs LONG</th>
+            <th style='{th}text-align:center'>vs BEST</th>
         </tr></thead><tbody>"""
 
     for rank, p in enumerate(show, 1):
@@ -272,12 +426,17 @@ def render_spread_table(pairs, theme, top_n=10):
         tot_c = pos_c if p['Tot%'] >= 0 else neg_c
         tot_s = '+' if p['Tot%'] >= 0 else ''
         win_c = pos_c if p['Win%'] >= 55 else (neg_c if p['Win%'] < 45 else _txt2)
-        vs = f"<span style='color:{pos_c};font-weight:700'>▲</span>" if p['beats_long'] else f"<span style='color:{_mut}'>—</span>"
-        bg = f'linear-gradient(90deg,{pos_c}08,{_bg3},{pos_c}08)' if p['beats_long'] else 'transparent'
+        er_c = pos_c if p['ER'] >= 0.30 else (_txt2 if p['ER'] >= 0.12 else _mut)
+        beats = p.get('beats_outright', False)
+        vs = (f"<span style='color:{pos_c};font-weight:700'>▲</span>" if beats
+              else f"<span style='color:{_mut}'>—</span>")
+        bg = f'linear-gradient(90deg,{pos_c}08,{_bg3},{pos_c}08)' if beats else 'transparent'
         score = p.get('_score', 0)
-        sc_c = pos_c if score <= 3 else (_txt2 if score <= 6 else _mut)
+        sc_c = pos_c if score <= 20 else (_txt2 if score <= 60 else _mut)
+        corr = '—' if pd.isna(p['Corr']) else f"{p['Corr']:.2f}"
         html += f"""<tr style='background:{bg}'>
             <td style='{td}color:{_mut};text-align:left'>{rank}</td>
+            <td style='{td}color:{_txt2};text-align:right'>{p.get('_field', '—')}</td>
             <td style='{td}color:{pos_c};font-weight:600;text-align:left'>{ln}</td>
             <td style='{td}color:{short_c};font-weight:600;text-align:left'>{sn}</td>
             <td style='{td}text-align:right;color:{sc_c};font-weight:600'>{score:.1f}</td>
@@ -285,18 +444,20 @@ def render_spread_table(pairs, theme, top_n=10):
             <td style='{td}text-align:right;color:{_txt2}'>{p["Sortino"]:.2f}</td>
             <td style='{td}text-align:right;color:{_txt2}'>{p["MAR"]:.2f}</td>
             <td style='{td}text-align:right;color:{_txt2}'>{p["R²"]:.3f}</td>
+            <td style='{td}text-align:right'><span style='color:{er_c};font-weight:600'>{p["ER"]:.3f}</span></td>
             <td style='{td}text-align:right'><span style='color:{win_c};font-weight:600'>{p["Win%"]:.0f}%</span></td>
             <td style='{td}text-align:right'><span style='color:{tot_c};font-weight:600'>{tot_s}{p["Tot%"]:.1f}%</span></td>
             <td style='{td}text-align:right;color:{_txt2}'>{p["Vol%"]:.1f}%</td>
             <td style='{td}text-align:right;color:{neg_c}'>{p["MDD%"]:.1f}%</td>
-            <td style='{td}text-align:right;color:{_txt2}'>{p["Corr"]:.2f}</td>
+            <td style='{td}text-align:right;color:{_txt2}'>{corr}</td>
             <td style='{td}text-align:center'>{vs}</td>
         </tr>"""
     html += "</tbody></table></div>"
     st.markdown(html, unsafe_allow_html=True)
 
+
 # =============================================================================
-# SHARED CHART RENDERER
+# CHART RENDERER
 # =============================================================================
 
 def _tick_fmt(index):
@@ -313,7 +474,8 @@ def _tick_fmt(index):
 def render_spread_charts(pairs, data, theme, mobile=False, tick_fmt='%d %b',
                          max_charts=6):
     top_n = min(max_charts, len(pairs))
-    if top_n == 0: return
+    if top_n == 0:
+        return
 
     _pbg = theme.get('plot_bg', '#ffffff'); _grd = theme.get('grid', '#eef2f6')
     _axl = theme.get('axis_line', '#e2e8f0'); _tk = theme.get('tick', '#94a3b8')
@@ -324,11 +486,19 @@ def render_spread_charts(pairs, data, theme, mobile=False, tick_fmt='%d %b',
 
     subtitles = []
     for i in range(top_n):
-        ln = SYMBOL_NAMES.get(pairs[i]['long'], clean_symbol(pairs[i]['long']))
-        sn = SYMBOL_NAMES.get(pairs[i]['short'], clean_symbol(pairs[i]['short']))
+        p = pairs[i]
+        ln = SYMBOL_NAMES.get(p['long'], clean_symbol(p['long']))
         lc = theme['long']; sc = theme['short']
-        subtitles.append(f"<span style='color:{lc}'>■</span> {ln}  <span style='color:{sc}'>■</span> {sn}  <span style='color:#0f172a'>■</span> Spread")
-    while len(subtitles) < n_rows * n_cols: subtitles.append("")
+        if p['short'] is None:
+            subtitles.append(f"<span style='color:{lc}'>■</span> {ln}  (outright)")
+        else:
+            sn = SYMBOL_NAMES.get(p['short'], clean_symbol(p['short']))
+            subtitles.append(
+                f"<span style='color:{lc}'>■</span> {ln}  "
+                f"<span style='color:{sc}'>■</span> {sn}  "
+                f"<span style='color:#0f172a'>■</span> Spread")
+    while len(subtitles) < n_rows * n_cols:
+        subtitles.append("")
 
     # vertical_spacing is a fraction of TOTAL figure height, so a fixed fraction
     # balloons into hundreds of px on tall grids. Work in pixels instead, then
@@ -338,20 +508,29 @@ def render_spread_charts(pairs, data, theme, mobile=False, tick_fmt='%d %b',
     v_space = min(gap_px / chart_h, 0.9 / max(n_rows - 1, 1))
     h_space = min(0.06, 0.8 / max(n_cols - 1, 1))
     fig = make_subplots(rows=n_rows, cols=n_cols, subplot_titles=subtitles,
-        horizontal_spacing=h_space, vertical_spacing=v_space)
+                        horizontal_spacing=h_space, vertical_spacing=v_space)
 
     for i in range(top_n):
         p = pairs[i]; row = i // n_cols + 1; col = i % n_cols + 1
-        fig.add_trace(go.Scatter(x=list(range(len(p['cum_long']))), y=p['cum_long'].values,
-            mode='lines', line=dict(color=theme['long'], width=1.3, shape='spline', smoothing=1.0),
-            showlegend=False, hovertemplate='Long: %{y:.1f}<extra></extra>'), row=row, col=col)
-        fig.add_trace(go.Scatter(x=list(range(len(p['cum_short']))), y=p['cum_short'].values,
-            mode='lines', line=dict(color=theme['short'], width=1.3, shape='spline', smoothing=1.0),
-            showlegend=False, hovertemplate='Short: %{y:.1f}<extra></extra>'), row=row, col=col)
-        fig.add_trace(go.Scatter(x=list(range(len(p['cum_spread']))), y=p['cum_spread'].values,
-            mode='lines', line=dict(color='#0f172a', width=1.5, dash='dot', shape='spline', smoothing=1.0),
-            showlegend=False, hovertemplate='Spread: %{y:.1f}<extra></extra>'), row=row, col=col)
-        fig.add_hline(y=100, line=dict(color=_grd, width=0.8, dash='dot'), row=row, col=col)
+        fig.add_trace(go.Scatter(
+            x=list(range(len(p['cum_long']))), y=p['cum_long'].values, mode='lines',
+            line=dict(color=theme['long'], width=1.3, shape='spline', smoothing=1.0),
+            showlegend=False, hovertemplate='Long: %{y:.1f}<extra></extra>'),
+            row=row, col=col)
+        if p['cum_short'] is not None:
+            fig.add_trace(go.Scatter(
+                x=list(range(len(p['cum_short']))), y=p['cum_short'].values, mode='lines',
+                line=dict(color=theme['short'], width=1.3, shape='spline', smoothing=1.0),
+                showlegend=False, hovertemplate='Short: %{y:.1f}<extra></extra>'),
+                row=row, col=col)
+            fig.add_trace(go.Scatter(
+                x=list(range(len(p['cum_spread']))), y=p['cum_spread'].values, mode='lines',
+                line=dict(color='#0f172a', width=1.5, dash='dot', shape='spline',
+                          smoothing=1.0),
+                showlegend=False, hovertemplate='Spread: %{y:.1f}<extra></extra>'),
+                row=row, col=col)
+        fig.add_hline(y=100, line=dict(color=_grd, width=0.8, dash='dot'),
+                      row=row, col=col)
 
         axis_idx = (row - 1) * n_cols + col
         fig.add_annotation(
@@ -373,7 +552,8 @@ def render_spread_charts(pairs, data, theme, mobile=False, tick_fmt='%d %b',
         tick_text = [data.index[j].strftime(tick_fmt) for j in tick_vals if j < len(data)]
         tick_vals = tick_vals[:len(tick_text)]
         axis_key = 'xaxis' if axis_idx == 1 else f'xaxis{axis_idx}'
-        fig.update_layout(**{axis_key: dict(tickmode='array', tickvals=tick_vals, ticktext=tick_text)})
+        fig.update_layout(**{axis_key: dict(tickmode='array', tickvals=tick_vals,
+                                            ticktext=tick_text)})
 
     for ann in fig['layout']['annotations']:
         xref_str = str(ann['xref']) if ann['xref'] else ''
@@ -386,44 +566,46 @@ def render_spread_charts(pairs, data, theme, mobile=False, tick_fmt='%d %b',
         plot_bgcolor=_pbg, paper_bgcolor=_pbg,
         showlegend=False, hovermode='x unified', font=dict(family=FONTS))
     fig.update_xaxes(gridcolor=_grd, linecolor=_axl,
-        tickfont=dict(color=_tk, size=8, family=FONTS), showgrid=False, tickangle=0)
+                     tickfont=dict(color=_tk, size=8, family=FONTS),
+                     showgrid=False, tickangle=0)
     fig.update_yaxes(gridcolor=_grd, linecolor=_axl,
-        tickfont=dict(color=_tk, size=8, family=FONTS), side='right')
+                     tickfont=dict(color=_tk, size=8, family=FONTS), side='right')
 
     st.plotly_chart(fig, use_container_width=True, config={
         'scrollZoom': True, 'displayModeBar': False, 'responsive': True})
 
+
 # =============================================================================
-# MAIN RENDER — one scan across the whole board
+# MAIN RENDER
 # =============================================================================
 
 def render_spreads_tab(is_mobile: bool = False) -> None:
     theme = THEMES.get(st.session_state.get("theme", "Light"), THEMES["Dark"])
 
+    n_inst = len(ALL_SYMBOLS)
+    n_pairs_max = n_inst * (n_inst - 1) // 2
     st.caption(
-        "Every long/short pair on the board, ranked — 171 combinations across "
-        "19 instruments. Each leg is rebased to 100 and the spread is the "
-        "return difference. Sign is auto-flipped so Sharpe reads positive, so "
-        "the LONG column is the leg to be long; **vs LONG** marks pairs that "
-        "beat the best single outright. On Auto the bar size follows the "
-        "window: 15m under 2 days, 30m to a week, hourly to 20 days, 4-hour to "
-        "60, daily beyond. Intraday rows are inner-joined rather than "
-        "forward-filled, so mixing 24h and session-bound markets keeps only "
-        "the overlapping bars — watch the bar count in the summary line."
+        f"Every instrument as an outright and every long/short pair, ranked in "
+        f"**one combined field** — {n_inst} outrights plus {n_pairs_max} pairs. "
+        "Both sides are measured identically, so FIELD # answers the only "
+        "question that matters: is the spread actually better than just being "
+        "long the best thing? Sign is auto-flipped so LONG is the leg to be "
+        "long. Calendar periods carry a matched bar size (WTD·1h, MTD·4h, "
+        "QTD·daily, YTD·weekly) — override with the Bars selector."
     )
 
     c1, c2, c3, c4, c5 = st.columns([2, 2, 2, 1, 1])
     with c1:
         st.markdown("##### Lookback")
-        lb_label = st.selectbox("Lookback", list(LOOKBACK_OPTIONS), index=4,
+        lb_label = st.selectbox("Lookback", LOOKBACK_OPTIONS, index=1,
                                 key="spr_lookback", label_visibility="collapsed")
     with c2:
         st.markdown("##### Bars")
         bar_label = st.selectbox("Bars", list(BAR_OPTIONS), index=0, key="spr_bars",
                                  label_visibility="collapsed")
     with c3:
-        st.markdown("##### Sort by")
-        sort_by = st.selectbox("Sort", list(SORT_KEYS), index=0, key="spr_sort",
+        st.markdown("##### Fitness")
+        sort_by = st.selectbox("Fitness", list(SORT_KEYS), index=0, key="spr_sort",
                                label_visibility="collapsed")
     with c4:
         st.markdown("##### Show")
@@ -440,56 +622,106 @@ def render_spreads_tab(is_mobile: bool = False) -> None:
 
     symbols = ALL_SYMBOLS
 
-    lb_days = LOOKBACK_OPTIONS[lb_label]
-    interval = BAR_OPTIONS[bar_label] or auto_interval(lb_days)
-    bar_name = {'15m': '15-minute', '30m': '30-minute', '1h': 'hourly',
-                '4h': '4-hour', '1d': 'daily'}[interval]
+    # --- resolve window and bar size ---
+    is_period = lb_label in PERIOD_BARS
+    if is_period:
+        start_dt = period_start(lb_label)
+        start_iso = start_dt.isoformat()
+        lb_days = 0
+        default_interval = PERIOD_BARS[lb_label]
+        window_txt = f"{lb_label} (from {start_dt:%d %b %Y})"
+    else:
+        start_iso = None
+        lb_days = ROLLING_DAYS[lb_label]
+        default_interval = auto_interval(lb_days)
+        window_txt = lb_label
+
+    interval = BAR_OPTIONS[bar_label] or default_interval
+    bar_name = BAR_NAMES[interval]
 
     n_pairs = len(symbols) * (len(symbols) - 1) // 2
-    with st.spinner(f"Pricing {n_pairs} pairs across {len(symbols)} instruments "
+    with st.spinner(f"Pricing {len(symbols)} outrights and {n_pairs} pairs "
                     f"on {bar_name} bars…"):
-        data = fetch_spread_data(tuple(symbols), lb_days, interval)
+        data = fetch_spread_data(tuple(symbols), lb_days, interval, start_iso)
 
     if data is None or len(data.columns) < 2:
-        st.warning(f"Not enough price history over {lb_label}. "
-                   "Yahoo may be throttling — try Refresh in a minute.")
+        st.warning(f"Not enough price history over {window_txt} on {bar_name} bars. "
+                   "Yahoo may be throttling, or the bar size may be too coarse for "
+                   "the window — try a finer bar, or Refresh in a minute.")
         return
 
     ann = ann_factor_for(data.index)
-    pairs = compute_sector_spreads(data, ann)
-    if not pairs:
-        st.info("No pairs computed.")
+    outs = compute_outrights(data, ann)
+    pairs = compute_pairs(data, ann)
+    if not outs and not pairs:
+        st.info("Nothing computed.")
         return
 
-    pairs = sort_spread_pairs(pairs, sort_by)
-    best = pairs[0]
-    bl = SYMBOL_NAMES.get(best["long"], clean_symbol(best["long"]))
-    bs = SYMBOL_NAMES.get(best["short"], clean_symbol(best["short"]))
-    outright = SYMBOL_NAMES.get(best["best_long_sym"],
-                                clean_symbol(best["best_long_sym"]))
-    n_beat = sum(1 for p in pairs if p["beats_long"])
+    # --- rank outrights and pairs in ONE field ---
+    field = outs + pairs
+    rank_field(field)
+    key, lower = apply_field_rank(field, sort_by)
+
+    best_out = min(outs, key=lambda c: c['_field']) if outs else None
+    if best_out is not None:
+        for p in pairs:
+            p['beats_outright'] = p['_field'] < best_out['_field']
+
+    outs_sorted = sort_candidates(outs, sort_by)
+    pairs_sorted = sort_candidates(pairs, sort_by)
+
+    # --- headline ---
+    n_beat = sum(1 for p in pairs if p.get('beats_outright'))
+    top_10 = sorted(field, key=lambda c: c['_field'])[:10]
+    outs_in_top10 = sum(1 for c in top_10 if c['kind'] == 'outright')
+    bo = SYMBOL_NAMES.get(best_out['long'], clean_symbol(best_out['long'])) if best_out else "—"
+    bp = pairs_sorted[0] if pairs_sorted else None
+    bl = SYMBOL_NAMES.get(bp['long'], clean_symbol(bp['long'])) if bp else "—"
+    bs = SYMBOL_NAMES.get(bp['short'], clean_symbol(bp['short'])) if bp else "—"
+    metric_txt = sort_by if key != '_score' else "Composite"
+
     st.markdown(
-        f"**{len(pairs)} pairs** from {len(data.columns)} instruments  ·  "
-        f"{len(data)} {bar_name} bars over {lb_label} (annualised ×{ann:,.0f})  ·  "
-        f"top by {sort_by}: "
-        f"**long {bl} / short {bs}** at Sharpe **{best['Sharpe']:.2f}**  ·  "
-        f"{n_beat} beat the best outright ({outright} {best['best_long_sharpe']:.2f})"
+        f"**{len(outs)} outrights + {len(pairs)} pairs** = {len(field)} candidates  ·  "
+        f"{len(data)} {bar_name} bars over {window_txt} (annualised ×{ann:,.0f})  ·  "
+        f"ranked by **{metric_txt}**"
+    )
+    st.markdown(
+        f"Best outright: **{bo}** (field #{best_out['_field']}, Sharpe "
+        f"{best_out['Sharpe']:.2f}, ER {best_out['ER']:.2f})  ·  "
+        f"Best pair: **long {bl} / short {bs}** (field #{bp['_field']}, Sharpe "
+        f"{bp['Sharpe']:.2f}, ER {bp['ER']:.2f})  ·  "
+        f"**{n_beat} of {len(pairs)} pairs** beat the best outright  ·  "
+        f"**{outs_in_top10} of the top 10** are plain outrights"
+        if best_out and bp else ""
     )
 
+    # --- sample-size honesty ---
     if len(data) < 100:
+        se = (ann / len(data)) ** 0.5
+        suggest = ("a finer bar (Bars → 4 Hour or 1 Hour)" if interval in ('1d', '1wk')
+                   else "a longer lookback")
         st.warning(
             f"**{len(data)} bars is a thin sample.** Annualised Sharpe carries a "
-            f"standard error of roughly {(ann / len(data)) ** 0.5:.1f} here, and "
-            f"{len(pairs)} pairs were tested — the top of the table will look "
-            f"strong from noise alone. Widen the lookback or use finer bars."
+            f"standard error of roughly ±{se:.1f} here, and {len(field)} candidates "
+            f"were tested — the top of the table will look strong from noise alone. "
+            f"Try {suggest}. Early in a quarter or year the calendar anchor is "
+            f"short by construction: QTD on daily bars in the first month is ~20 "
+            f"observations, YTD on weekly is ~1 per week elapsed."
         )
 
-    top_n = len(pairs) if show == "All" else int(show)
-    st.markdown(f"##### Ranked pairs — {min(top_n, len(pairs))} of {len(pairs)} "
-                f"by {sort_by}")
-    render_spread_table(pairs, theme, top_n=top_n)
+    # --- outright leaderboard first ---
+    st.markdown(f"##### Outright leaderboard — {len(outs)} instruments by {metric_txt}")
+    render_outright_table(outs_sorted, theme, key, top_n=len(outs_sorted))
 
-    st.markdown(f"##### Top {min(n_charts, len(pairs))} — legs vs spread "
+    st.markdown("")
+
+    # --- then the pairs ---
+    top_n = len(pairs_sorted) if show == "All" else int(show)
+    st.markdown(f"##### Ranked pairs — {min(top_n, len(pairs_sorted))} of "
+                f"{len(pairs_sorted)} by {metric_txt}  ·  ▲ = beats the best outright")
+    render_spread_table(pairs_sorted, theme, top_n=top_n)
+
+    st.markdown(f"##### Top {min(n_charts, len(pairs_sorted))} — legs vs spread "
                 f"(rebased to 100)")
-    render_spread_charts(pairs, data, theme, mobile=is_mobile, max_charts=n_charts,
-                         tick_fmt=_tick_fmt(data.index))
+    render_spread_charts(pairs_sorted, data, theme, mobile=is_mobile,
+                         max_charts=n_charts, tick_fmt=_tick_fmt(data.index))
