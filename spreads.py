@@ -84,10 +84,15 @@ def series_stats(returns, ann_factor=252):
     two are measured identically and can be ranked in a single field."""
     mdd, add = _drawdowns(returns)
     ann = float(returns.mean() * ann_factor * 100)
+    # MAR divides by average drawdown. On a tight low-vol spread over a short
+    # window that denominator approaches zero and MAR explodes into the
+    # hundreds, which then dominates the composite. Floor it at 50bp — below
+    # that a drawdown is not distinguishable from noise — and cap the result.
+    mar = float(np.clip(ann / max(abs(add), 0.5), -99, 99))
     return {
         'Sharpe': _sharpe(returns, ann_factor),
         'Sortino': _sortino(returns, ann_factor),
-        'MAR': float(ann / abs(add)) if add != 0 else 0.0,
+        'MAR': mar,
         'R²': _r2(returns),
         'ER': _efficiency(returns),
         'Tot%': float(((1 + returns).cumprod().iloc[-1] - 1) * 100),
@@ -122,6 +127,13 @@ WEIGHT_BLURB = {
 }
 
 
+# Above this the vol-adjusted sizing stops being executable: a sigma ratio of
+# 46 means 46 yen contracts per coffee contract, which is a leveraged yen short
+# with a coffee garnish, not a spread.
+RATIO_WARN = 5.0
+RATIO_CAPS = {'Off': None, '3:1': 3.0, '5:1': 5.0, '10:1': 10.0}
+
+
 def _weighted_spread(r1, r2, mode):
     """Combine two aligned return streams. Returns (spread_returns, ratio)."""
     j = pd.concat([r1, r2], axis=1).dropna()
@@ -147,7 +159,7 @@ def _weighted_spread(r1, r2, mode):
 
 # Calendar-anchored periods -> the bar size each defaults to. These are anchors,
 # not rolling windows: QTD on 1 July is one day long, not ninety.
-PERIOD_BARS = {'WTD': '1h', 'MTD': '4h', 'QTD': '1d', 'YTD': '1wk'}
+PERIOD_BARS = {'DTD': '15m', 'WTD': '1h', 'MTD': '4h', 'QTD': '1d', 'YTD': '1wk'}
 
 ROLLING_DAYS = {
     '1 Day': 1, '5 Days': 5, '10 Days': 10, '20 Days': 20, '30 Days': 30,
@@ -188,6 +200,8 @@ def auto_interval(lookback_days):
 def period_start(period, now=None):
     """Calendar anchor for WTD / MTD / QTD / YTD, at midnight."""
     now = (now or datetime.now()).replace(hour=0, minute=0, second=0, microsecond=0)
+    if period == 'DTD':
+        return now
     if period == 'WTD':
         return now - _dt.timedelta(days=now.weekday())      # Monday
     if period == 'MTD':
@@ -197,6 +211,127 @@ def period_start(period, now=None):
     if period == 'YTD':
         return now.replace(month=1, day=1)
     return None
+
+
+def period_end(period, now=None):
+    """Close of the current calendar period — the natural exit for the trade."""
+    now = (now or datetime.now()).replace(hour=0, minute=0, second=0, microsecond=0)
+    if period == 'DTD':
+        return now + _dt.timedelta(days=1)
+    if period == 'WTD':
+        return period_start('WTD', now) + _dt.timedelta(days=7)
+    if period == 'MTD':
+        return (now.replace(day=28) + _dt.timedelta(days=8)).replace(day=1)
+    if period == 'QTD':
+        q0 = ((now.month - 1) // 3) * 3 + 1
+        return (now.replace(year=now.year + 1, month=1, day=1) if q0 == 10
+                else now.replace(month=q0 + 3, day=1))
+    if period == 'YTD':
+        return now.replace(year=now.year + 1, month=1, day=1)
+    return None
+
+
+def sharpe_se(span_days):
+    """Standard error of an annualised Sharpe over a given calendar span.
+
+    SE = sqrt(annualisation / bars). Since annualisation IS bars/years, the bar
+    count cancels exactly and SE = 1/sqrt(years). Bar size is therefore
+    irrelevant to Sharpe confidence: 15-minute bars over a month give 92x the
+    observations of daily bars and precisely the same standard error. Finer bars
+    buy execution granularity, not statistical power.
+    """
+    return float(1.0 / np.sqrt(max(span_days, 1) / 365.25))
+
+
+# Metrics that estimate a forward-looking parameter, and so need a real sample.
+INFERENTIAL_FITNESS = ('Composite', 'Sharpe', 'Sortino', 'MAR')
+# Metrics that describe what demonstrably happened in the window. Readable in
+# 30 bars because they make no claim about the future.
+DESCRIPTIVE_FITNESS = ('ER (efficiency)', 'Total', 'Win Rate', 'R² (linearity)')
+
+
+def fitness_advice(span_days, chosen):
+    """Whether the chosen fitness function is supportable over this span."""
+    se = sharpe_se(span_days)
+    if chosen in INFERENTIAL_FITNESS and se > 2.5:
+        return ('bad', se,
+                f"**{chosen}** is a t-statistic in disguise, and over {span_days} "
+                f"calendar days its standard error is ±{se:.1f}. A Sharpe of 6 is "
+                f"barely two SE from zero. Rank by **ER (efficiency)** or "
+                f"**Total** instead — those describe what the window actually did "
+                f"rather than estimating a forward parameter, so they stay "
+                f"readable on a short span. Changing the bar size will not help: "
+                f"SE depends only on calendar span.")
+    if chosen in INFERENTIAL_FITNESS and se > 1.5:
+        return ('warn', se,
+                f"**{chosen}** carries a standard error of ±{se:.1f} over "
+                f"{span_days} days — usable for sorting, too loose for sizing. "
+                f"Cross-check against **ER**.")
+    return ('ok', se,
+            f"**{chosen}** is supportable over {span_days} days "
+            f"(Sharpe SE ±{se:.1f}).")
+
+
+def period_progress(period, data):
+    """How full the period's sample is, and how full it will get by the close."""
+    s0, e0 = period_start(period), period_end(period)
+    if s0 is None or e0 is None:
+        return None
+    total = max((e0 - s0).days, 1)
+    elapsed = min(max((datetime.now() - s0).days, 1), total)
+    return {'total_days': total, 'elapsed_days': elapsed,
+            'frac': elapsed / total, 'bars_now': len(data),
+            'bars_proj': int(len(data) / elapsed * total),
+            'se_now': sharpe_se(elapsed), 'se_end': sharpe_se(total),
+            'ends': e0}
+
+
+def thesis_drift(data, cands, mode, top_n=12):
+    """Split the window in half and re-measure each top candidate, holding its
+    orientation fixed.
+
+    This is the stop rule. A spread whose first half was strong and second half
+    negative has already broken, whatever the calendar says — the period
+    boundary is a planned exit, but a thesis break is an unplanned one and it
+    comes first. Correlation drift shows WHY: when two legs stop moving
+    together, the relationship the spread was built on no longer exists.
+    """
+    k = len(data) // 2
+    if k < 8 or len(data) - k < 8:
+        return []
+    a, b = data.iloc[:k], data.iloc[k:]
+    ann_a, ann_b = ann_factor_for(a.index), ann_factor_for(b.index)
+    out = []
+    for c in cands[:top_n]:
+        lg, sh = c.get('long'), c.get('short')
+        try:
+            if lg and sh:
+                ra = _weighted_spread(a[lg].pct_change().dropna(),
+                                      a[sh].pct_change().dropna(), mode)[0]
+                rb = _weighted_spread(b[lg].pct_change().dropna(),
+                                      b[sh].pct_change().dropna(), mode)[0]
+                c1 = float(a[lg].pct_change().corr(a[sh].pct_change()))
+                c2 = float(b[lg].pct_change().corr(b[sh].pct_change()))
+            elif lg:
+                ra, rb = a[lg].pct_change().dropna(), b[lg].pct_change().dropna()
+                c1 = c2 = float('nan')
+            else:
+                ra, rb = -a[sh].pct_change().dropna(), -b[sh].pct_change().dropna()
+                c1 = c2 = float('nan')
+            if len(ra) < 5 or len(rb) < 5:
+                continue
+            s1, s2 = _sharpe(ra, ann_a), _sharpe(rb, ann_b)
+            out.append({
+                'label': f"{'cash' if lg is None else SYMBOL_NAMES.get(lg, clean_symbol(lg))}"
+                         f"/{'cash' if sh is None else SYMBOL_NAMES.get(sh, clean_symbol(sh))}",
+                'kind': c['kind'], 'sh_h1': s1, 'sh_h2': s2, 'delta': s2 - s1,
+                'er_h1': _efficiency(ra), 'er_h2': _efficiency(rb),
+                'corr_h1': c1, 'corr_h2': c2,
+                'broken': s1 > 0 and s2 < 0,
+            })
+        except Exception:  # noqa: BLE001
+            continue
+    return out
 
 
 def ann_factor_for(index):
@@ -338,19 +473,32 @@ def _sector_of(sym):
     return SYMBOL_SECTOR.get(sym, '—')
 
 
-def compute_outrights(data, ann_factor=252):
-    """Every single instrument as a standalone long — the benchmark field."""
+def compute_outrights(data, ann_factor=252, allow_short=True):
+    """Every instrument as a standalone position — the benchmark field.
+
+    Oriented on Sharpe exactly as pairs are. Without this the comparison is
+    rigged: a pair gets to pick its sign and so can never post a negative
+    Sharpe, while a long-only outright eats the full loss in any risk-off
+    window. Every outright then sinks to the bottom of the field for a reason
+    that has nothing to do with spreading being better. If you can short a
+    pair's leg you can short it outright, so the sign flip must apply to both.
+    """
     out = []
     for sym in data.columns:
         ret = data[sym].pct_change().dropna()
         if len(ret) < 5:
             continue
-        row = series_stats(ret, ann_factor)
-        row.update({'long': sym, 'short': None, 'kind': 'outright',
+        is_short = allow_short and _sharpe(ret, ann_factor) < 0
+        r = -ret if is_short else ret
+        row = series_stats(r, ann_factor)
+        eq = 100 * (1 + r).cumprod()
+        row.update({'long': None if is_short else sym,
+                    'short': sym if is_short else None,
+                    'sym': sym, 'kind': 'outright',
+                    'dir': 'short' if is_short else 'long',
                     'Sector': _sector_of(sym), 'same_sector': True,
                     'Ratio': float('nan'), 'Corr': float('nan'),
-                    'cum_long': data[sym], 'cum_short': None,
-                    'cum_spread': data[sym]})
+                    'cum_long': eq, 'cum_short': None, 'cum_spread': eq})
         out.append(row)
     return out
 
@@ -390,12 +538,125 @@ def compute_pairs(data, ann_factor=252, mode='equal'):
     return pairs
 
 
+def score_position(data, long_sym, short_sym, mode, ann_factor):
+    """Stats for a FIXED orientation — no sign flip.
+
+    Essential for the cross-period snapshot. If each period were allowed to
+    orient itself, a pair could show as long GC/short 6J on the quarter and the
+    reverse on the week, and the columns would not be comparable. Orientation is
+    set once by the primary period and every other column measures that same
+    position.
+    """
+    try:
+        if long_sym and short_sym:
+            r = _weighted_spread(data[long_sym].pct_change().dropna(),
+                                 data[short_sym].pct_change().dropna(), mode)[0]
+        elif long_sym:
+            r = data[long_sym].pct_change().dropna()
+        elif short_sym:
+            r = -data[short_sym].pct_change().dropna()
+        else:
+            return None
+    except Exception:  # noqa: BLE001
+        return None
+    if len(r) < 5:
+        return None
+    return series_stats(r, ann_factor)
+
+
+# =============================================================================
+# CROSS-PERIOD SNAPSHOT
+# =============================================================================
+
+def resample_view(df_1h, bar):
+    """Derive a coarser view from one 1-hour matrix.
+
+    4h / daily / weekly are all obtainable by resampling 1h, and 1h reaches back
+    700 days on Yahoo — far enough to cover YTD. So the whole ladder comes from a
+    single fetch instead of four, which matters because the fetch is the slow
+    part. The statistics are unaffected: Sharpe SE depends only on calendar span.
+    """
+    rule = {'1h': None, '4h': '4h', '1d': '1D', '1wk': 'W-MON'}[bar]
+    out = df_1h if rule is None else df_1h.resample(rule).last()
+    out = out.dropna(how='all').ffill().dropna()
+    if len(out) < 5:
+        return None
+    return 100 * (out / out.iloc[0])
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def build_snapshot(symbols_tuple, primary, mode, universe, _stamp=None):
+    """One row per candidate, one column per period, orientation fixed.
+
+    Returns (rows, meta). Each row carries the full stat block for the primary
+    period plus the chosen metric for every period, so persistence across
+    horizons is readable at a glance — a position positive on the quarter, the
+    month AND the week is a far stronger claim than any single window.
+    """
+    ytd0 = period_start('YTD')
+    res = fetch_spread_data(symbols_tuple, 0, '1h', ytd0.isoformat())
+    if res['data'] is None:
+        return None, {'error': 'no 1h data', 'report': res}
+    # 15m cannot be derived from 1h, so DTD gets its own small pull. Everything
+    # coarser than an hour is resampled off the single 1h matrix.
+    res15 = fetch_spread_data(symbols_tuple, 3, '15m', None)
+
+    base = res['data']
+    views, meta = {}, {'report': res, 'periods': {}}
+    for per, bar in PERIOD_BARS.items():
+        src = res15['data'] if bar == '15m' else base
+        if src is None:
+            continue
+        sub = src[src.index >= pd.Timestamp(period_start(per))]
+        v = resample_view(sub, bar if bar != '15m' else '1h') if len(sub) else None
+        if bar == '15m' and len(sub) >= 5:
+            v = 100 * (sub / sub.iloc[0])
+        if v is None:
+            continue
+        views[per] = v
+        meta['periods'][per] = {
+            'bar': bar, 'bars': len(v),
+            'span': max((datetime.now() - period_start(per)).days, 1),
+            'se': sharpe_se(max((datetime.now() - period_start(per)).days, 1)),
+            'ann': ann_factor_for(v.index)}
+    if primary not in views:
+        primary = next(iter(views), None)
+    if primary is None:
+        return None, {'error': 'no usable period views', 'report': res}
+    meta['primary'] = primary
+
+    prim = views[primary]
+    ann_p = meta['periods'][primary]['ann']
+    outs = compute_outrights(prim, ann_p, allow_short=True)
+    pairs = compute_pairs(prim, ann_p, mode)
+    outs, pairs = filter_universe(outs, pairs, universe)
+    cands = outs + pairs
+
+    for c in cands:
+        for per, v in views.items():
+            a = meta['periods'][per]['ann']
+            stt = score_position(v, c.get('long'), c.get('short'), mode, a)
+            for m in ('ER', 'Sharpe', 'Tot%', 'Vol%'):
+                c[f'{m}@{per}'] = stt[m] if stt else float('nan')
+        vals = [c.get(f'ER@{p}') for p in views]
+        good = [v for v in vals if not pd.isna(v)]
+        c['align'] = sum(1 for v in good if v > 0)
+        c['align_n'] = len(good)
+        c['align_txt'] = f"{c['align']}/{c['align_n']}"
+    return cands, meta
+
+
 # =============================================================================
 # UNIVERSE FILTERING
 # =============================================================================
 
 UNIVERSE_ALL = 'All cross-asset'
 UNIVERSE_INTRA = 'Within sector only'
+
+
+def _legs_of(c):
+    """Tickers a candidate touches. A short outright has long=None."""
+    return {x for x in (c.get('long'), c.get('short')) if x}
 
 
 def universe_options():
@@ -411,8 +672,8 @@ def filter_universe(outs, pairs, universe):
     if universe == UNIVERSE_INTRA:
         return outs, [p for p in pairs if p['same_sector']]
     syms = set(FUTURES_GROUPS.get(universe, []))
-    return ([o for o in outs if o['long'] in syms],
-            [p for p in pairs if p['long'] in syms and p['short'] in syms])
+    return ([o for o in outs if _legs_of(o) <= syms],
+            [p for p in pairs if _legs_of(p) <= syms])
 
 
 # =============================================================================
@@ -462,6 +723,180 @@ def sort_candidates(cands, sort_key='Composite', ascending=False):
 
 
 # =============================================================================
+# REDUNDANCY + DIGEST
+# =============================================================================
+
+def leg_frequency(cands, top_n=20):
+    """How often each ticker appears as a long or a short in the top N.
+
+    A field of 153 pairs is not 153 independent candidates. When one instrument
+    is the short leg of twelve of the top twenty, the table is one macro bet
+    replicated against whatever rallied — and the honest expression of it is the
+    outright, not the twelve spreads.
+    """
+    from collections import Counter
+    lg, sh = Counter(), Counter()
+    for c in cands[:top_n]:
+        if c.get('long'):
+            lg[c['long']] += 1
+        if c.get('short'):
+            sh[c['short']] += 1
+    return lg, sh
+
+
+def build_digest(field, table_rows, data, ctx, top_n=25):
+    """Compact fixed-width digest of the whole run, sized to paste into a chat.
+
+    The full 171-row HTML table is unreadable once pasted — it loses the column
+    alignment and buries the summary statistics. This keeps the diagnostics that
+    actually determine whether anything here is real: sample size, Sharpe
+    standard error, the noise threshold, outright-vs-pair verdict, and leg
+    concentration.
+    """
+    L = []
+    A = L.append
+    A("SAKATA / SPREADS DIGEST")
+    A(f"generated       {datetime.now():%Y-%m-%d %H:%M}")
+    A(f"window          {ctx['window']}")
+    A(f"bars            {ctx['bar']}  ({len(data)} observations, annualised x{ctx['ann']:,.0f})")
+    A(f"instruments     {len(data.columns)}  |  universe: {ctx['universe']}")
+    A(f"leg weighting   {ctx['weighting']}   ratio cap: {ctx['ratio_cap']}")
+    A(f"fitness         {ctx['fitness']}")
+    A(f"field           {ctx['n_out']} outrights + {ctx['n_pair']} pairs = {len(field)} candidates")
+
+    se = (ctx['ann'] / len(data)) ** 0.5
+    A("")
+    A("-- SIGNIFICANCE ------------------------------------------------")
+    A(f"Sharpe standard error   +/-{se:.2f}   ({len(data)} bars)")
+    outs = [c for c in field if c['kind'] == 'outright']
+    prs = [c for c in field if c['kind'] == 'pair']
+    if prs:
+        bp = max(prs, key=lambda c: c['Sharpe'])
+        A(f"best pair Sharpe        {bp['Sharpe']:.2f}  = {bp['Sharpe']/se:.2f} SE")
+        A(f"median pair Sharpe      {np.median([c['Sharpe'] for c in prs]):.2f}")
+    if outs:
+        bo = max(outs, key=lambda c: c['Sharpe'])
+        A(f"best outright Sharpe    {bo['Sharpe']:.2f}  = {bo['Sharpe']/se:.2f} SE")
+        A(f"median outright Sharpe  {np.median([c['Sharpe'] for c in outs]):.2f}")
+    if outs and prs:
+        bo = max(outs, key=lambda c: c['Sharpe'])
+        nb = sum(1 for c in prs if c['Sharpe'] > bo['Sharpe'])
+        A(f"pairs beating best outright  {nb}/{len(prs)}  ({nb/len(prs):.0%})")
+        top10 = sorted(field, key=lambda c: c.get('_field', 9999))[:10]
+        A(f"outrights in top ten    {sum(1 for c in top10 if c['kind']=='outright')}/10")
+
+    lg, sh = leg_frequency(table_rows, 20)
+    if sh:
+        A("")
+        A("-- LEG CONCENTRATION IN TOP 20 ---------------------------------")
+        A("short legs: " + "  ".join(
+            f"{SYMBOL_NAMES.get(k, clean_symbol(k))}x{v}" for k, v in sh.most_common(6)))
+        A("long legs:  " + "  ".join(
+            f"{SYMBOL_NAMES.get(k, clean_symbol(k))}x{v}" for k, v in lg.most_common(6)))
+
+    A("")
+    A(f"-- TOP {top_n} BY {ctx['fitness'].upper()} " + "-" * max(0, 44 - len(ctx['fitness'])))
+    A(f"{'#':>3} {'LONG':<6}{'SHORT':<6}{'SECTOR':<9}{'RATIO':>7}"
+      f"{'SCORE':>7}{'SHRP':>7}{'SORT':>7}{'MAR':>7}{'R2':>7}{'ER':>7}"
+      f"{'WIN%':>6}{'TOT%':>8}{'VOL%':>8}{'MDD%':>7}{'CORR':>7}")
+    for i, c in enumerate(table_rows[:top_n], 1):
+        ln = 'cash' if c['long'] is None else SYMBOL_NAMES.get(c['long'], clean_symbol(c['long']))
+        sn = 'cash' if c['short'] is None else SYMBOL_NAMES.get(c['short'], clean_symbol(c['short']))
+        rt = '   -  ' if pd.isna(c['Ratio']) else f"{c['Ratio']:7.2f}"
+        cr = '   -  ' if pd.isna(c['Corr']) else f"{c['Corr']:7.2f}"
+        A(f"{i:>3} {ln:<6}{sn:<6}{str(c.get('Sector','-'))[:8]:<9}{rt}"
+          f"{c.get('_score',0):7.1f}{c['Sharpe']:7.2f}{c['Sortino']:7.2f}"
+          f"{c['MAR']:7.1f}{c['R²']:7.3f}{c['ER']:7.3f}{c['Win%']:6.0f}"
+          f"{c['Tot%']:+8.2f}{c['Vol%']:8.1f}{c['MDD%']:7.2f}{cr}")
+    if ctx.get('dropped'):
+        A("")
+        A("dropped for thin coverage: " + ", ".join(
+            SYMBOL_NAMES.get(x, clean_symbol(x)) for x in ctx['dropped']))
+    return "\n".join(L)
+
+
+def build_snapshot_digest(rows, meta, ctx, top_n=30):
+    """Fixed-width multi-period export, written to be pasted into a chat.
+
+    One row per position, one ER column per period, orientation fixed by the
+    primary period. Everything an outside reader needs to judge whether a row is
+    tradeable — span, bar, sample size, standard error, and whether the metric is
+    inferential or descriptive at that span — sits in the header, so the numbers
+    cannot be read out of context.
+    """
+    pers = list(meta['periods'])
+    L = []
+    A = L.append
+    A("SAKATA MULTI-PERIOD SNAPSHOT")
+    A(f"generated   {datetime.now():%Y-%m-%d %H:%M}")
+    A(f"universe    {ctx['universe']}")
+    A(f"legs        {ctx['weighting']}   leg-ratio cap {ctx['ratio_cap']}")
+    A(f"primary     {meta['primary']}  (orientation and sort are fixed by this period)")
+    A("")
+    A("-- PERIOD FRAME ------------------------------------------------------")
+    A(f"{'per':<5}{'bar':<6}{'span':>7}{'bars':>7}{'SE':>8}   metric status at this span")
+    for per in pers:
+        m = meta['periods'][per]
+        stat = ("Sharpe usable" if m['se'] <= 1.5 else
+                "Sharpe marginal" if m['se'] <= 2.5 else "descriptive only (use ER)")
+        A(f"{per:<5}{m['bar']:<6}{m['span']:>6}d{m['bars']:>7}{m['se']:>8.1f}   {stat}")
+    A("")
+    A("ER = Kaufman efficiency ratio on the equity curve: |net move| / path length.")
+    A("    1.00 = straight line, 0.00 = chop going nowhere, negative = downtrend.")
+    A("    Scale-free and descriptive, so it stays readable on short spans where")
+    A("    Sharpe does not. ALIGN = periods with positive ER (persistence).")
+    A("")
+    prim = meta['primary']
+    A(f"-- RANKED BY ER @ {prim} " + "-" * max(0, 48 - len(prim)))
+    hdr = f"{'#':>3} {'LONG':<6}{'SHORT':<6}{'SECTOR':<9}{'ALIGN':>6}"
+    for per in pers:
+        hdr += f"{'ER_' + per:>8}"
+    hdr += f"{'SHRP':>8}{'TOT%':>8}{'VOL%':>8}{'MDD%':>8}{'CORR':>7}{'RATIO':>7}"
+    A(hdr)
+    for i, c in enumerate(rows[:top_n], 1):
+        ln = 'cash' if c['long'] is None else SYMBOL_NAMES.get(c['long'], clean_symbol(c['long']))
+        sn = 'cash' if c['short'] is None else SYMBOL_NAMES.get(c['short'], clean_symbol(c['short']))
+        line = (f"{i:>3} {ln:<6}{sn:<6}{str(c.get('Sector','-'))[:8]:<9}"
+                f"{c.get('align_txt','-'):>6}")
+        for per in pers:
+            v = c.get(f'ER@{per}')
+            line += "     -  " if pd.isna(v) else f"{v:>8.3f}"
+        cr = '     - ' if pd.isna(c['Corr']) else f"{c['Corr']:7.2f}"
+        rt = '     - ' if pd.isna(c['Ratio']) else f"{c['Ratio']:7.2f}"
+        line += (f"{c['Sharpe']:>8.2f}{c['Tot%']:>+8.2f}{c['Vol%']:>8.1f}"
+                 f"{c['MDD%']:>8.2f}{cr}{rt}")
+        A(line)
+
+    A("")
+    A("-- PERSISTENCE -------------------------------------------------------")
+    n_all = sum(1 for c in rows if c.get('align') == c.get('align_n') and c.get('align_n'))
+    A(f"positive ER in every period: {n_all} of {len(rows)} candidates")
+    best = [c for c in rows if c.get('align') == c.get('align_n') and c.get('align_n')][:8]
+    if best:
+        A("  " + ",  ".join(
+            ('cash' if c['long'] is None else SYMBOL_NAMES.get(c['long'], clean_symbol(c['long'])))
+            + "/" +
+            ('cash' if c['short'] is None else SYMBOL_NAMES.get(c['short'], clean_symbol(c['short'])))
+            for c in best))
+    lg, sh = leg_frequency(rows, 20)
+    if sh or lg:
+        A("")
+        A("-- LEG CONCENTRATION, TOP 20 -----------------------------------------")
+        A("short: " + "  ".join(f"{SYMBOL_NAMES.get(k, clean_symbol(k))}x{v}"
+                                for k, v in sh.most_common(6)))
+        A("long:  " + "  ".join(f"{SYMBOL_NAMES.get(k, clean_symbol(k))}x{v}"
+                                for k, v in lg.most_common(6)))
+        A("(one ticker dominating the short column means the field is one macro")
+        A(" bet replicated, not N independent candidates)")
+    rep = meta.get('report', {})
+    if rep.get('dropped'):
+        A("")
+        A("dropped for thin coverage: " + ", ".join(
+            SYMBOL_NAMES.get(x, clean_symbol(x)) for x in rep['dropped']))
+    return "\n".join(L)
+
+
+# =============================================================================
 # COMBINED TABLE
 # =============================================================================
 
@@ -500,9 +935,11 @@ def render_field_table(cands, theme, mode='equal', top_n=50):
         </tr></thead><tbody>"""
 
     for rank, p in enumerate(show, 1):
-        is_out = p['short'] is None
-        ln = SYMBOL_NAMES.get(p['long'], clean_symbol(p['long']))
-        sn = (f"<span style='color:{_mut};font-style:italic'>cash</span>" if is_out
+        is_out = p['kind'] == 'outright'
+        cash = f"<span style='color:{_mut};font-style:italic'>cash</span>"
+        ln = (cash if p['long'] is None
+              else SYMBOL_NAMES.get(p['long'], clean_symbol(p['long'])))
+        sn = (cash if p['short'] is None
               else SYMBOL_NAMES.get(p['short'], clean_symbol(p['short'])))
         sh_c = pos_c if p['Sharpe'] >= 0 else neg_c
         tot_c = pos_c if p['Tot%'] >= 0 else neg_c
@@ -511,7 +948,12 @@ def render_field_table(cands, theme, mode='equal', top_n=50):
         er_c = pos_c if p['ER'] >= 0.30 else (_txt2 if p['ER'] >= 0.12 else _mut)
         score = p.get('_score', 0)
         corr = '—' if pd.isna(p['Corr']) else f"{p['Corr']:.2f}"
-        ratio = '—' if pd.isna(p['Ratio']) else f"{p['Ratio']:.2f}"
+        if pd.isna(p['Ratio']):
+            ratio = '—'
+        else:
+            hot = abs(p['Ratio']) > RATIO_WARN or abs(p['Ratio']) < 1 / RATIO_WARN
+            ratio = (f"<span style='color:{neg_c}'>{p['Ratio']:.2f}⚠</span>" if hot
+                     else f"{p['Ratio']:.2f}")
         bg = f'linear-gradient(90deg,{_bg3},{_bg3}00)' if is_out else 'transparent'
         short_style = f"color:{_mut}" if is_out else f"color:{short_c};font-weight:600"
         sec_c = _txt2 if p.get('same_sector') else _mut
@@ -572,8 +1014,11 @@ def render_spread_charts(pairs, data, theme, mobile=False, tick_fmt='%d %b',
         lc = theme['long']; sc = theme['short']
         tag = (f"<span style='color:{_mut};font-size:9px'> · {bar_tag}</span>"
                if bar_tag else "")
-        if p['short'] is None:
-            subtitles.append(f"<span style='color:{lc}'>■</span> {ln} (outright){tag}")
+        if p['kind'] == 'outright':
+            sym = SYMBOL_NAMES.get(p.get('sym'), clean_symbol(p.get('sym', '')))
+            d = p.get('dir', 'long')
+            col = lc if d == 'long' else sc
+            subtitles.append(f"<span style='color:{col}'>■</span> {d} {sym}{tag}")
         else:
             sn = SYMBOL_NAMES.get(p['short'], clean_symbol(p['short']))
             subtitles.append(
@@ -676,8 +1121,168 @@ def _badge(theme, bits):
                 unsafe_allow_html=True)
 
 
+def render_snapshot_table(rows, meta, theme, top_n=40):
+    """One row per position, one ER column per period."""
+    pers = list(meta['periods'])
+    pos_c = theme['pos']; neg_c = theme['neg']; short_c = theme['short']
+    _bg3 = theme.get('bg3', '#f8fafc'); _bdr = theme.get('border', '#e2e8f0')
+    _txt2 = theme.get('text2', '#64748b'); _mut = theme.get('muted', '#94a3b8')
+    th = (f"padding:4px 7px;border-bottom:1px solid {_bdr};color:#475569;"
+          "font-weight:600;font-size:9px;text-transform:uppercase;letter-spacing:0.05em;")
+    td = f"padding:5px 7px;border-bottom:1px solid {_bdr}22;"
+
+    def er_col(v):
+        if pd.isna(v):
+            return _mut
+        if v >= 0.30:
+            return pos_c
+        if v >= 0.12:
+            return _txt2
+        return neg_c if v < 0 else _mut
+
+    head = (f"<th style='{th}text-align:left'>#</th>"
+            f"<th style='{th}text-align:left'>LONG</th>"
+            f"<th style='{th}text-align:left'>SHORT</th>"
+            f"<th style='{th}text-align:left'>SECTOR</th>"
+            f"<th style='{th}text-align:center'>ALIGN</th>")
+    for per in pers:
+        mark = " ★" if per == meta['primary'] else ""
+        head += f"<th style='{th}text-align:right'>ER {per}{mark}</th>"
+    for c in ('SHARPE', 'TOT%', 'VOL%', 'MDD%', 'CORR', 'RATIO'):
+        head += f"<th style='{th}text-align:right'>{c}</th>"
+
+    html = (f"<div style='overflow-x:auto;border:1px solid {_bdr};border-radius:6px'>"
+            f"<table style='border-collapse:collapse;font-family:{FONTS};font-size:11px;"
+            f"width:100%;line-height:1.3;font-variant-numeric:tabular-nums'>"
+            f"<thead style='background:{_bg3}'><tr>{head}</tr></thead><tbody>")
+
+    for i, c in enumerate(rows[:top_n], 1):
+        cash = f"<span style='color:{_mut};font-style:italic'>cash</span>"
+        ln = cash if c['long'] is None else SYMBOL_NAMES.get(c['long'], clean_symbol(c['long']))
+        sn = cash if c['short'] is None else SYMBOL_NAMES.get(c['short'], clean_symbol(c['short']))
+        is_out = c['kind'] == 'outright'
+        bg = f'linear-gradient(90deg,{_bg3},{_bg3}00)' if is_out else 'transparent'
+        full = c.get('align_n') and c['align'] == c['align_n']
+        al_c = pos_c if full else (_txt2 if c.get('align', 0) else _mut)
+        row = (f"<tr style='background:{bg}'>"
+               f"<td style='{td}color:{_mut}'>{i}</td>"
+               f"<td style='{td}color:{pos_c};font-weight:600'>{ln}</td>"
+               f"<td style='{td}color:{short_c};font-weight:600'>{sn}</td>"
+               f"<td style='{td}color:{_mut};font-size:10px'>{c.get('Sector','—')}</td>"
+               f"<td style='{td}text-align:center;color:{al_c};font-weight:700'>"
+               f"{c.get('align_txt','—')}</td>")
+        for per in pers:
+            v = c.get(f'ER@{per}')
+            txt = '—' if pd.isna(v) else f"{v:.3f}"
+            wt = '700' if per == meta['primary'] else '500'
+            row += (f"<td style='{td}text-align:right;color:{er_col(v)};"
+                    f"font-weight:{wt}'>{txt}</td>")
+        tot_c = pos_c if c['Tot%'] >= 0 else neg_c
+        cr = '—' if pd.isna(c['Corr']) else f"{c['Corr']:.2f}"
+        rt = '—' if pd.isna(c['Ratio']) else f"{c['Ratio']:.2f}"
+        row += (f"<td style='{td}text-align:right;color:{_txt2}'>{c['Sharpe']:.2f}</td>"
+                f"<td style='{td}text-align:right;color:{tot_c};font-weight:600'>{c['Tot%']:+.1f}%</td>"
+                f"<td style='{td}text-align:right;color:{_txt2}'>{c['Vol%']:.1f}%</td>"
+                f"<td style='{td}text-align:right;color:{neg_c}'>{c['MDD%']:.1f}%</td>"
+                f"<td style='{td}text-align:right;color:{_txt2}'>{cr}</td>"
+                f"<td style='{td}text-align:right;color:{_txt2}'>{rt}</td></tr>")
+        html += row
+    html += "</tbody></table></div>"
+    st.markdown(html, unsafe_allow_html=True)
+
+
+def _render_snapshot_mode(theme, is_mobile):
+    st.caption(
+        "Every position measured across the whole calendar ladder at once — "
+        "intraday, week, month, quarter, year — from a single 1-hour pull "
+        "resampled five ways. Orientation is fixed by the primary period so the "
+        "columns are comparable. **ALIGN** counts periods with positive ER: a "
+        "position trending cleanly on the quarter *and* the month *and* the week "
+        "is a far stronger claim than any one window."
+    )
+    c1, c2, c3, c4, c5 = st.columns([2, 3, 2, 2, 1])
+    with c1:
+        st.markdown("##### Primary period")
+        primary = st.selectbox("Primary", list(PERIOD_BARS), index=2,
+                               key="snap_prim", label_visibility="collapsed")
+    with c2:
+        st.markdown("##### Universe")
+        universe = st.selectbox("Universe", universe_options(), index=0,
+                                key="snap_univ", label_visibility="collapsed")
+    with c3:
+        st.markdown("##### Leg weighting")
+        weight_label = st.selectbox("Weighting", list(WEIGHTINGS), index=1,
+                                    key="snap_w", label_visibility="collapsed")
+    with c4:
+        st.markdown("##### Max leg ratio")
+        cap_label = st.selectbox("Cap", list(RATIO_CAPS), index=2,
+                                 key="snap_cap", label_visibility="collapsed")
+    with c5:
+        st.markdown("##### Show")
+        show = st.selectbox("Show", ["20", "40", "80", "All"], index=1,
+                            key="snap_show", label_visibility="collapsed")
+
+    if st.button("Refresh", key="snap_rs"):
+        fetch_spread_data.clear()
+        build_snapshot.clear()
+        st.rerun()
+
+    mode = WEIGHTINGS[weight_label]
+    with st.spinner("Building ladder — one 1-hour pull, resampled five ways…"):
+        rows, meta = build_snapshot(tuple(ALL_SYMBOLS), primary, mode, universe)
+
+    if not rows:
+        st.warning("Snapshot unavailable — "
+                   f"{meta.get('error', 'no data returned')}. Try Refresh.")
+        return
+
+    cap = RATIO_CAPS[cap_label]
+    n_capped = 0
+    if cap and mode != 'equal':
+        keep = [c for c in rows if c['kind'] == 'outright' or
+                (not pd.isna(c['Ratio']) and (1 / cap) <= abs(c['Ratio']) <= cap)]
+        n_capped = len(rows) - len(keep)
+        rows = keep
+
+    prim = meta['primary']
+    rows = sorted(rows, key=lambda c: (-(c.get('align') or 0),
+                                       -(c.get(f'ER@{prim}') or -9)))
+
+    _badge(theme, [f"primary {prim} · {PERIOD_BARS[prim]}"]
+           + [f"{p} {m['bar']} · {m['bars']}b · SE ±{m['se']:.1f}"
+              for p, m in meta['periods'].items()]
+           + [universe, f"legs: {weight_label}"])
+
+    n_out = sum(1 for c in rows if c['kind'] == 'outright')
+    n_full = sum(1 for c in rows if c.get('align_n') and c['align'] == c['align_n'])
+    st.markdown(
+        f"**{len(rows)} candidates** ({n_out} outrights) · sorted by ALIGN then "
+        f"ER @ {prim} · **{n_full}** trend cleanly in every period"
+        + (f" · {n_capped} hidden by the {cap_label} leg-ratio cap" if n_capped else ""))
+
+    top_n = len(rows) if show == "All" else int(show)
+    st.markdown(f"##### Ladder — {min(top_n, len(rows))} of {len(rows)} · ★ = primary")
+    render_snapshot_table(rows, meta, theme, top_n=top_n)
+
+    with st.expander("📋 Copy digest — paste this for analysis", expanded=True):
+        st.caption("Fixed-width export carrying the period frame, standard errors, "
+                   "and persistence counts alongside the numbers, so the table "
+                   "cannot be read out of context. Copy button sits top-right.")
+        dn = st.slider("Rows", 10, 80, 30, 5, key="snap_dgn")
+        ctx = {'universe': universe, 'weighting': weight_label,
+               'ratio_cap': cap_label}
+        st.code(build_snapshot_digest(rows, meta, ctx, top_n=dn), language='text')
+
+
 def render_spreads_tab(is_mobile: bool = False) -> None:
     theme = THEMES.get(st.session_state.get("theme", "Light"), THEMES["Dark"])
+
+    view = st.radio("View", ["Snapshot — all periods", "Single period — detail"],
+                    index=0, horizontal=True, key="spr_view",
+                    label_visibility="collapsed")
+    if view.startswith("Snapshot"):
+        _render_snapshot_mode(theme, is_mobile)
+        return
 
     n_inst = len(ALL_SYMBOLS)
     st.caption(
@@ -708,7 +1313,7 @@ def render_spreads_tab(is_mobile: bool = False) -> None:
         weight_label = st.selectbox("Weighting", list(WEIGHTINGS), index=0,
                                     key="spr_weight", label_visibility="collapsed")
 
-    r2c1, r2c2, r2c3, r2c4 = st.columns([2, 2, 1, 1])
+    r2c1, r2c2, r2c5, r2c3, r2c4 = st.columns([2, 2, 2, 1, 1])
     with r2c1:
         st.markdown("##### Fitness")
         sort_by = st.selectbox("Fitness", list(SORT_KEYS), index=0, key="spr_sort",
@@ -717,6 +1322,10 @@ def render_spreads_tab(is_mobile: bool = False) -> None:
         st.markdown("##### Include")
         type_filter = st.selectbox("Include", TYPE_FILTERS, index=0, key="spr_type",
                                    label_visibility="collapsed")
+    with r2c5:
+        st.markdown("##### Max leg ratio")
+        cap_label = st.selectbox("Max leg ratio", list(RATIO_CAPS), index=2,
+                                 key="spr_cap", label_visibility="collapsed")
     with r2c3:
         st.markdown("##### Show")
         show = st.selectbox("Show", ["10", "25", "50", "100", "All"], index=4,
@@ -807,9 +1416,18 @@ def render_spreads_tab(is_mobile: bool = False) -> None:
     data = res['data']
     ann = ann_factor_for(data.index)
 
-    outs = compute_outrights(data, ann)
+    outs = compute_outrights(data, ann, allow_short=True)
     pairs = compute_pairs(data, ann, mode)
     outs, pairs = filter_universe(outs, pairs, universe)
+
+    # Drop sizings that cannot be executed. A sigma ratio of 46 is not a spread.
+    cap = RATIO_CAPS[cap_label]
+    n_capped = 0
+    if cap and mode != 'equal':
+        keep = [p for p in pairs
+                if not pd.isna(p['Ratio']) and (1 / cap) <= abs(p['Ratio']) <= cap]
+        n_capped = len(pairs) - len(keep)
+        pairs = keep
     if not outs and not pairs:
         st.info("Nothing in that universe over this window.")
         return
@@ -849,6 +1467,21 @@ def render_spreads_tab(is_mobile: bool = False) -> None:
         line.append(f"**{outs_top10}/10** of the top ten are outrights")
     st.markdown("  ·  ".join(line))
 
+    if outs and pairs:
+        se_ = (ann / len(data)) ** 0.5
+        mp = float(np.median([c['Sharpe'] for c in pairs]))
+        mo = float(np.median([c['Sharpe'] for c in outs]))
+        st.caption(
+            f"Median Sharpe — pairs **{mp:.2f}**, outrights **{mo:.2f}** "
+            f"(standard error ±{se_:.2f}). Best pair is "
+            f"**{best_pair['Sharpe'] / se_:.2f} SE** from zero, best outright "
+            f"**{best_out['Sharpe'] / se_:.2f} SE**. Comparing the two *best* "
+            f"favours pairs simply because there are {len(pairs)} of them against "
+            f"{len(outs)} outrights — more draws, higher maximum. The medians are "
+            f"the like-for-like comparison."
+            + (f" {n_capped} pairs hidden by the {cap_label} leg-ratio cap."
+               if n_capped else ""))
+
     st.caption(f"**{weight_label}** — {WEIGHT_BLURB[mode]}")
 
     if interval != requested:
@@ -856,15 +1489,26 @@ def render_spreads_tab(is_mobile: bool = False) -> None:
                 f"{window_txt} — stepped down to **{bar_name}**. Pin a bar in the "
                 f"Bars selector to override.")
 
-    if len(data) < 100:
-        se = (ann / len(data)) ** 0.5
-        suggest = ("a finer bar (Bars → 4 Hour or 1 Hour)" if interval in ('1d', '1wk')
-                   else "a longer lookback")
-        st.warning(
-            f"**{len(data)} bars is a thin sample.** Annualised Sharpe carries a "
-            f"standard error of roughly ±{se:.1f} here, and {len(field)} candidates "
-            f"were tested — the top of the table will look strong from noise alone. "
-            f"Try {suggest}.")
+    # --- period progress: how full the sample is, and how full it will get ---
+    prog = period_progress(lb_label, data) if is_period else None
+    if prog:
+        st.markdown(
+            f"**{lb_label} is {prog['frac']:.0%} elapsed** — day "
+            f"{prog['elapsed_days']} of {prog['total_days']}, closing "
+            f"{prog['ends']:%a %d %b}. {prog['bars_now']} bars now, about "
+            f"{prog['bars_proj']} by the close. Sharpe SE ±{prog['se_now']:.1f} "
+            f"today, ±{prog['se_end']:.1f} at period end.")
+
+    # --- is the chosen fitness function supportable over this span? ---
+    verdict, se_span, msg = fitness_advice(window_days, sort_by)
+    (st.error if verdict == 'bad' else st.warning if verdict == 'warn'
+     else st.success)(msg)
+    if verdict != 'ok':
+        st.caption(
+            f"{len(field)} candidates were tested on {len(data)} bars. With "
+            f"SE ±{se_span:.1f}, the expected best-of-{len(field)} Sharpe from "
+            f"pure noise is roughly {se_span * 2.8:.0f} — treat anything below "
+            f"that as unproven.")
 
     _diagnostics(res)
 
@@ -881,6 +1525,68 @@ def render_spreads_tab(is_mobile: bool = False) -> None:
     st.markdown(f"##### Ranked field — {min(top_n, len(table_rows))} of "
                 f"{len(table_rows)} · {universe} · {bar_name} bars · by {metric_txt}")
     render_field_table(table_rows, theme, mode=mode, top_n=top_n)
+
+    lg, sh = leg_frequency(table_rows, 20)
+    if sh or lg:
+        with st.expander("Leg concentration — is this one trade or twenty?"):
+            st.caption(
+                "How often each instrument appears in the top 20. When one ticker "
+                "is the short leg of most of them, the field is a single macro bet "
+                "replicated against whatever rallied, and the cleanest expression "
+                "of it is the outright rather than the spreads.")
+            cc1, cc2 = st.columns(2)
+            with cc1:
+                st.markdown("**Short legs**")
+                for k, v in sh.most_common(8):
+                    st.markdown(f"`{v:2}/20`  {SYMBOL_NAMES.get(k, clean_symbol(k))}")
+            with cc2:
+                st.markdown("**Long legs**")
+                for k, v in lg.most_common(8):
+                    st.markdown(f"`{v:2}/20`  {SYMBOL_NAMES.get(k, clean_symbol(k))}")
+
+    drift = thesis_drift(data, table_rows, mode, top_n=12)
+    if drift:
+        broken = [d for d in drift if d['broken']]
+        with st.expander(
+                f"Thesis drift — when to stop the spread"
+                + (f"  ·  {len(broken)} of {len(drift)} already broken" if broken else "")):
+            st.caption(
+                "Each top candidate re-measured on the first and second half of "
+                "the window, orientation held fixed. The period boundary is your "
+                "planned exit; a thesis break is the unplanned one and it comes "
+                "first. Falling correlation shows why — when the legs stop moving "
+                "together, the relationship the spread was built on is gone.")
+            ddf = pd.DataFrame([{
+                'Position': d['label'],
+                'Sharpe H1': round(d['sh_h1'], 2),
+                'Sharpe H2': round(d['sh_h2'], 2),
+                'Δ': round(d['delta'], 2),
+                'ER H1': round(d['er_h1'], 3),
+                'ER H2': round(d['er_h2'], 3),
+                'Corr H1': '—' if pd.isna(d['corr_h1']) else round(d['corr_h1'], 2),
+                'Corr H2': '—' if pd.isna(d['corr_h2']) else round(d['corr_h2'], 2),
+                'Status': 'BROKEN' if d['broken'] else ('fading' if d['delta'] < 0 else 'holding'),
+            } for d in drift])
+            st.dataframe(ddf, use_container_width=True, hide_index=True)
+            if broken:
+                st.warning(
+                    "**" + ", ".join(d['label'] for d in broken) + "** turned "
+                    "negative in the second half of the window. They rank well only "
+                    "on first-half performance that has already reversed.")
+
+    with st.expander("Copy digest — compact text export"):
+        st.caption("Fixed-width summary sized to paste into a chat or notebook. "
+                   "Keeps the diagnostics that decide whether any of this is real: "
+                   "sample size, Sharpe standard error, outright-vs-pair verdict, "
+                   "leg concentration. Use the copy button in the corner.")
+        dg_n = st.slider("Rows in digest", 10, 60, 25, 5, key="spr_dgn")
+        ctx = {'window': window_txt, 'bar': bar_name, 'ann': ann,
+               'universe': universe, 'weighting': weight_label,
+               'ratio_cap': cap_label, 'fitness': metric_txt,
+               'n_out': len(outs), 'n_pair': len(pairs),
+               'dropped': res.get('dropped', [])}
+        st.code(build_digest(field, table_rows, data, ctx, top_n=dg_n),
+                language='text')
 
     st.markdown(f"##### Top {min(n_charts, len(table_rows))} — legs vs spread, "
                 f"rebased to 100 · {bar_name} bars")
