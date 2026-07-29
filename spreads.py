@@ -170,21 +170,70 @@ def ann_factor_for(index):
 # DATA FETCHING
 # =============================================================================
 
+MIN_BARS = 20        # below this a window is not worth ranking 171 candidates on
+MIN_SYMBOLS = 8      # never thin the universe past this to chase bar count
+
+# coarse -> fine, for automatic bar-size fallback
+_FINER = {'1wk': '1d', '1d': '4h', '4h': '1h', '1h': '30m', '30m': '15m', '15m': None}
+
+
+def _align_frames(frames, intraday, min_bars=MIN_BARS, min_symbols=MIN_SYMBOLS):
+    """Align a dict of {symbol: close Series} into one matrix.
+
+    The old behaviour dropped ROWS: an inner join across all symbols, or ffill
+    then dropna. Either way a single sparsely-listed contract governs the whole
+    matrix — ffill cannot backfill a late listing, so dropna then deletes every
+    row before it, and on intraday the intersection collapses to whichever
+    market trades the fewest hours. Both were observed to cut a 31-week window
+    to 6 rows and a 73-hour window to 9.
+
+    So drop COLUMNS instead: rank symbols by how much of the union index they
+    actually cover, and shed the worst until the matrix clears min_bars or the
+    universe hits min_symbols. Returns (df, dropped, coverage).
+    """
+    syms = [k for k, v in frames.items() if v is not None and len(v) > 0]
+    if len(syms) < 2:
+        return None, [], {}
+    union = frames[syms[0]].index
+    for s in syms[1:]:
+        union = union.union(frames[s].index)
+    cov = {k: float(frames[k].reindex(union).notna().mean()) for k in syms}
+    order = sorted(syms, key=lambda k: cov[k])     # worst coverage first
+
+    keep, dropped = list(syms), []
+    while True:
+        df = pd.DataFrame({k: frames[k] for k in keep})
+        df = df.dropna() if intraday else df.ffill().dropna()
+        if len(df) >= min_bars or len(keep) <= min_symbols:
+            break
+        victim = next((k for k in order if k in keep), None)
+        if victim is None:
+            break
+        keep.remove(victim)
+        dropped.append(victim)
+    if len(df) < 10 or len(df.columns) < 2:
+        return None, dropped, cov
+    return df, dropped, cov
+
+
 @st.cache_data(ttl=1800, show_spinner=False)
 def fetch_spread_data(symbols_tuple, lookback_days=0, interval='1d', start_iso=None):
-    """Rebased (=100) close matrix for an arbitrary set of tickers.
+    """Rebased (=100) close matrix, plus a coverage report.
 
-    Daily/weekly bars are forward-filled then aligned. Intraday bars are NOT
-    forward-filled — a stale grain price carried through a closed session would
-    show as a zero return and flatter the vol and Sharpe. Instead the columns
-    are inner-joined, so every row is a genuinely simultaneous observation.
+    Daily/weekly bars are forward-filled before alignment. Intraday bars are
+    NOT — a stale grain price carried through a closed session would show as a
+    zero return and flatter the vol and Sharpe.
 
     start_iso pins an absolute calendar start (the WTD/MTD/QTD/YTD anchors) and
     takes precedence over lookback_days.
+
+    Returns {'data', 'raw', 'cov', 'dropped', 'interval'} — never a bare None,
+    so the caller can explain WHY a window came back empty.
     """
+    blank = {'data': None, 'raw': {}, 'cov': {}, 'dropped': [], 'interval': interval}
     symbols = list(symbols_tuple)
     if len(symbols) < 2:
-        return None
+        return blank
     intraday = interval in _INTRADAY
     yf_interval = _NATIVE[interval]
 
@@ -199,13 +248,18 @@ def fetch_spread_data(symbols_tuple, lookback_days=0, interval='1d', start_iso=N
     if cap:   # respect Yahoo's per-interval history limit
         start = max(start, datetime.now() - pd.Timedelta(days=cap))
 
-    data = pd.DataFrame()
+    # Fetch a few days before the anchor so a weekly/daily bar straddling the
+    # boundary is not clipped off, then trim back to the anchor after aligning.
+    fetch_start = start - pd.Timedelta(days=10 if interval in ('1wk', '1d') else 2)
+
+    frames, raw = {}, {}
     for sym in symbols:
         try:
             ticker = yf.Ticker(sym, session=_session)
-            hist = ticker.history(start=start.strftime('%Y-%m-%d'),
+            hist = ticker.history(start=fetch_start.strftime('%Y-%m-%d'),
                                   interval=yf_interval)
             if hist.empty:
+                raw[sym] = 0
                 continue
             closes = hist['Close'].copy()
             closes.index = closes.index.tz_localize(None) if closes.index.tz else closes.index
@@ -215,21 +269,28 @@ def fetch_spread_data(symbols_tuple, lookback_days=0, interval='1d', start_iso=N
             else:
                 closes.index = closes.index.normalize()
             closes = closes.groupby(closes.index).last()
-            data[sym] = closes
+            frames[sym] = closes
+            raw[sym] = len(closes)
         except Exception as e:
+            raw[sym] = 0
             logger.debug(f"[{sym}] spread data fetch error: {e}")
 
-    if data.empty or len(data.columns) < 2:
-        return None
-    data = data.dropna() if intraday else data.ffill().dropna()
+    data, dropped, cov = _align_frames(frames, intraday)
+    report = {'data': None, 'raw': raw, 'cov': cov, 'dropped': dropped,
+              'interval': interval}
+    if data is None:
+        return report
+
     if start_iso:
         data = data[data.index >= pd.Timestamp(start_iso)]
     elif lookback_days > 0 and not data.empty:
         cutoff = data.index.max() - pd.Timedelta(days=lookback_days)
         data = data[data.index >= cutoff]
-    if len(data) < 10:
-        return None
-    return 100 * (data / data.iloc[0])
+    if len(data) < 10 or len(data.columns) < 2:
+        return report
+
+    report['data'] = 100 * (data / data.iloc[0])
+    return report
 
 
 # =============================================================================
@@ -629,26 +690,75 @@ def render_spreads_tab(is_mobile: bool = False) -> None:
         start_iso = start_dt.isoformat()
         lb_days = 0
         default_interval = PERIOD_BARS[lb_label]
+        window_days = max((datetime.now() - start_dt).days, 1)
         window_txt = f"{lb_label} (from {start_dt:%d %b %Y})"
     else:
         start_iso = None
         lb_days = ROLLING_DAYS[lb_label]
         default_interval = auto_interval(lb_days)
+        window_days = lb_days
         window_txt = lb_label
 
     interval = BAR_OPTIONS[bar_label] or default_interval
+    pinned = BAR_OPTIONS[bar_label] is not None    # user chose the bar explicitly
+
+    # --- fetch, stepping to a finer bar if the window comes back too thin ---
+    n_pairs = len(symbols) * (len(symbols) - 1) // 2
+    tried, res, iv = [], None, interval
+    while iv is not None:
+        cap = _MAX_BACK.get(iv)
+        if cap is not None and window_days > cap:
+            tried.append((iv, 'beyond Yahoo history limit'))
+            iv = _FINER.get(iv)
+            continue
+        with st.spinner(f"Pricing {len(symbols)} outrights and {n_pairs} pairs "
+                        f"on {BAR_NAMES[iv]} bars…"):
+            res = fetch_spread_data(tuple(symbols), lb_days, iv, start_iso)
+        n_rows = 0 if res['data'] is None else len(res['data'])
+        tried.append((iv, f"{n_rows} bars"))
+        if n_rows >= MIN_BARS or pinned:
+            break
+        iv = _FINER.get(iv)
+    interval = iv or interval
     bar_name = BAR_NAMES[interval]
 
-    n_pairs = len(symbols) * (len(symbols) - 1) // 2
-    with st.spinner(f"Pricing {len(symbols)} outrights and {n_pairs} pairs "
-                    f"on {bar_name} bars…"):
-        data = fetch_spread_data(tuple(symbols), lb_days, interval, start_iso)
+    def _diagnostics(r):
+        with st.expander("Data coverage — why this window looks the way it does"):
+            if tried:
+                st.markdown("**Bar sizes tried:** " +
+                            "  →  ".join(f"{BAR_NAMES[i]} ({m})" for i, m in tried))
+            if r.get('dropped'):
+                st.markdown(
+                    "**Dropped for thin coverage:** " +
+                    ", ".join(f"{SYMBOL_NAMES.get(s, clean_symbol(s))} "
+                              f"({r['cov'].get(s, 0):.0%})" for s in r['dropped']) +
+                    "  — these were shed so the remaining instruments keep their "
+                    "full history, rather than every symbol being clipped to the "
+                    "sparsest one.")
+            if r.get('cov'):
+                cdf = pd.DataFrame({
+                    'Instrument': [SYMBOL_NAMES.get(s, clean_symbol(s)) for s in r['cov']],
+                    'Raw bars': [r['raw'].get(s, 0) for s in r['cov']],
+                    'Coverage': [f"{v:.0%}" for v in r['cov'].values()],
+                    'Kept': ['—' if s in r.get('dropped', []) else '✓' for s in r['cov']],
+                }).sort_values('Coverage')
+                st.dataframe(cdf, use_container_width=True, hide_index=True)
 
-    if data is None or len(data.columns) < 2:
-        st.warning(f"Not enough price history over {window_txt} on {bar_name} bars. "
-                   "Yahoo may be throttling, or the bar size may be too coarse for "
-                   "the window — try a finer bar, or Refresh in a minute.")
+    if res is None or res['data'] is None:
+        st.warning(
+            f"Not enough usable history over {window_txt} on {bar_name} bars. "
+            + ("You've pinned the bar size — set Bars back to Auto to let it step "
+               "finer automatically. " if pinned else
+               "Every finer bar was tried too. ")
+            + "Open the panel below to see which instruments came back thin.")
+        _diagnostics(res or {'raw': {}, 'cov': {}, 'dropped': []})
         return
+
+    data = res['data']
+    if interval != (BAR_OPTIONS[bar_label] or default_interval):
+        st.info(f"{BAR_NAMES[default_interval]} bars gave too few observations "
+                f"over {window_txt} — stepped down to **{bar_name}**. Pin a bar "
+                f"in the Bars selector to override.")
 
     ann = ann_factor_for(data.index)
     outs = compute_outrights(data, ann)
@@ -708,6 +818,8 @@ def render_spreads_tab(is_mobile: bool = False) -> None:
             f"short by construction: QTD on daily bars in the first month is ~20 "
             f"observations, YTD on weekly is ~1 per week elapsed."
         )
+
+    _diagnostics(res)
 
     # --- outright leaderboard first ---
     st.markdown(f"##### Outright leaderboard — {len(outs)} instruments by {metric_txt}")

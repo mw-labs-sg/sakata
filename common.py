@@ -13,8 +13,10 @@ _session = cffi_requests.Session(impersonate="chrome110")
 # Scanner sectors. sector -> {name: (yahoo_ticker, decimals)}
 SECTORS = {
     "Indices":    {"ES  S&P 500": ("ES=F", 2), "NQ  Nasdaq": ("NQ=F", 2)},
-    "Bonds":      {"ZB  T-Bond": ("ZB=F", 3), "ZN  10Y Note": ("ZN=F", 3),
-                   "SR3  SOFR": ("SR3=F", 4)},
+    # SR3 (3M SOFR) removed: Yahoo lists it too sparsely, and one thin column
+    # clips every other instrument once the matrix is aligned. Re-add only if
+    # a source with continuous history is wired in.
+    "Bonds":      {"ZB  T-Bond": ("ZB=F", 3), "ZN  10Y Note": ("ZN=F", 3)},
     "Currencies": {"6E  Euro": ("6E=F", 4), "6J  Yen": ("6J=F", 7)},
     "Crypto":     {"BTC  Bitcoin": ("BTC-USD", 0), "ETH  Ether": ("ETH-USD", 2)},
     "Energy":     {"CL  Crude": ("CL=F", 2), "NG  Nat Gas": ("NG=F", 3)},
