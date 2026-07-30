@@ -322,8 +322,7 @@ def thesis_drift(data, cands, mode, top_n=12):
                 continue
             s1, s2 = _sharpe(ra, ann_a), _sharpe(rb, ann_b)
             out.append({
-                'label': f"{'cash' if lg is None else SYMBOL_NAMES.get(lg, clean_symbol(lg))}"
-                         f"/{'cash' if sh is None else SYMBOL_NAMES.get(sh, clean_symbol(sh))}",
+                'label': pos_label(c),
                 'kind': c['kind'], 'sh_h1': s1, 'sh_h2': s2, 'delta': s2 - s1,
                 'er_h1': _efficiency(ra), 'er_h2': _efficiency(rb),
                 'corr_h1': c1, 'corr_h2': c2,
@@ -466,7 +465,41 @@ def fetch_spread_data(symbols_tuple, lookback_days=0, interval='1d', start_iso=N
 # CANDIDATES — outrights and pairs, measured the same way
 # =============================================================================
 
-METRICS = ['Sharpe', 'Sortino', 'MAR', 'R²', 'ER']
+# Metrics that go into the composite, with weights. MAR and Sortino are
+# deliberately EXCLUDED and kept as display columns only:
+#   MAR is annualised return / average drawdown. Annualise a 3-day return by
+#   x4226, divide by a 0.6% drawdown, and it saturates — on a 27-bar window 123
+#   of 165 rows pinned to the cap, so its rank contribution was arbitrary
+#   tie-breaking, not signal. Clipping hid the symptom; the metric is simply
+#   unusable on short spans, as is Calmar for the same reason.
+#   Sortino ranked near-identically to Sharpe across every run, so including it
+#   just counted Sharpe twice.
+# ER is double-weighted because it is the only member that stays meaningful when
+# the span is too short for a t-statistic.
+# Composite = equal-weighted average of the rank on each of these three.
+#   Sharpe  risk-adjusted return; the magnitude of the move per unit of vol.
+#   ER      Kaufman efficiency; how much of the distance travelled was retained.
+#   Win%    hit rate; how often the position was onside bar to bar.
+# Together they cover size, path quality and consistency. MAR and Sortino are
+# excluded and remain display-only: MAR saturates on short windows (it pinned to
+# the cap on 123 of 165 rows in a 57-bar field), and Sortino ranked almost
+# identically to Sharpe in every run, so including it just counted Sharpe twice.
+COMPOSITE_WEIGHTS = {'Sharpe': 1.0, 'ER': 1.0, 'Win%': 1.0}
+METRICS = list(COMPOSITE_WEIGHTS)
+
+
+def pos_label(c):
+    """Readable name for any candidate, including short outrights where `long`
+    is None and a naive lookup renders the string 'None'."""
+    lg, sh = c.get('long'), c.get('short')
+    if lg and sh:
+        return (f"{SYMBOL_NAMES.get(lg, clean_symbol(lg))}/"
+                f"{SYMBOL_NAMES.get(sh, clean_symbol(sh))}")
+    if lg:
+        return f"long {SYMBOL_NAMES.get(lg, clean_symbol(lg))}"
+    if sh:
+        return f"short {SYMBOL_NAMES.get(sh, clean_symbol(sh))}"
+    return "—"
 
 
 def _sector_of(sym):
@@ -701,8 +734,10 @@ def rank_field(candidates):
         order = sorted(range(n), key=lambda i: -vals[i])
         for rank, idx in enumerate(order):
             candidates[idx][f'_{metric}_rank'] = rank + 1
+    total_w = sum(COMPOSITE_WEIGHTS.values())
     for c in candidates:
-        c['_score'] = float(np.mean([c[f'_{m}_rank'] for m in METRICS]))
+        c['_score'] = float(sum(c[f'_{m}_rank'] * COMPOSITE_WEIGHTS[m]
+                                for m in METRICS) / total_w)
 
 
 def apply_field_rank(candidates, sort_key):
@@ -764,7 +799,7 @@ def build_digest(field, table_rows, data, ctx, top_n=25):
     A(f"fitness         {ctx['fitness']}")
     A(f"field           {ctx['n_out']} outrights + {ctx['n_pair']} pairs = {len(field)} candidates")
 
-    se = (ctx['ann'] / len(data)) ** 0.5
+    se = ctx.get('se') or sharpe_se(ctx.get('span', 365))
     A("")
     A("-- SIGNIFICANCE ------------------------------------------------")
     A(f"Sharpe standard error   +/-{se:.2f}   ({len(data)} bars)")
@@ -1385,7 +1420,7 @@ def render_spreads_tab(is_mobile: bool = False) -> None:
         weight_label = st.selectbox("Weighting", list(WEIGHTINGS), index=0,
                                     key="spr_weight", label_visibility="collapsed")
 
-    r2c1, r2c2, r2c5, r2c3, r2c4 = st.columns([2, 2, 2, 1, 1])
+    r2c1, r2c2, r2c5, r2c6, r2c3, r2c4 = st.columns([2, 2, 2, 2, 1, 1])
     with r2c1:
         st.markdown("##### Fitness")
         sort_by = st.selectbox("Fitness", list(SORT_KEYS), index=0, key="spr_sort",
@@ -1398,6 +1433,10 @@ def render_spreads_tab(is_mobile: bool = False) -> None:
         st.markdown("##### Max leg ratio")
         cap_label = st.selectbox("Max leg ratio", list(RATIO_CAPS), index=2,
                                  key="spr_cap", label_visibility="collapsed")
+    with r2c6:
+        st.markdown("##### Min win%")
+        win_floor = st.selectbox("Min win%", ["Off", "50%", "55%", "60%"], index=0,
+                                 key="spr_win", label_visibility="collapsed")
     with r2c3:
         st.markdown("##### Show")
         show = st.selectbox("Show", ["10", "25", "50", "100", "All"], index=4,
@@ -1528,19 +1567,16 @@ def render_spreads_tab(is_mobile: bool = False) -> None:
 
     line = [f"**{len(outs)} outrights + {len(pairs)} pairs** = {len(field)} candidates"]
     if best_out:
-        bo = SYMBOL_NAMES.get(best_out['long'], clean_symbol(best_out['long']))
-        line.append(f"best outright **{bo}** at #{best_out['_field']}")
+        line.append(f"best outright **{pos_label(best_out)}** at #{best_out['_field']}")
     if best_pair:
-        bl = SYMBOL_NAMES.get(best_pair['long'], clean_symbol(best_pair['long']))
-        bs = SYMBOL_NAMES.get(best_pair['short'], clean_symbol(best_pair['short']))
-        line.append(f"best pair **{bl}/{bs}** at #{best_pair['_field']}")
+        line.append(f"best pair **{pos_label(best_pair)}** at #{best_pair['_field']}")
     if best_out and pairs:
         line.append(f"**{n_beat} of {len(pairs)}** pairs beat it")
         line.append(f"**{outs_top10}/10** of the top ten are outrights")
     st.markdown("  ·  ".join(line))
 
     if outs and pairs:
-        se_ = (ann / len(data)) ** 0.5
+        se_ = sharpe_se(window_days)   # calendar span is what determines SE
         mp = float(np.median([c['Sharpe'] for c in pairs]))
         mo = float(np.median([c['Sharpe'] for c in outs]))
         st.caption(
@@ -1583,6 +1619,21 @@ def render_spreads_tab(is_mobile: bool = False) -> None:
             f"that as unproven.")
 
     _diagnostics(res)
+
+    # --- win-rate floor: a robustness screen, applied after ranking ---
+    n_win = 0
+    if win_floor != "Off":
+        thr = float(win_floor.rstrip('%'))
+        keep = [c for c in field if c['Win%'] >= thr]
+        n_win = len(field) - len(keep)
+        field = keep
+        if not field:
+            st.warning(f"Nothing clears a {win_floor} win rate over this window.")
+            return
+        st.caption(f"**{n_win} candidates below the {win_floor} win-rate floor "
+                   f"hidden.** Note the win rate's own standard error here is "
+                   f"±{np.sqrt(0.25 / len(data)) * 100:.1f} percentage points, so "
+                   f"treat this as a rough screen rather than a sharp cut.")
 
     # --- the single ranked table ---
     if type_filter == 'Pairs only':
@@ -1653,6 +1704,7 @@ def render_spreads_tab(is_mobile: bool = False) -> None:
                    "leg concentration. Use the copy button in the corner.")
         dg_n = st.slider("Rows in digest", 10, 60, 25, 5, key="spr_dgn")
         ctx = {'window': window_txt, 'bar': bar_name, 'ann': ann,
+               'se': sharpe_se(window_days), 'span': window_days,
                'universe': universe, 'weighting': weight_label,
                'ratio_cap': cap_label, 'fitness': metric_txt,
                'n_out': len(outs), 'n_pair': len(pairs),
