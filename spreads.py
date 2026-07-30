@@ -815,6 +815,43 @@ def build_digest(field, table_rows, data, ctx, top_n=25):
     return "\n".join(L)
 
 
+def score_cells(rows, periods):
+    """Percentile-rank each position WITHIN each horizon, then pick its best cell.
+
+    Raw ER cannot be compared across horizons. Kaufman efficiency is
+    |net move| / path length, and a coarser bar traces a shorter path over the
+    same move — measured on one identical price series ER reads 0.04 on hourly
+    bars and 0.41 on weekly. Rank cells on the raw number and you sort by
+    timeframe, not by trade quality.
+
+    Ranking within a column removes that entirely: the question becomes "how
+    exceptional is this position among its peers on the same horizon", which IS
+    comparable across horizons. The winning cell then answers the real question —
+    trade WHAT, on WHICH holding period.
+    """
+    n_rows = len(rows)
+    if not n_rows:
+        return
+    for per in periods:
+        vals = [(i, rows[i].get(f'ER@{per}')) for i in range(n_rows)]
+        valid = sorted([(i, v) for i, v in vals if not pd.isna(v)], key=lambda x: x[1])
+        m = len(valid)
+        for rank, (i, _) in enumerate(valid):
+            rows[i][f'pct@{per}'] = (rank + 1) / m * 100 if m else float('nan')
+        for i, v in vals:
+            if pd.isna(v):
+                rows[i][f'pct@{per}'] = float('nan')
+    for c in rows:
+        cells = [(p, c.get(f'pct@{p}')) for p in periods]
+        cells = [(p, v) for p, v in cells if not pd.isna(v)]
+        if cells:
+            bp, bv = max(cells, key=lambda x: x[1])
+            c['best_tf'], c['best_pct'] = bp, bv
+            c['best_er'] = c.get(f'ER@{bp}')
+        else:
+            c['best_tf'], c['best_pct'], c['best_er'] = '—', float('nan'), float('nan')
+
+
 def build_snapshot_digest(rows, meta, ctx, top_n=30):
     """Fixed-width multi-period export, written to be pasted into a chat.
 
@@ -846,9 +883,13 @@ def build_snapshot_digest(rows, meta, ctx, top_n=30):
     A("    Scale-free and descriptive, so it stays readable on short spans where")
     A("    Sharpe does not. ALIGN = periods with positive ER (persistence).")
     A("")
+    A("Raw ER is NOT comparable across horizons — a coarser bar traces a shorter")
+    A("    path, inflating ER mechanically. PCTILE is the position's rank WITHIN its")
+    A("    own horizon, which IS comparable. BEST = the horizon to trade it on.")
+    A("")
     prim = meta['primary']
-    A(f"-- RANKED BY ER @ {prim} " + "-" * max(0, 48 - len(prim)))
-    hdr = f"{'#':>3} {'LONG':<6}{'SHORT':<6}{'SECTOR':<9}{'ALIGN':>6}"
+    A("-- RANKED BY BEST CELL (position x horizon) ------------------------")
+    hdr = f"{'#':>3} {'LONG':<6}{'SHORT':<6}{'SECTOR':<9}{'BEST':>5}{'PCT':>5}{'ALIGN':>6}"
     for per in pers:
         hdr += f"{'ER_' + per:>8}"
     hdr += f"{'SHRP':>8}{'TOT%':>8}{'VOL%':>8}{'MDD%':>8}{'CORR':>7}{'RATIO':>7}"
@@ -856,7 +897,10 @@ def build_snapshot_digest(rows, meta, ctx, top_n=30):
     for i, c in enumerate(rows[:top_n], 1):
         ln = 'cash' if c['long'] is None else SYMBOL_NAMES.get(c['long'], clean_symbol(c['long']))
         sn = 'cash' if c['short'] is None else SYMBOL_NAMES.get(c['short'], clean_symbol(c['short']))
+        pc = c.get('best_pct')
         line = (f"{i:>3} {ln:<6}{sn:<6}{str(c.get('Sector','-'))[:8]:<9}"
+                f"{str(c.get('best_tf','-')):>5}"
+                f"{'   - ' if pd.isna(pc) else f'{pc:5.0f}'}"
                 f"{c.get('align_txt','-'):>6}")
         for per in pers:
             v = c.get(f'ER@{per}')
@@ -1144,6 +1188,8 @@ def render_snapshot_table(rows, meta, theme, top_n=40):
             f"<th style='{th}text-align:left'>LONG</th>"
             f"<th style='{th}text-align:left'>SHORT</th>"
             f"<th style='{th}text-align:left'>SECTOR</th>"
+            f"<th style='{th}text-align:center'>BEST</th>"
+            f"<th style='{th}text-align:right'>PCTILE</th>"
             f"<th style='{th}text-align:center'>ALIGN</th>")
     for per in pers:
         mark = " ★" if per == meta['primary'] else ""
@@ -1168,9 +1214,16 @@ def render_snapshot_table(rows, meta, theme, top_n=40):
                f"<td style='{td}color:{_mut}'>{i}</td>"
                f"<td style='{td}color:{pos_c};font-weight:600'>{ln}</td>"
                f"<td style='{td}color:{short_c};font-weight:600'>{sn}</td>"
-               f"<td style='{td}color:{_mut};font-size:10px'>{c.get('Sector','—')}</td>"
-               f"<td style='{td}text-align:center;color:{al_c};font-weight:700'>"
-               f"{c.get('align_txt','—')}</td>")
+               f"<td style='{td}color:{_mut};font-size:10px'>{c.get('Sector','—')}</td>")
+        pc = c.get('best_pct')
+        pc_c = pos_c if not pd.isna(pc) and pc >= 90 else (
+            _txt2 if not pd.isna(pc) and pc >= 70 else _mut)
+        row += (f"<td style='{td}text-align:center;color:{pos_c};font-weight:700'>"
+                f"{c.get('best_tf','—')}</td>"
+                f"<td style='{td}text-align:right;color:{pc_c};font-weight:700'>"
+                f"{'—' if pd.isna(pc) else f'{pc:.0f}'}</td>"
+                f"<td style='{td}text-align:center;color:{al_c}'>"
+                f"{c.get('align_txt','—')}</td>")
         for per in pers:
             v = c.get(f'ER@{per}')
             txt = '—' if pd.isna(v) else f"{v:.3f}"
@@ -1245,8 +1298,11 @@ def _render_snapshot_mode(theme, is_mobile):
         rows = keep
 
     prim = meta['primary']
-    rows = sorted(rows, key=lambda c: (-(c.get('align') or 0),
-                                       -(c.get(f'ER@{prim}') or -9)))
+    pers = list(meta['periods'])
+    score_cells(rows, pers)
+    rows = sorted(rows, key=lambda c: -(c.get('best_pct')
+                                        if not pd.isna(c.get('best_pct', float('nan')))
+                                        else -1))
 
     _badge(theme, [f"primary {prim} · {PERIOD_BARS[prim]}"]
            + [f"{p} {m['bar']} · {m['bars']}b · SE ±{m['se']:.1f}"
@@ -1255,10 +1311,26 @@ def _render_snapshot_mode(theme, is_mobile):
 
     n_out = sum(1 for c in rows if c['kind'] == 'outright')
     n_full = sum(1 for c in rows if c.get('align_n') and c['align'] == c['align_n'])
+    owners = {}
+    for c in rows:
+        owners[c.get('best_tf', '—')] = owners.get(c.get('best_tf', '—'), 0) + 1
+    own_txt = " · ".join(f"{k} {v}" for k, v in
+                        sorted(owners.items(), key=lambda x: -x[1]) if k != '—')
     st.markdown(
-        f"**{len(rows)} candidates** ({n_out} outrights) · sorted by ALIGN then "
-        f"ER @ {prim} · **{n_full}** trend cleanly in every period"
+        f"**{len(rows)} candidates** ({n_out} outrights) · sorted by **best cell** "
+        f"— the horizon each position ranks highest on"
         + (f" · {n_capped} hidden by the {cap_label} leg-ratio cap" if n_capped else ""))
+    st.caption(
+        f"**Horizon ownership:** {own_txt}. "
+        f"PCTILE is the rank *within* that horizon, so it is comparable across "
+        f"columns — raw ER is not, because a coarser bar traces a shorter path and "
+        f"inflates ER mechanically. ALIGN ({n_full} positive on every horizon) is "
+        f"kept as context, not as the objective: you are choosing a cell, not "
+        f"stacking confirmations."
+        + (" Note MTD and QTD share a start date in the first month of a quarter, "
+           "so the split between them is arbitrary until the month turns."
+           if {'MTD', 'QTD'} <= set(pers) and
+           period_start('MTD') == period_start('QTD') else ""))
 
     top_n = len(rows) if show == "All" else int(show)
     st.markdown(f"##### Ladder — {min(top_n, len(rows))} of {len(rows)} · ★ = primary")
@@ -1277,7 +1349,7 @@ def _render_snapshot_mode(theme, is_mobile):
 def render_spreads_tab(is_mobile: bool = False) -> None:
     theme = THEMES.get(st.session_state.get("theme", "Light"), THEMES["Dark"])
 
-    view = st.radio("View", ["Snapshot — all periods", "Single period — detail"],
+    view = st.radio("View", ["Single period — full field", "Snapshot — all horizons"],
                     index=0, horizontal=True, key="spr_view",
                     label_visibility="collapsed")
     if view.startswith("Snapshot"):
@@ -1332,7 +1404,7 @@ def render_spreads_tab(is_mobile: bool = False) -> None:
                             key="spr_topn", label_visibility="collapsed")
     with r2c4:
         st.markdown("##### Charts")
-        n_charts = st.selectbox("Charts", [6, 12, 24, 48], index=0,
+        n_charts = st.selectbox("Charts", [6, 12, 20, 30, 48], index=2,
                                 key="spr_charts", label_visibility="collapsed")
 
     if st.button("Refresh", key="rs"):
