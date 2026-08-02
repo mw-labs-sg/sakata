@@ -72,6 +72,15 @@ html, body, [data-testid="stAppViewContainer"], .stMarkdown,
 [data-testid="stTable"] tbody tr:hover td { background:#f8fafc; }
 [data-testid="stDataFrame"] { font-size:13px; border:1px solid #eef2f6; border-radius:8px; }
 hr { margin:0.6rem 0; border-color:#eef2f6; }
+
+/* two-up board panels — fill the column, tighter gutters */
+[data-testid="stHorizontalBlock"] [data-testid="stTable"] table {
+  width:100%; min-width:0; }
+[data-testid="stHorizontalBlock"] [data-testid="stTable"] th,
+[data-testid="stHorizontalBlock"] [data-testid="stTable"] td {
+  padding:3px 7px !important; }
+[data-testid="stHorizontalBlock"] [data-testid="stTable"] td:first-child {
+  padding-right:8px !important; }
 </style>
 """
 

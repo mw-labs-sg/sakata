@@ -12,7 +12,8 @@ _session = cffi_requests.Session(impersonate="chrome110")
 # Board: name -> (yahoo_ticker, decimals)
 # Scanner sectors. sector -> {name: (yahoo_ticker, decimals)}
 SECTORS = {
-    "Indices":    {"ES  S&P 500": ("ES=F", 2), "NQ  Nasdaq": ("NQ=F", 2)},
+    "Indices":    {"ES  S&P 500": ("ES=F", 2), "NQ  Nasdaq": ("NQ=F", 2),
+                   "NKD  Nikkei": ("NKD=F", 0)},
     # SR3 (3M SOFR) removed: Yahoo lists it too sparsely, and one thin column
     # clips every other instrument once the matrix is aligned. Re-add only if
     # a source with continuous history is wired in.
@@ -27,6 +28,14 @@ SECTORS = {
     "Softs":      {"SB  Sugar": ("SB=F", 2), "KC  Coffee": ("KC=F", 2)},
 }
 SYMBOLS = {k: v for g in SECTORS.values() for k, v in g.items()}
+
+# Macro grouping — drives the two-panel Board layout. Sector order within each
+# group is taken from SECTORS, so this only decides which side a sector lands on.
+GROUPS = {
+    "Financials":  ["Indices", "Bonds", "Currencies", "Crypto"],
+    "Commodities": ["Energy", "Metals", "Grains", "Softs"],
+}
+GROUP_OF = {sec: g for g, secs in GROUPS.items() for sec in secs}
 
 
 @st.cache_data(ttl=60, show_spinner=False)
