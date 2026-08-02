@@ -76,7 +76,7 @@ function table(head, body, cls) {
 /* Hand-rolled SVG. A charting library would be 60kb for eight bars. */
 function barChart(items, w, opts) {
   opts = opts || {};
-  var rowH = 24, padL = 96, padR = 14, padT = 6, padB = 22;
+  var rowH = 28, padL = 108, padR = 16, padT = 8, padB = 26;
   var h = items.length * rowH + padT + padB;
   var vals = items.map(function (d) { return d.v; });
   var lo = Math.min.apply(null, vals.concat([0]));
@@ -95,17 +95,17 @@ function barChart(items, w, opts) {
       '" text-anchor="middle">' + num(lo + span * t / 4, 1) + "</text>";
   }
   items.forEach(function (d, i) {
-    var y = padT + i * rowH, bh = 13;
+    var y = padT + i * rowH, bh = 15;
     var xv = x(d.v), x0 = Math.min(xv, zero), bw = Math.abs(xv - zero);
     s += '<text class="lbl" x="' + (padL - 10) + '" y="' + (y + bh / 2 + 4) +
       '" text-anchor="end">' + esc(d.k) + "</text>";
     s += '<rect x="' + x0 + '" y="' + y + '" width="' + Math.max(bw, 1) +
       '" height="' + bh + '" rx="2" fill="' +
-      (d.v >= 0 ? "#15803d" : "#be123c") + '"><title>' + esc(d.k) + " " +
+      (d.v >= 0 ? "#0f766e" : "#9f3b46") + '"><title>' + esc(d.k) + " " +
       num(d.v, 2) + "</title></rect>";
   });
   s += '<line class="grid" x1="' + zero + '" y1="' + padT + '" x2="' + zero +
-    '" y2="' + (h - padB) + '" stroke="#cbd5e1"/>';
+    '" y2="' + (h - padB) + '" stroke="#c9d1d8"/>';
   return s + "</svg>";
 }
 
@@ -139,7 +139,7 @@ function lineChart(labels, series, bars, w, h, dec) {
         if (v == null) return;
         var bh = v / bmax * ih * 0.42;
         s += '<rect x="' + (x(i) - 3) + '" y="' + (padT + ih - bh) +
-          '" width="6" height="' + bh + '" fill="#cbd5e1" opacity=".55" rx="1"/>';
+          '" width="6" height="' + bh + '" fill="#e8edf0" opacity=".95" rx="1"/>';
       });
     }
   }
@@ -186,7 +186,7 @@ function candles(t, o, hh, l, c, overlays, w, h, dec) {
   }
   for (var i = 0; i < n; i++) {
     if (c[i] == null) continue;
-    var up = c[i] >= o[i], col = up ? "#15803d" : "#be123c";
+    var up = c[i] >= o[i], col = up ? "#0f766e" : "#9f3b46";
     s += '<line x1="' + x(i) + '" y1="' + y(hh[i]) + '" x2="' + x(i) +
       '" y2="' + y(l[i]) + '" stroke="' + col + '" stroke-width="1" opacity=".75"/>';
     var yo = y(o[i]), yc = y(c[i]);
@@ -288,17 +288,18 @@ function renderBoard(d) {
     '<span class="spacer"></span><span class="chip">' + d.rows.length +
     " instruments</span></div>" +
     '<div class="eyebrow">Sector performance · ' + hz + " %</div>" +
-    '<div class="card" style="padding:8px 4px">' +
-    barChart(agg, width() - 10) + "</div>" +
+    '<div class="plot">' + barChart(agg, width() - 26) + "</div>" +
     '<div class="grid2" style="margin-top:6px">' +
     panel("Financials") + panel("Commodities") + "</div>"
   );
 }
 
 /* ------------------------------------------------------------- Technical */
+/* One hue up, one down. Tints carry conviction so the eye reads strength
+   before it reads the digit. */
 var BIAS_COL = {
-  "3": "#166534", "2": "#15803d", "1": "#86a98f", "0": "#94a3b8",
-  "-1": "#c58a86", "-2": "#be123c", "-3": "#9f1239"
+  "3": "#134e4a", "2": "#0f766e", "1": "#5eada6", "0": "#9aa4b0",
+  "-1": "#c08b91", "-2": "#9f3b46", "-3": "#7a2731"
 };
 function renderTech(d) {
   var order = d.order, grid = d.grid;
@@ -331,7 +332,7 @@ function renderTech(d) {
     });
     body += '<tr><td class="l ind"><a href="#" data-code="' + u.code + '">' +
       esc(u.code) + " " + esc(u.name) + "</a></td>" + cells +
-      '<td style="color:' + (tot >= 0 ? "#15803d" : "#be123c") +
+      '<td style="color:' + (tot >= 0 ? "#0f766e" : "#9f3b46") +
       ';font-weight:600">' + (tot > 0 ? "+" : "") + tot + "</td></tr>";
   });
 
@@ -341,12 +342,12 @@ function renderTech(d) {
   var c = g[S.tech.hz] || {};
   var dec = (META.universe.filter(function (u) { return u.code === S.tech.code; })[0] || {}).dec;
   var chart = c.t ? candles(c.t, c.o, c.h, c.l, c.c, [
-    { k: "PH", v: c.ph, c: "#be123c", dash: "4 3" },
-    { k: "PL", v: c.pl, c: "#15803d", dash: "4 3" },
-    { k: "Mid", v: c.md, c: "#94a3b8", dash: "2 4" },
-    { k: "RB", v: c.vb, c: "#0d9488" },
-    { k: "RS", v: c.vs, c: "#b45309" }
-  ], width() - 10, 340, dec) : '<div class="skel">no series</div>';
+    { k: "PH", v: c.ph, c: "#9f3b46", dash: "4 3" },
+    { k: "PL", v: c.pl, c: "#0f766e", dash: "4 3" },
+    { k: "Mid", v: c.md, c: "#9aa4b0", dash: "2 4" },
+    { k: "RB", v: c.vb, c: "#134e4a" },
+    { k: "RS", v: c.vs, c: "#a16207" }
+  ], width() - 26, 340, dec) : '<div class="skel">no series</div>';
 
   var lv = [
     ["Prior high", c.high], ["RS target", c.rs], ["Mid", c.mid],
@@ -376,7 +377,7 @@ function renderTech(d) {
     esc(c.retrace || "—") + " / " + esc(c.trend || "—") + ") · position " +
     (c.pos == null ? "—" : num(c.pos, 0) + "%") + " of prior range · R:R to band " +
     (c.rr_retrace == null ? "—" : num(c.rr_retrace, 2)) + "</div>" +
-    '<div class="card" style="padding:6px 4px">' + chart + "</div>" +
+    '<div class="plot">' + chart + "</div>" +
     '<div class="eyebrow">Levels</div>' +
     table('<th class="l">Level</th><th>Price</th>', lv)
   );
@@ -550,9 +551,9 @@ function renderCurve(d) {
     "</b> · " + esc(c.shape) + " " + arrow + " · current roll " +
     (c.rollPct >= 0 ? "+" : "") + num(c.rollPct, 2) + "% · carry ann " +
     (c.carryAnn >= 0 ? "+" : "") + num(c.carryAnn, 1) + "%</div>" +
-    '<div class="card" style="padding:6px 4px">' +
-    lineChart(months, [{ k: "Settle", v: settle, c: "#0d9488", w: 2.2 }], oi,
-      width() - 10, 320, 2) + "</div>" +
+    '<div class="plot">' +
+    lineChart(months, [{ k: "Settle", v: settle, c: "#0f766e", w: 2.2 }], oi,
+      width() - 26, 320, 2) + "</div>" +
     '<div class="eyebrow">Settlements</div>' +
     table('<th class="l">Month</th><th>Settle</th><th>Change</th><th>Volume</th>' +
       "<th>OI</th>", detail)
@@ -781,7 +782,9 @@ window.addEventListener("resize", function () {
 });
 
 /* ------------------------------------------------------------------ boot */
-contours();
+/* Wallpaper retired: the contour art competed with the tables for attention,
+   and on white the data reads better with nothing behind it. contours() is
+   left in place in case a textured ground is ever wanted again. */
 var hash = (location.hash || "").replace("#", "");
 if (TABS.indexOf(hash) >= 0) S.tab = hash;
 load("meta").then(function (m) {

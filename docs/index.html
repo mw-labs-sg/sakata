@@ -3,44 +3,31 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#0b1220">
+<meta name="theme-color" content="#ffffff">
 <title>Sakata · futures terminal</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="sakata.css">
 </head>
 <body>
-<div class="canvas" aria-hidden="true"></div>
 
 <div class="wrap">
 
   <header class="head">
-    <svg class="head-art" viewBox="0 0 420 80" preserveAspectRatio="xMaxYMid slice" fill="none" aria-hidden="true">
-      <path d="M0 30 L78 36 L148 22 L212 32 L286 18 L352 27 L420 15" stroke="#10b981" stroke-width="1" opacity=".18"/>
-      <path d="M0 68 L62 54 L112 62 L172 36 L232 46 L292 20 L358 28 L420 10" stroke="#2dd4bf" stroke-width="1.5" opacity=".5" stroke-linejoin="round"/>
-      <path d="M0 75 L70 70 L132 74 L200 60 L262 68 L332 50 L420 42" stroke="#34d399" stroke-width="1.1" opacity=".26" stroke-linejoin="round"/>
-      <rect x="171" y="30" width="2.4" height="22" rx="1.2" fill="#2dd4bf" opacity=".22"/>
-      <rect x="231" y="40" width="2.4" height="17" rx="1.2" fill="#2dd4bf" opacity=".18"/>
-      <rect x="291" y="14" width="2.4" height="30" rx="1.2" fill="#5eead4" opacity=".28"/>
-      <rect x="357" y="22" width="2.4" height="24" rx="1.2" fill="#2dd4bf" opacity=".2"/>
-      <circle cx="292" cy="20" r="2.6" fill="#5eead4" opacity=".7"/>
+    <svg class="mark" width="20" height="24" viewBox="0 0 28 32" fill="none" aria-hidden="true">
+      <path d="M14 30V11" stroke="#0f766e" stroke-width="1.8" stroke-linecap="round"/>
+      <path d="M14 25c.2-2.9 1.9-4.4 5.3-4.6-.2 2.9-1.9 4.4-5.3 4.6z" fill="#0f766e" opacity=".4"/>
+      <path d="M14 25c-.2-2.9-1.9-4.4-5.3-4.6.2 2.9 1.9 4.4 5.3 4.6z" fill="#0f766e" opacity=".4"/>
+      <path d="M14 19.5c.2-2.9 1.9-4.4 5.3-4.6-.2 2.9-1.9 4.4-5.3 4.6z" fill="#0f766e" opacity=".68"/>
+      <path d="M14 19.5c-.2-2.9-1.9-4.4-5.3-4.6.2 2.9 1.9 4.4 5.3 4.6z" fill="#0f766e" opacity=".68"/>
+      <path d="M14 14c.2-2.9 1.9-4.4 5.3-4.6-.2 2.9-1.9 4.4-5.3 4.6z" fill="#0f766e"/>
+      <path d="M14 14c-.2-2.9-1.9-4.4-5.3-4.6.2 2.9 1.9 4.4 5.3 4.6z" fill="#0f766e"/>
+      <path d="M14 11.5V6" stroke="#0f766e" stroke-width="1.8" stroke-linecap="round"/>
     </svg>
-    <svg class="head-mark" width="26" height="30" viewBox="0 0 28 32" fill="none" aria-hidden="true">
-      <path d="M14 30V11" stroke="#34d399" stroke-width="1.7" stroke-linecap="round"/>
-      <path d="M14 25c.2-2.9 1.9-4.4 5.3-4.6-.2 2.9-1.9 4.4-5.3 4.6z" fill="#34d399" opacity=".55"/>
-      <path d="M14 25c-.2-2.9-1.9-4.4-5.3-4.6.2 2.9 1.9 4.4 5.3 4.6z" fill="#34d399" opacity=".55"/>
-      <path d="M14 19.5c.2-2.9 1.9-4.4 5.3-4.6-.2 2.9-1.9 4.4-5.3 4.6z" fill="#2dd4bf" opacity=".75"/>
-      <path d="M14 19.5c-.2-2.9-1.9-4.4-5.3-4.6.2 2.9 1.9 4.4 5.3 4.6z" fill="#2dd4bf" opacity=".75"/>
-      <path d="M14 14c.2-2.9 1.9-4.4 5.3-4.6-.2 2.9-1.9 4.4-5.3 4.6z" fill="#5eead4"/>
-      <path d="M14 14c-.2-2.9-1.9-4.4-5.3-4.6.2 2.9 1.9 4.4 5.3 4.6z" fill="#5eead4"/>
-      <path d="M14 11.5V6" stroke="#5eead4" stroke-width="1.7" stroke-linecap="round"/>
-    </svg>
-    <div class="head-word">
-      <span class="head-title">SAKATA</span>
-      <span class="head-tag">futures terminal</span>
-    </div>
-    <div class="head-meta"><span class="dot"></span><span id="stamp">loading</span></div>
+    <h1 class="wordmark">Sakata</h1>
+    <span class="rule"></span>
+    <span class="stamp" id="stamp">loading</span>
   </header>
 
   <nav class="tabs" id="tabs"></nav>

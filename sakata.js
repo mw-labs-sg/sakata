@@ -76,7 +76,7 @@ function table(head, body, cls) {
 /* Hand-rolled SVG. A charting library would be 60kb for eight bars. */
 function barChart(items, w, opts) {
   opts = opts || {};
-  var rowH = 24, padL = 96, padR = 14, padT = 6, padB = 22;
+  var rowH = 28, padL = 108, padR = 16, padT = 8, padB = 26;
   var h = items.length * rowH + padT + padB;
   var vals = items.map(function (d) { return d.v; });
   var lo = Math.min.apply(null, vals.concat([0]));
@@ -95,17 +95,17 @@ function barChart(items, w, opts) {
       '" text-anchor="middle">' + num(lo + span * t / 4, 1) + "</text>";
   }
   items.forEach(function (d, i) {
-    var y = padT + i * rowH, bh = 13;
+    var y = padT + i * rowH, bh = 15;
     var xv = x(d.v), x0 = Math.min(xv, zero), bw = Math.abs(xv - zero);
     s += '<text class="lbl" x="' + (padL - 10) + '" y="' + (y + bh / 2 + 4) +
       '" text-anchor="end">' + esc(d.k) + "</text>";
     s += '<rect x="' + x0 + '" y="' + y + '" width="' + Math.max(bw, 1) +
       '" height="' + bh + '" rx="2" fill="' +
-      (d.v >= 0 ? "#15803d" : "#b91c1c") + '"><title>' + esc(d.k) + " " +
+      (d.v >= 0 ? "#0d9488" : "#cf5a54") + '"><title>' + esc(d.k) + " " +
       num(d.v, 2) + "</title></rect>";
   });
   s += '<line class="grid" x1="' + zero + '" y1="' + padT + '" x2="' + zero +
-    '" y2="' + (h - padB) + '" stroke="#d1d5db"/>';
+    '" y2="' + (h - padB) + '" stroke="#c9d1d8"/>';
   return s + "</svg>";
 }
 
@@ -139,7 +139,7 @@ function lineChart(labels, series, bars, w, h, dec) {
         if (v == null) return;
         var bh = v / bmax * ih * 0.42;
         s += '<rect x="' + (x(i) - 3) + '" y="' + (padT + ih - bh) +
-          '" width="6" height="' + bh + '" fill="#e5e7eb" opacity=".9" rx="1"/>';
+          '" width="6" height="' + bh + '" fill="#e9edf1" opacity=".95" rx="1"/>';
       });
     }
   }
@@ -186,7 +186,7 @@ function candles(t, o, hh, l, c, overlays, w, h, dec) {
   }
   for (var i = 0; i < n; i++) {
     if (c[i] == null) continue;
-    var up = c[i] >= o[i], col = up ? "#15803d" : "#b91c1c";
+    var up = c[i] >= o[i], col = up ? "#0d9488" : "#cf5a54";
     s += '<line x1="' + x(i) + '" y1="' + y(hh[i]) + '" x2="' + x(i) +
       '" y2="' + y(l[i]) + '" stroke="' + col + '" stroke-width="1" opacity=".75"/>';
     var yo = y(o[i]), yc = y(c[i]);
@@ -295,9 +295,11 @@ function renderBoard(d) {
 }
 
 /* ------------------------------------------------------------- Technical */
+/* One hue up, one down. Tints carry conviction so the eye reads strength
+   before it reads the digit. */
 var BIAS_COL = {
-  "3": "#14532d", "2": "#15803d", "1": "#6b9d7a", "0": "#9ca3af",
-  "-1": "#c08b87", "-2": "#b91c1c", "-3": "#7f1d1d"
+  "3": "#0f5f57", "2": "#0d9488", "1": "#6cc0b6", "0": "#99a2ac",
+  "-1": "#e0a09c", "-2": "#cf5a54", "-3": "#a33f3a"
 };
 function renderTech(d) {
   var order = d.order, grid = d.grid;
@@ -330,7 +332,7 @@ function renderTech(d) {
     });
     body += '<tr><td class="l ind"><a href="#" data-code="' + u.code + '">' +
       esc(u.code) + " " + esc(u.name) + "</a></td>" + cells +
-      '<td style="color:' + (tot >= 0 ? "#15803d" : "#b91c1c") +
+      '<td style="color:' + (tot >= 0 ? "#0d9488" : "#cf5a54") +
       ';font-weight:600">' + (tot > 0 ? "+" : "") + tot + "</td></tr>";
   });
 
@@ -340,11 +342,11 @@ function renderTech(d) {
   var c = g[S.tech.hz] || {};
   var dec = (META.universe.filter(function (u) { return u.code === S.tech.code; })[0] || {}).dec;
   var chart = c.t ? candles(c.t, c.o, c.h, c.l, c.c, [
-    { k: "PH", v: c.ph, c: "#b91c1c", dash: "4 3" },
-    { k: "PL", v: c.pl, c: "#15803d", dash: "4 3" },
-    { k: "Mid", v: c.md, c: "#9ca3af", dash: "2 4" },
-    { k: "RB", v: c.vb, c: "#0d9488" },
-    { k: "RS", v: c.vs, c: "#b45309" }
+    { k: "PH", v: c.ph, c: "#cf5a54", dash: "4 3" },
+    { k: "PL", v: c.pl, c: "#0d9488", dash: "4 3" },
+    { k: "Mid", v: c.md, c: "#99a2ac", dash: "2 4" },
+    { k: "RB", v: c.vb, c: "#0f5f57" },
+    { k: "RS", v: c.vs, c: "#a16207" }
   ], width() - 26, 340, dec) : '<div class="skel">no series</div>';
 
   var lv = [
@@ -550,7 +552,7 @@ function renderCurve(d) {
     (c.rollPct >= 0 ? "+" : "") + num(c.rollPct, 2) + "% · carry ann " +
     (c.carryAnn >= 0 ? "+" : "") + num(c.carryAnn, 1) + "%</div>" +
     '<div class="plot">' +
-    lineChart(months, [{ k: "Settle", v: settle, c: "#0d9488", w: 2.2 }], oi,
+    lineChart(months, [{ k: "Settle", v: settle, c: "#0d9488", w: 2.4 }], oi,
       width() - 26, 320, 2) + "</div>" +
     '<div class="eyebrow">Settlements</div>' +
     table('<th class="l">Month</th><th>Settle</th><th>Change</th><th>Volume</th>' +
