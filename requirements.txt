@@ -1,10 +1,7 @@
-streamlit>=1.36
-yfinance>=0.2.40
-pandas>=2.0
+# Build-time only. Nothing here runs in the browser.
+pandas>=2.2
 numpy>=1.26
-altair>=5.0
-plotly>=5.20
+yfinance>=0.2.40
 curl_cffi>=0.7
 lxml>=5.0
 beautifulsoup4>=4.12
-matplotlib

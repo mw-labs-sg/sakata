@@ -1,0 +1,46 @@
+name: build sakata
+
+on:
+  schedule:
+    # 4x on weekdays, after each session's settlements land (UTC)
+    - cron: "10 6,12,18,23 * * 1-6"
+  workflow_dispatch:        # the "refresh now" button, under Actions
+  push:
+    paths:
+      - "site/**"
+      - "sk_*.py"
+      - "build.py"
+      - "sakata_stats.py"
+      - ".github/workflows/build.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sakata-build
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: Build site
+        run: python build.py
+
+      - name: Commit if changed
+        run: |
+          git config user.name  "sakata-bot"
+          git config user.email "actions@github.com"
+          git add docs
+          git diff --staged --quiet || git commit -m "build: $(date -u '+%Y-%m-%d %H:%M') UTC"
+          git pull --rebase origin main
+          git push origin main
