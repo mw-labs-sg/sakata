@@ -1,0 +1,171 @@
+/* Sakata — static terminal.
+
+   One typeface, white ground, one accent. The figures use Inter's tabular
+   numerals rather than a monospace: mono aligns columns but reads as a code
+   editor, and Inter's tabular set aligns just as well while looking like a
+   research note. Set --fig to var(--mono) below to switch back. */
+
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap') screen and (min-width:99999px);
+
+:root{
+  --sans:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;
+  --mono:ui-monospace,'SF Mono',Menlo,monospace;
+  --fig:var(--sans);            /* face used for every figure */
+
+  --ink:#111827; --body:#374151; --mute:#6b7280; --faint:#9ca3af;
+  --line:#e5e7eb; --hair:#f3f4f6; --wash:#fafafa;
+  --teal:#0f766e; --teal-d:#115e59; --teal-w:#f0fdfa;
+  --pos:#15803d; --neg:#b91c1c; --amber:#b45309;
+}
+
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:#fff;color:var(--ink);font-family:var(--sans);
+  font-size:14px;line-height:1.55;-webkit-font-smoothing:antialiased;
+  font-feature-settings:'cv05' 1,'cv11' 1}
+
+.wrap{max-width:1140px;margin:0 auto;padding:30px 22px 64px}
+
+/* ---------------------------------------------------------------- header */
+/* No gradient, no chart art. A mark, a name, a timestamp — the page itself is
+   the interesting part. */
+.head{display:flex;align-items:center;gap:12px;padding:0 0 16px;
+  border-bottom:1px solid var(--line);margin-bottom:2px}
+.head-mark{flex:none}
+.head-word{display:flex;flex-direction:column;gap:1px;line-height:1.15}
+.head-title{font-size:19px;font-weight:600;letter-spacing:-.015em;color:var(--ink)}
+.head-tag{font-size:11px;font-weight:500;letter-spacing:.02em;color:var(--faint)}
+.head-meta{margin-left:auto;display:flex;align-items:center;gap:7px;
+  font-size:11.5px;font-weight:500;color:var(--faint);
+  font-variant-numeric:tabular-nums}
+.dot{width:5px;height:5px;border-radius:50%;background:var(--teal);flex:none}
+
+/* ------------------------------------------------------------------ tabs */
+.tabs{display:flex;gap:0;flex-wrap:wrap;border-bottom:1px solid var(--line);
+  margin-bottom:20px;position:sticky;top:0;z-index:6;background:#fff}
+.tab{appearance:none;border:none;background:none;cursor:pointer;padding:11px 14px;
+  font-family:var(--sans);font-size:13px;font-weight:500;color:var(--mute);
+  border-bottom:2px solid transparent;margin-bottom:-1px;transition:color .12s}
+.tab:hover{color:var(--ink)}
+.tab.on{color:var(--teal);font-weight:600;border-bottom-color:var(--teal)}
+
+/* -------------------------------------------------------------- controls */
+.bar{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin:0 0 16px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;
+  overflow:hidden;background:#fff}
+.seg button{appearance:none;border:none;background:none;cursor:pointer;
+  font-family:var(--sans);font-size:12px;font-weight:500;color:var(--mute);
+  padding:6px 14px;border-right:1px solid var(--line)}
+.seg button:last-child{border-right:none}
+.seg button:hover{color:var(--ink);background:var(--wash)}
+.seg button.on{color:#fff;background:var(--teal);font-weight:600}
+select{font-family:var(--sans);font-size:13px;color:var(--ink);padding:6px 30px 6px 11px;
+  border:1px solid var(--line);border-radius:6px;background:#fff;appearance:none;
+  background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%236b7280' stroke-width='1.5'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 11px center}
+.spacer{margin-left:auto}
+
+/* ----------------------------------------------------------------- type */
+h5,.eyebrow{font-size:11px;text-transform:uppercase;letter-spacing:.07em;
+  color:var(--mute);font-weight:600;margin:26px 0 9px}
+.eyebrow:first-child{margin-top:0}
+.note{font-size:13px;color:var(--mute);line-height:1.65;margin:0 0 14px;
+  max-width:78ch}
+.note b{color:var(--ink);font-weight:600}
+.warn{background:#fffbeb;border:1px solid #fde68a;padding:11px 14px;
+  font-size:12.5px;line-height:1.6;margin:0 0 14px;border-radius:6px;
+  color:#78350f;max-width:82ch}
+.warn b{color:#78350f;font-weight:600}
+.chips{margin:0 0 14px}
+.chip{display:inline-block;padding:3px 9px;margin:0 6px 6px 0;
+  border:1px solid var(--line);border-radius:5px;background:#fff;
+  font-size:11.5px;font-weight:500;color:var(--mute);
+  font-variant-numeric:tabular-nums}
+.skel{padding:44px 0;text-align:center;color:var(--faint);font-size:13px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+@media(max-width:860px){.grid2{grid-template-columns:1fr;gap:8px}}
+
+/* --------------------------------------------------------------- tables */
+/* Hairline rules, no card shadow, no fills. On white the data is the only
+   thing with weight, which is the whole point. */
+.card{border:1px solid var(--line);border-radius:7px;overflow:hidden;background:#fff}
+.scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+table{border-collapse:collapse;width:100%;font-size:12.5px;line-height:1.5;
+  font-variant-numeric:tabular-nums lining-nums}
+thead th{background:var(--wash);color:var(--mute);font-weight:600;font-size:10.5px;
+  text-transform:uppercase;letter-spacing:.05em;padding:9px 13px;text-align:right;
+  border-bottom:1px solid var(--line);white-space:nowrap}
+thead th.l{text-align:left}
+td{font-family:var(--fig);font-weight:450;padding:7px 13px;text-align:right;
+  border-bottom:1px solid var(--hair);white-space:nowrap;color:var(--body)}
+td.l{text-align:left;color:var(--ink);font-weight:500}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover td{background:#fcfcfd}
+
+/* sector breaks: a rule and a label, not a coloured band */
+tr.sec td{background:#fff;color:var(--teal);font-weight:600;font-size:10px;
+  text-transform:uppercase;letter-spacing:.08em;padding:14px 13px 5px;
+  border-bottom:1px solid var(--line)}
+tr.sec:hover td{background:#fff}
+tr.sec:first-child td{padding-top:9px}
+tr.out td{background:var(--wash)}
+tr.out:hover td{background:#f6f7f8}
+
+.pos{color:var(--pos);font-weight:550}
+.neg{color:var(--neg);font-weight:550}
+.dim{color:var(--mute)}
+.faint{color:var(--faint)}
+.lg{color:var(--pos);font-weight:600}
+.sh{color:var(--amber);font-weight:600}
+.cash{color:var(--faint)}
+.ind{padding-left:13px}
+td.l a{color:var(--ink);text-decoration:none;border-bottom:1px solid transparent}
+td.l a:hover{color:var(--teal);border-bottom-color:var(--teal)}
+
+/* --------------------------------------------------------------- charts */
+.chart{width:100%;display:block}
+.chart .axis{font-family:var(--sans);font-size:10px;fill:var(--faint);
+  font-variant-numeric:tabular-nums}
+.chart .lbl{font-family:var(--sans);font-size:11.5px;fill:var(--body)}
+.chart .grid{stroke:var(--hair);stroke-width:1}
+.plot{border:1px solid var(--line);border-radius:7px;padding:10px 6px;background:#fff}
+
+/* ----------------------------------------------------------------- news */
+.item{border-bottom:1px solid var(--hair);padding:13px 16px}
+.item:last-child{border-bottom:none}
+.item a{color:var(--ink);text-decoration:none;font-weight:600;font-size:13.5px}
+.item a:hover{color:var(--teal)}
+.item p{margin:5px 0 0;font-size:13px;color:var(--mute);line-height:1.6}
+.item .when{font-size:11px;color:var(--faint);display:block;margin-top:6px;
+  font-variant-numeric:tabular-nums}
+.mkt{padding:15px 16px;border-bottom:1px solid var(--hair)}
+.mkt:last-child{border-bottom:none}
+.mkt h6{margin:0 0 6px;font-size:11px;font-weight:600;letter-spacing:.05em;
+  color:var(--teal);text-transform:uppercase}
+.mkt p{margin:0;font-size:13.5px;color:var(--body);line-height:1.65;max-width:80ch}
+
+/* --------------------------------------------------------------- digest */
+details{margin:22px 0;border:1px solid var(--line);border-radius:7px;
+  overflow:hidden;background:#fff}
+summary{padding:11px 14px;background:var(--wash);cursor:pointer;font-size:12.5px;
+  font-weight:600;color:var(--body)}
+pre{margin:0;padding:15px;font-family:var(--mono);font-size:11px;line-height:1.55;
+  overflow-x:auto;white-space:pre;color:var(--body)}
+.btn{margin:11px 14px;padding:5px 13px;font-family:var(--sans);font-size:12px;
+  font-weight:500;border:1px solid var(--line);border-radius:6px;background:#fff;
+  color:var(--mute);cursor:pointer}
+.btn:hover{border-color:var(--teal);color:var(--teal)}
+
+.foot{margin-top:44px;padding-top:16px;border-top:1px solid var(--line);
+  font-size:11.5px;color:var(--faint);line-height:1.65;max-width:62ch}
+
+@media(max-width:640px){
+  .wrap{padding:18px 14px 48px}
+  .head-title{font-size:17px}
+  .head-meta{font-size:10.5px}
+  table{font-size:11.5px}
+  td{padding:6px 9px}
+  thead th{padding:8px 9px;font-size:10px}
+  .tab{padding:10px 11px;font-size:12.5px}
+  .note{font-size:12.5px}
+}
