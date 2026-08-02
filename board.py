@@ -8,8 +8,13 @@ from common import SECTORS, GROUPS, GROUP_OF, get_perf
 HORIZONS = ["Day", "WTD", "MTD", "QTD", "YTD"]
 _KEYS = {"Day": "day", "WTD": "wtd", "MTD": "mtd", "QTD": "qtd", "YTD": "ytd"}
 
-_HDR_STYLE = ("background:#f1f5f9;color:#0f766e;font-weight:700;font-size:10px;"
-              "text-transform:uppercase;letter-spacing:0.06em;")
+POS, NEG = "#15803d", "#be123c"
+
+# Sector header rows: tinted band, teal spine on the first cell.
+_HDR = ("background:#f0fdfa;color:#0f766e;font-weight:600;font-size:9.5px;"
+        "text-transform:uppercase;letter-spacing:0.1em;"
+        "font-family:'IBM Plex Sans',sans-serif;")
+_SPINE = "box-shadow:inset 2px 0 0 #0d9488;"
 
 
 def build_scanner() -> pd.DataFrame:
@@ -31,7 +36,7 @@ def build_scanner() -> pd.DataFrame:
 
 
 def _fmt_pct(v) -> str:
-    return "—" if v is None or pd.isna(v) else f"{v:+.2f}%"
+    return "—" if v is None or pd.isna(v) else f"{v:+.2f}"
 
 
 def _panel_frame(df: pd.DataFrame, group: str):
@@ -55,9 +60,9 @@ def _panel_frame(df: pd.DataFrame, group: str):
 def _cell_colour(v):
     s = str(v)
     if s.startswith("+"):
-        return "color:#16a34a;font-weight:600;"
+        return f"color:{POS};font-weight:600;"
     if s.startswith("-"):
-        return "color:#dc2626;font-weight:600;"
+        return f"color:{NEG};font-weight:600;"
     return "color:#cbd5e1;"
 
 
@@ -68,7 +73,9 @@ def _render_panel(df: pd.DataFrame, group: str) -> None:
         return
 
     def row_style(row):
-        return [_HDR_STYLE if row["Instrument"] in headers else ""] * len(row)
+        if row["Instrument"] not in headers:
+            return [""] * len(row)
+        return [_HDR + _SPINE] + [_HDR] * (len(row) - 1)
 
     st.table(
         frame.style
@@ -92,20 +99,24 @@ def render_board() -> None:
             st.rerun()
 
     # --- sector performance: one chart across both groups, ranked ---
-    st.markdown(f"##### Sector performance · {hz}")
+    st.markdown(f"##### Sector performance · {hz} %")
     agg = df.groupby(["Sector", "Group"], sort=False)[HORIZONS].mean().reset_index()
     agg["_v"] = agg[hz]
     agg = agg.sort_values("_v", ascending=False)
-    bar = (alt.Chart(agg).mark_bar(cornerRadius=2, height=15).encode(
-        x=alt.X("_v:Q", title=None, axis=alt.Axis(format="+.1f", grid=True,
-                gridColor="#f1f5f9")),
+    bar = (alt.Chart(agg).mark_bar(cornerRadius=2, height=13).encode(
+        x=alt.X("_v:Q", title=None,
+                axis=alt.Axis(format="+.1f", grid=True, gridColor="#eef2f6",
+                              domain=False, tickSize=0, labelFontSize=10,
+                              labelFont="IBM Plex Mono")),
         y=alt.Y("Sector:N", sort=list(agg["Sector"]), title=None,
-                axis=alt.Axis(labelFontSize=12, labelColor="#334155")),
-        color=alt.condition("datum._v >= 0", alt.value("#16a34a"), alt.value("#dc2626")),
+                axis=alt.Axis(labelFontSize=11, labelColor="#334155",
+                              labelFont="IBM Plex Sans", domain=False, tickSize=0)),
+        color=alt.condition("datum._v >= 0", alt.value(POS), alt.value(NEG)),
         tooltip=[alt.Tooltip("Sector:N"), alt.Tooltip("Group:N"),
                  alt.Tooltip("_v:Q", format="+.2f", title=hz)],
-    ).properties(height=26 * len(agg) + 10).configure_view(strokeWidth=0)
-        .configure_axis(labelColor="#64748b"))
+    ).properties(height=24 * len(agg) + 8)
+        .configure_view(strokeWidth=0)
+        .configure_axis(labelColor="#94a3b8"))
     st.altair_chart(bar, use_container_width=True)
 
     # --- scanner: financials | commodities ---
