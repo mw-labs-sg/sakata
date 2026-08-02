@@ -30,12 +30,12 @@ body{margin:0;background:#fff;color:var(--ink);font-family:var(--sans);
   font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased;
   text-rendering:optimizeLegibility}
 
-.wrap{max-width:1120px;margin:0 auto;padding:34px 24px 72px}
+.wrap{max-width:1120px;margin:0 auto;padding:22px 24px 56px}
 
 /* ---------------------------------------------------------------- header */
 /* Mark and wordmark read as one lockup, so the gap is optical — tight enough
    to bind them, wide enough that the stalk does not touch the S. */
-.head{display:flex;align-items:center;gap:9px;margin-bottom:24px}
+.head{display:flex;align-items:center;gap:9px;margin-bottom:16px}
 .mark{flex:none;margin-bottom:2px}
 .wordmark{font-family:var(--display);font-size:25px;font-weight:700;
   letter-spacing:.13em;color:var(--ink);margin:0;line-height:1}
@@ -46,9 +46,9 @@ body{margin:0;background:#fff;color:var(--ink);font-family:var(--sans);
 
 /* ------------------------------------------------------------------ tabs */
 .tabs{display:flex;flex-wrap:wrap;border-bottom:1px solid var(--line);
-  margin-bottom:28px;position:sticky;top:0;z-index:6;background:#fff}
+  margin-bottom:16px;position:sticky;top:0;z-index:6;background:#fff}
 .tab{appearance:none;border:none;background:none;cursor:pointer;
-  padding:12px 17px 11px;font-family:var(--display);font-size:14.5px;
+  padding:10px 16px 9px;font-family:var(--display);font-size:14.5px;
   font-weight:500;color:var(--mute);border-bottom:2px solid transparent;
   margin-bottom:-1px;transition:color .12s}
 .tab:first-child{padding-left:0}
@@ -56,7 +56,7 @@ body{margin:0;background:#fff;color:var(--ink);font-family:var(--sans);
 .tab.on{color:var(--teal);font-weight:700;border-bottom-color:var(--teal-b)}
 
 /* -------------------------------------------------------------- controls */
-.bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 20px}
+.bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 12px}
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:7px;
   overflow:hidden;background:#fff}
 .seg button{appearance:none;border:none;background:none;cursor:pointer;
@@ -74,35 +74,35 @@ select{font-family:var(--display);font-size:14px;color:var(--ink);
 
 /* ----------------------------------------------------------------- type */
 h5,.eyebrow{font-family:var(--display);font-size:17px;font-weight:700;
-  letter-spacing:-.005em;color:var(--ink);margin:34px 0 12px;text-transform:none}
+  letter-spacing:-.005em;color:var(--ink);margin:18px 0 8px;text-transform:none}
 .eyebrow:first-child{margin-top:0}
-.note{font-size:14px;color:var(--mute);line-height:1.7;margin:0 0 18px;
+.note{font-size:14px;color:var(--mute);line-height:1.65;margin:0 0 12px;
   max-width:74ch}
 .note b{color:var(--ink);font-weight:600}
 .warn{background:#fdfaf3;border:1px solid #ecdfc4;padding:13px 16px;
   font-size:13.5px;line-height:1.65;margin:0 0 18px;border-radius:7px;
   color:#6b4f1a;max-width:78ch}
 .warn b{color:#4a3610;font-weight:600}
-.chips{margin:0 0 18px}
+.chips{margin:0 0 12px}
 .chip{display:inline-block;padding:4px 11px;margin:0 7px 7px 0;
   border:1px solid var(--line);border-radius:6px;background:#fff;
   font-size:12.5px;font-weight:500;color:var(--mute);
   font-variant-numeric:tabular-nums}
 .skel{padding:52px 0;text-align:center;color:var(--faint);font-size:14px}
-.grid2{display:grid;grid-template-columns:1fr 1fr;gap:26px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:20px}
 @media(max-width:880px){.grid2{grid-template-columns:1fr;gap:10px}}
 
 /* --------------------------------------------------------------- tables */
 .card{border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#fff}
 .scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
-table{border-collapse:collapse;width:100%;font-size:13.5px;line-height:1.5;
+table{border-collapse:collapse;width:100%;font-size:13px;line-height:1.45;
   font-variant-numeric:tabular-nums lining-nums}
 thead th{background:var(--wash);color:var(--mute);font-family:var(--display);
   font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.08em;
-  padding:10px 14px;text-align:right;border-bottom:1px solid var(--line);
+  padding:7px 13px;text-align:right;border-bottom:1px solid var(--line);
   white-space:nowrap}
 thead th.l{text-align:left}
-td{font-weight:450;padding:8px 14px;text-align:right;
+td{font-weight:450;padding:5px 13px;text-align:right;
   border-bottom:1px solid var(--hair);white-space:nowrap;color:var(--body)}
 td.l{text-align:left;color:var(--ink);font-weight:500}
 tbody tr:last-child td{border-bottom:none}
@@ -111,9 +111,9 @@ tbody tr:hover td{background:var(--wash)}
 /* sector breaks: a label above a rule, not a coloured band */
 tr.sec td{background:#fff;font-family:var(--display);color:var(--teal);
   font-weight:700;font-size:12px;letter-spacing:.04em;text-transform:uppercase;
-  padding:16px 14px 6px;border-bottom:1px solid var(--line)}
+  padding:11px 13px 4px;border-bottom:1px solid var(--line)}
 tr.sec:hover td{background:#fff}
-tr.sec:first-child td{padding-top:10px}
+tr.sec:first-child td{padding-top:7px}
 tr.out td{background:var(--wash)}
 tr.out:hover td{background:#f2f5f7}
 
@@ -134,7 +134,7 @@ td.l a:hover{color:var(--teal);border-bottom-color:var(--teal-b)}
   font-variant-numeric:tabular-nums}
 .chart .lbl{font-family:var(--display);font-size:13px;fill:var(--body)}
 .chart .grid{stroke:var(--hair);stroke-width:1}
-.plot{border:1px solid var(--line);border-radius:8px;padding:12px 8px;background:#fff}
+.plot{border:1px solid var(--line);border-radius:8px;padding:6px 4px;background:#fff}
 
 /* ----------------------------------------------------------------- news */
 .item{border-bottom:1px solid var(--hair);padding:15px 18px}
@@ -163,7 +163,7 @@ pre{margin:0;padding:16px;font-family:var(--mono);font-size:11.5px;line-height:1
   color:var(--mute);cursor:pointer}
 .btn:hover{border-color:var(--teal);color:var(--teal)}
 
-.foot{margin-top:52px;padding-top:18px;border-top:1px solid var(--line);
+.foot{margin-top:38px;padding-top:16px;border-top:1px solid var(--line);
   font-size:12.5px;color:var(--faint);line-height:1.7;max-width:60ch}
 
 @media(max-width:640px){

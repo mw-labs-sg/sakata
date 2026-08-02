@@ -76,7 +76,7 @@ function table(head, body, cls) {
 /* Hand-rolled SVG. A charting library would be 60kb for eight bars. */
 function barChart(items, w, opts) {
   opts = opts || {};
-  var rowH = 28, padL = 108, padR = 16, padT = 8, padB = 26;
+  var rowH = 21, padL = 100, padR = 16, padT = 5, padB = 22;
   var h = items.length * rowH + padT + padB;
   var vals = items.map(function (d) { return d.v; });
   var lo = Math.min.apply(null, vals.concat([0]));
@@ -95,7 +95,7 @@ function barChart(items, w, opts) {
       '" text-anchor="middle">' + num(lo + span * t / 4, 1) + "</text>";
   }
   items.forEach(function (d, i) {
-    var y = padT + i * rowH, bh = 15;
+    var y = padT + i * rowH, bh = 11;
     var xv = x(d.v), x0 = Math.min(xv, zero), bw = Math.abs(xv - zero);
     s += '<text class="lbl" x="' + (padL - 10) + '" y="' + (y + bh / 2 + 4) +
       '" text-anchor="end">' + esc(d.k) + "</text>";
@@ -347,7 +347,7 @@ function renderTech(d) {
     { k: "Mid", v: c.md, c: "#99a2ac", dash: "2 4" },
     { k: "RB", v: c.vb, c: "#0f5f57" },
     { k: "RS", v: c.vs, c: "#a16207" }
-  ], width() - 26, 340, dec) : '<div class="skel">no series</div>';
+  ], width() - 22, 300, dec) : '<div class="skel">no series</div>';
 
   var lv = [
     ["Prior high", c.high], ["RS target", c.rs], ["Mid", c.mid],
@@ -553,7 +553,7 @@ function renderCurve(d) {
     (c.carryAnn >= 0 ? "+" : "") + num(c.carryAnn, 1) + "%</div>" +
     '<div class="plot">' +
     lineChart(months, [{ k: "Settle", v: settle, c: "#0d9488", w: 2.4 }], oi,
-      width() - 26, 320, 2) + "</div>" +
+      width() - 22, 280, 2) + "</div>" +
     '<div class="eyebrow">Settlements</div>' +
     table('<th class="l">Month</th><th>Settle</th><th>Change</th><th>Volume</th>' +
       "<th>OI</th>", detail)
