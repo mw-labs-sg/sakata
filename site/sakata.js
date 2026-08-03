@@ -240,10 +240,12 @@ var S = {
   spreads: { period: "MTD" },
   curve: { code: null },
   margins: { sort: "margVol" },
+  drivers: { group: "All" },
   events: { filter: "All" }
 };
 var HZ = ["Day", "WTD", "MTD", "QTD", "YTD"];
-var TABS = ["Board", "Technical", "Spreads", "Curve", "Margins", "Events", "News"];
+var TABS = ["Board", "Technical", "Spreads", "Curve", "Margins", "Drivers",
+  "Events", "News"];
 var META = null;
 
 /* ------------------------------------------------------------------ tabs */
@@ -712,6 +714,34 @@ function renderEvents() {
   );
 }
 
+/* --------------------------------------------------------------- Drivers */
+/* A standing frame, not a feed. These change when the structure of a market
+   changes, which is why they live in the repo rather than in a scrape. */
+function renderDrivers() {
+  var filt = S.drivers.group;
+  var cards = META.universe.filter(function (u) {
+    return filt === "All" || u.group === filt;
+  }).map(function (u) {
+    var ds = (META.drivers || {})[u.code] || [];
+    if (!ds.length) return "";
+    return '<div class="dcard"><div class="dhead">' + swatch(u.sector) +
+      '<b>' + esc(u.code) + "</b> " + esc(u.name) +
+      '<span class="dsec">' + esc(u.sector) + "</span></div><ol class=\"dlist\">" +
+      ds.map(function (x) {
+        return "<li><b>" + esc(x.t) + "</b><span>" + esc(x.d) + "</span></li>";
+      }).join("") + "</ol></div>";
+  }).join("");
+
+  view(
+    '<div class="note">What actually moves each contract, ordered by how often ' +
+    'it sets the tone rather than by how much it can move on its ' +
+    'day. Maintained by hand — a driver you cannot sign is a topic, not a ' +
+    'driver.</div>' +
+    '<div class="bar">' + seg("drGroup", ["All", "Financials", "Commodities"], filt) +
+    "</div><div class=\"dgrid\">" + cards + "</div>"
+  );
+}
+
 /* ------------------------------------------------------------------ News */
 function renderNews(d) {
   var mk = Object.keys(d.markets || {});
@@ -746,6 +776,7 @@ function route() {
   var t = S.tab;
   busy();
   if (t === "Events") return renderEvents();
+  if (t === "Drivers") return renderDrivers();
   var file = { Board: "board", Technical: "technical", Spreads: "spreads",
     Curve: "curve", Margins: "margins", News: "news" }[t];
   load(file).then(function (d) {
@@ -765,6 +796,7 @@ document.addEventListener("click", function (e) {
     if (id === "boardHz") S.board.hz = v;
     if (id === "techHz") S.tech.hz = v;
     if (id === "spPeriod") S.spreads.period = v;
+    if (id === "drGroup") S.drivers.group = v;
     route(); return;
   }
 

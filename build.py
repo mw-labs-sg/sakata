@@ -14,6 +14,7 @@ import shutil
 import sys
 from pathlib import Path
 
+import sk_drivers as DR
 import sk_sources as S
 import sk_spreads as SP
 import sk_tabs as T
@@ -84,6 +85,8 @@ def main() -> int:
                       "group": U.GROUP_OF[U.SECTOR[c]], "dec": U.DEC[c]}
                      for c in U.CODES],
         "groups": U.GROUPS,
+        "drivers": {c: [{"t": t, "d": d} for t, d in DR.DRIVERS.get(c, [])]
+                    for c in U.CODES},
         "dry": bool(args.dry),
     })
 
