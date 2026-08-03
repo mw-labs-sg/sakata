@@ -85,7 +85,15 @@ function barChart(items, w, opts) {
   lo -= span * 0.06; hi += span * 0.06; span = hi - lo;
   var iw = w - padL - padR;
   function x(v) { return padL + (v - lo) / span * iw; }
-  var s = '<svg class="chart" viewBox="0 0 ' + w + " " + h + '" height="' + h + '">';
+  var s = '<svg class="chart" viewBox="0 0 ' + w + " " + h + '" height="' + h + '">' +
+    '<defs>' +
+    '<linearGradient id="gpos" x1="0" x2="1"><stop offset="0" stop-color="#0d9488" ' +
+    'stop-opacity=".45"/><stop offset="1" stop-color="#0d9488" stop-opacity="1"/></linearGradient>' +
+    '<linearGradient id="gneg" x1="1" x2="0"><stop offset="0" stop-color="#cf5a54" ' +
+    'stop-opacity=".45"/><stop offset="1" stop-color="#cf5a54" stop-opacity="1"/></linearGradient>' +
+    '<linearGradient id="wash" x1="0" y1="0" x2="0" y2="1"><stop offset="0" ' +
+    'stop-color="#f6fbfa"/><stop offset="1" stop-color="#ffffff"/></linearGradient>' +
+    '</defs><rect x="0" y="0" width="' + w + '" height="' + h + '" fill="url(#wash)"/>';
   var zero = x(0);
   for (var t = 0; t <= 4; t++) {
     var gx = padL + iw * t / 4;
@@ -100,8 +108,8 @@ function barChart(items, w, opts) {
     s += '<text class="lbl" x="' + (padL - 10) + '" y="' + (y + bh / 2 + 4) +
       '" text-anchor="end">' + esc(d.k) + "</text>";
     s += '<rect x="' + x0 + '" y="' + y + '" width="' + Math.max(bw, 1) +
-      '" height="' + bh + '" rx="2" fill="' +
-      (d.v >= 0 ? "#0d9488" : "#cf5a54") + '"><title>' + esc(d.k) + " " +
+      '" height="' + bh + '" rx="2" fill="url(#' + (d.v >= 0 ? "gpos" : "gneg") +
+      ')"><title>' + esc(d.k) + " " +
       num(d.v, 2) + "</title></rect>";
   });
   s += '<line class="grid" x1="' + zero + '" y1="' + padT + '" x2="' + zero +
@@ -264,21 +272,46 @@ function renderBoard(d) {
     return { k: s, v: vs.length ? vs.reduce(function (a, b) { return a + b; }, 0) / vs.length : 0 };
   }).sort(function (a, b) { return b.v - a.v; });
 
+  /* Heat on the selected horizon. Scaled to the largest absolute move on the
+     page, so the wash reads as relative conviction rather than an absolute
+     threshold that would be meaningless across Day and YTD alike. */
+  var peak = 0;
+  d.rows.forEach(function (r) {
+    var v = Math.abs(r[hz] || 0);
+    if (v > peak) peak = v;
+  });
+  function heat(v) {
+    if (v == null || !peak) return "";
+    var a = Math.min(Math.abs(v) / peak, 1) * 0.15;
+    return "background:rgba(" + (v >= 0 ? "13,148,136," : "207,90,84,") +
+      a.toFixed(3) + ")";
+  }
+
   function panel(group) {
     var body = "";
     (META.groups[group] || []).forEach(function (sec) {
       var rows = bySec[sec];
       if (!rows) return;
-      body += '<tr class="sec"><td class="l">' + esc(sec) + "</td>" +
-        '<td colspan="6"></td></tr>';
-      rows.forEach(function (r) {
-        body += '<tr><td class="l ind">' + esc(r.code) + " " + esc(r.name) + "</td>" +
-          cell(r.last, r.dec, "dim") +
-          HZ.map(function (h) { return pct(r[h]); }).join("") + "</tr>";
+      /* One merged vertical cell per sector instead of a full-width header
+         row: same signal, none of the vertical cost. */
+      rows.forEach(function (r, i) {
+        body += "<tr>" + (i === 0 ? '<td class="band" rowspan="' + rows.length +
+          '"><span>' + esc(sec) + "</span></td>" : "") +
+          '<td class="l">' + esc(r.code) + " " + esc(r.name) + "</td>" +
+          '<td class="last">' + (r.last == null ? "—" : num(r.last, r.dec)) + "</td>" +
+          HZ.map(function (h) {
+            var v = r[h];
+            if (v == null || isNaN(v)) return '<td class="faint">—</td>';
+            var st = (h === hz) ? ' style="' + heat(v) + '"' : "";
+            return '<td class="' + (v >= 0 ? "pos" : "neg") + '"' + st + ">" +
+              (v >= 0 ? "+" : "") + num(v, 2) + "</td>";
+          }).join("") + "</tr>";
       });
     });
-    var head = '<th class="l">Instrument</th><th>Last</th>' +
-      HZ.map(function (h) { return "<th>" + h + "</th>"; }).join("");
+    var head = '<th class="band"></th><th class="l">Instrument</th><th>Last</th>' +
+      HZ.map(function (h) {
+        return '<th' + (h === hz ? ' class="on"' : "") + ">" + h + "</th>";
+      }).join("");
     return '<div><div class="eyebrow">' + group + "</div>" +
       table(head, body) + "</div>";
   }
@@ -288,8 +321,8 @@ function renderBoard(d) {
     '<span class="spacer"></span><span class="chip">' + d.rows.length +
     " instruments</span></div>" +
     '<div class="eyebrow">Sector performance · ' + hz + " %</div>" +
-    '<div class="plot">' + barChart(agg, width() - 26) + "</div>" +
-    '<div class="grid2" style="margin-top:6px">' +
+    '<div class="plot">' + barChart(agg, width() - 22) + "</div>" +
+    '<div class="grid2" style="margin-top:14px">' +
     panel("Financials") + panel("Commodities") + "</div>"
   );
 }
