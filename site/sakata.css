@@ -11,8 +11,8 @@
 
 :root{
   --serif:'Source Serif 4',Georgia,'Times New Roman',serif;
-  --display:'DM Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
-  --sans:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;
+  --display:'Public Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --sans:'Public Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;
   --mono:ui-monospace,'SF Mono',Menlo,monospace;
 
   --ink:#101820; --body:#39434f; --mute:#69737f; --faint:#99a2ac;
@@ -22,14 +22,14 @@
   --teal-b:#14b8a6;             /* the bright mint, for fills and marks */
   --teal-d:#0f5f57;             /* deepest tint, for conviction */
   --teal-w:#effcfa;
-  --pos:#0d9488; --neg:#cf5a54; --amber:#b07d2a;
+  --pos:#0b7a63; --neg:#b3261e; --amber:#8c6d1f;
 }
 
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
 body{margin:0;background:#fff;color:var(--ink);font-family:var(--sans);
   font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased;
-  text-rendering:optimizeLegibility}
+  text-rendering:optimizeLegibility;font-feature-settings:'tnum' 1,'lnum' 1}
 
 .wrap{max-width:1120px;margin:0 auto;padding:22px 24px 56px}
 
@@ -74,8 +74,9 @@ select{font-family:var(--display);font-size:14px;color:var(--ink);
 .spacer{margin-left:auto}
 
 /* ----------------------------------------------------------------- type */
-h5,.eyebrow{font-family:var(--display);font-size:17px;font-weight:700;
-  letter-spacing:-.005em;color:var(--ink);margin:18px 0 8px;text-transform:none}
+h5,.eyebrow{font-family:var(--serif);font-size:18px;font-weight:600;
+  letter-spacing:-.008em;color:var(--ink);margin:20px 0 9px;text-transform:none;
+  display:flex;align-items:baseline;flex-wrap:wrap}
 .eyebrow:first-child{margin-top:0}
 .note{font-size:14px;color:var(--mute);line-height:1.65;margin:0 0 12px;
   max-width:74ch}
@@ -98,8 +99,8 @@ h5,.eyebrow{font-family:var(--display);font-size:17px;font-weight:700;
 .scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
 table{border-collapse:collapse;width:100%;font-size:13px;line-height:1.45;
   font-variant-numeric:tabular-nums lining-nums}
-thead th{background:var(--wash);color:var(--mute);font-family:var(--display);
-  font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.08em;
+thead th{background:#fff;color:var(--faint);font-family:var(--display);
+  font-weight:600;font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;
   padding:7px 13px;text-align:right;border-bottom:1px solid var(--line);
   white-space:nowrap}
 thead th.l{text-align:left}
@@ -109,22 +110,27 @@ td.l{text-align:left;color:var(--ink);font-weight:500}
 tbody tr:last-child td{border-bottom:none}
 tbody tr:hover td{background:var(--wash)}
 
-/* Sector as a merged vertical band down the left edge. A full-width header
-   row costs 30px per sector — eight of them was a quarter of the table
-   spent on labels. Rotated into the gutter it costs nothing vertical. */
-td.band{width:22px;padding:0;background:#f5faf9;border-right:1px solid var(--line);
-  border-bottom:1px solid var(--line);text-align:center;vertical-align:middle}
-td.band span{writing-mode:vertical-rl;transform:rotate(180deg);display:inline-block;
-  font-family:var(--display);font-size:9.5px;font-weight:700;letter-spacing:.1em;
-  text-transform:uppercase;color:var(--teal);white-space:nowrap;padding:6px 0}
-th.band{width:22px;padding:0;border-right:1px solid var(--line)}
-tbody tr:hover td.band{background:#f5faf9}
+/* Sector identity is a swatch, not a label. Rotated text in a gutter was
+   unreadable and a repeated header row cost 30px each; a 8px square carries
+   the same grouping at zero cost and ties the row to its bar in the chart. */
+.sw{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:8px;
+  vertical-align:1px;flex:none}
+.legend{display:inline-flex;flex-wrap:wrap;gap:14px;margin-left:14px;
+  font-family:var(--display);font-size:11px;font-weight:500;color:var(--mute);
+  letter-spacing:.01em;text-transform:none}
+.key{display:inline-flex;align-items:center;white-space:nowrap}
+.key .sw{margin-right:6px;width:7px;height:7px}
+td.l .nm{color:var(--mute);font-weight:400}
 
 /* Last is the anchor figure — everything else on the row is a derivative
    of it, so it carries the weight. */
 td.last{color:var(--ink);font-weight:600;font-size:13.5px;
-  border-right:1px solid var(--hair)}
-thead th.on{color:var(--teal)}
+  border-right:1px solid var(--hair);padding-right:16px}
+
+/* The selected horizon gains weight, not a coloured fill. A tinted cell
+   reads as an error state; a heavier digit reads as focus. */
+td.on{font-weight:700}
+thead th.on{color:var(--ink);font-weight:700}
 tr.out td{background:var(--wash)}
 tr.out:hover td{background:#f2f5f7}
 
@@ -143,9 +149,12 @@ td.l a:hover{color:var(--teal);border-bottom-color:var(--teal-b)}
 .chart{width:100%;display:block}
 .chart .axis{font-family:var(--sans);font-size:11px;fill:var(--faint);
   font-variant-numeric:tabular-nums}
-.chart .lbl{font-family:var(--display);font-size:13px;fill:var(--body)}
+.chart .lbl{font-family:var(--display);font-size:12.5px;font-weight:500;
+  fill:var(--body)}
+.chart .val{font-family:var(--display);font-size:11.5px;font-weight:600;
+  fill:var(--mute);font-variant-numeric:tabular-nums}
 .chart .grid{stroke:var(--hair);stroke-width:1}
-.plot{border:1px solid var(--line);border-radius:8px;padding:6px 4px;background:#fff}
+.plot{border:1px solid var(--line);border-radius:8px;padding:10px 6px;background:#fff}
 
 /* ----------------------------------------------------------------- news */
 .item{border-bottom:1px solid var(--hair);padding:15px 18px}

@@ -76,44 +76,33 @@ function table(head, body, cls) {
 /* Hand-rolled SVG. A charting library would be 60kb for eight bars. */
 function barChart(items, w, opts) {
   opts = opts || {};
-  var rowH = 21, padL = 100, padR = 16, padT = 5, padB = 22;
+  var rowH = 26, padL = 104, padR = 52, padT = 4, padB = 4;
   var h = items.length * rowH + padT + padB;
   var vals = items.map(function (d) { return d.v; });
   var lo = Math.min.apply(null, vals.concat([0]));
   var hi = Math.max.apply(null, vals.concat([0]));
   var span = (hi - lo) || 1;
-  lo -= span * 0.06; hi += span * 0.06; span = hi - lo;
+  lo -= span * 0.04; hi += span * 0.04; span = hi - lo;
   var iw = w - padL - padR;
   function x(v) { return padL + (v - lo) / span * iw; }
-  var s = '<svg class="chart" viewBox="0 0 ' + w + " " + h + '" height="' + h + '">' +
-    '<defs>' +
-    '<linearGradient id="gpos" x1="0" x2="1"><stop offset="0" stop-color="#0d9488" ' +
-    'stop-opacity=".45"/><stop offset="1" stop-color="#0d9488" stop-opacity="1"/></linearGradient>' +
-    '<linearGradient id="gneg" x1="1" x2="0"><stop offset="0" stop-color="#cf5a54" ' +
-    'stop-opacity=".45"/><stop offset="1" stop-color="#cf5a54" stop-opacity="1"/></linearGradient>' +
-    '<linearGradient id="wash" x1="0" y1="0" x2="0" y2="1"><stop offset="0" ' +
-    'stop-color="#f6fbfa"/><stop offset="1" stop-color="#ffffff"/></linearGradient>' +
-    '</defs><rect x="0" y="0" width="' + w + '" height="' + h + '" fill="url(#wash)"/>';
   var zero = x(0);
-  for (var t = 0; t <= 4; t++) {
-    var gx = padL + iw * t / 4;
-    s += '<line class="grid" x1="' + gx + '" y1="' + padT + '" x2="' + gx +
-      '" y2="' + (h - padB) + '"/>';
-    s += '<text class="axis" x="' + gx + '" y="' + (h - 7) +
-      '" text-anchor="middle">' + num(lo + span * t / 4, 1) + "</text>";
-  }
+  var s = '<svg class="chart" viewBox="0 0 ' + w + " " + h + '" height="' + h + '">';
+  /* Zero is the only rule that earns a line. Gridlines behind eight bars are
+     furniture: the value sits at the end of each bar instead. */
+  s += '<line x1="' + zero + '" y1="' + padT + '" x2="' + zero + '" y2="' +
+    (h - padB) + '" stroke="#d7dde3" stroke-width="1"/>';
   items.forEach(function (d, i) {
-    var y = padT + i * rowH, bh = 11;
-    var xv = x(d.v), x0 = Math.min(xv, zero), bw = Math.abs(xv - zero);
-    s += '<text class="lbl" x="' + (padL - 10) + '" y="' + (y + bh / 2 + 4) +
+    var y = padT + i * rowH, bh = 14, col = d.c || "#5c7d99";
+    var xv = x(d.v), x0 = Math.min(xv, zero), bw = Math.max(Math.abs(xv - zero), 2);
+    s += '<text class="lbl" x="' + (padL - 12) + '" y="' + (y + bh / 2 + 5) +
       '" text-anchor="end">' + esc(d.k) + "</text>";
-    s += '<rect x="' + x0 + '" y="' + y + '" width="' + Math.max(bw, 1) +
-      '" height="' + bh + '" rx="2" fill="url(#' + (d.v >= 0 ? "gpos" : "gneg") +
-      ')"><title>' + esc(d.k) + " " +
-      num(d.v, 2) + "</title></rect>";
+    s += '<rect x="' + x0 + '" y="' + (y + 3) + '" width="' + bw + '" height="' +
+      bh + '" rx="1.5" fill="' + col + '" opacity="' + (d.v >= 0 ? ".92" : ".62") +
+      '"/>';
+    s += '<text class="val" x="' + (d.v >= 0 ? xv + 8 : x0 - 8) + '" y="' +
+      (y + bh / 2 + 5) + '" text-anchor="' + (d.v >= 0 ? "start" : "end") + '">' +
+      (d.v >= 0 ? "+" : "") + num(d.v, 2) + "</text>";
   });
-  s += '<line class="grid" x1="' + zero + '" y1="' + padT + '" x2="' + zero +
-    '" y2="' + (h - padB) + '" stroke="#c9d1d8"/>';
   return s + "</svg>";
 }
 
@@ -231,6 +220,18 @@ function width() {
   return Math.max((v ? v.clientWidth : 900) - 2, 320);
 }
 
+/* Sector palette. Cool and muted by design: these are identity tags, not
+   signals, so nothing here may be confused with the red/green of a number.
+   That is why no sector is allowed a saturated warm red. */
+var SECTOR_COL = {
+  "Indices": "#3b6ea5", "Bonds": "#5c7d99", "Currencies": "#7a6ba8",
+  "Crypto": "#4c8f86", "Energy": "#8c5a3c", "Metals": "#a8894f",
+  "Grains": "#7d8f4e", "Softs": "#4f8f7d"
+};
+function swatch(sec) {
+  return '<i class="sw" style="background:' + (SECTOR_COL[sec] || "#9aa2ab") + '"></i>';
+}
+
 /* ------------------------------------------------------------- app state */
 var S = {
   tab: "Board",
@@ -269,50 +270,38 @@ function renderBoard(d) {
   var agg = secs.map(function (s) {
     var vs = bySec[s].map(function (r) { return r[hz]; })
       .filter(function (v) { return v != null; });
-    return { k: s, v: vs.length ? vs.reduce(function (a, b) { return a + b; }, 0) / vs.length : 0 };
+    return {
+      k: s, c: SECTOR_COL[s],
+      v: vs.length ? vs.reduce(function (a, b) { return a + b; }, 0) / vs.length : 0
+    };
   }).sort(function (a, b) { return b.v - a.v; });
 
-  /* Heat on the selected horizon. Scaled to the largest absolute move on the
-     page, so the wash reads as relative conviction rather than an absolute
-     threshold that would be meaningless across Day and YTD alike. */
-  var peak = 0;
-  d.rows.forEach(function (r) {
-    var v = Math.abs(r[hz] || 0);
-    if (v > peak) peak = v;
-  });
-  function heat(v) {
-    if (v == null || !peak) return "";
-    var a = Math.min(Math.abs(v) / peak, 1) * 0.15;
-    return "background:rgba(" + (v >= 0 ? "13,148,136," : "207,90,84,") +
-      a.toFixed(3) + ")";
-  }
-
   function panel(group) {
-    var body = "";
+    var body = "", legend = "";
     (META.groups[group] || []).forEach(function (sec) {
       var rows = bySec[sec];
       if (!rows) return;
-      /* One merged vertical cell per sector instead of a full-width header
-         row: same signal, none of the vertical cost. */
-      rows.forEach(function (r, i) {
-        body += "<tr>" + (i === 0 ? '<td class="band" rowspan="' + rows.length +
-          '"><span>' + esc(sec) + "</span></td>" : "") +
-          '<td class="l">' + esc(r.code) + " " + esc(r.name) + "</td>" +
+      legend += '<span class="key">' + swatch(sec) + esc(sec) + "</span>";
+      rows.forEach(function (r) {
+        body += '<tr><td class="l">' + swatch(sec) + esc(r.code) +
+          ' <span class="nm">' + esc(r.name) + "</span></td>" +
           '<td class="last">' + (r.last == null ? "—" : num(r.last, r.dec)) + "</td>" +
           HZ.map(function (h) {
             var v = r[h];
-            if (v == null || isNaN(v)) return '<td class="faint">—</td>';
-            var st = (h === hz) ? ' style="' + heat(v) + '"' : "";
-            return '<td class="' + (v >= 0 ? "pos" : "neg") + '"' + st + ">" +
-              (v >= 0 ? "+" : "") + num(v, 2) + "</td>";
+            var cls = (v == null || isNaN(v)) ? "faint" : (v >= 0 ? "pos" : "neg");
+            if (h === hz) cls += " on";
+            return '<td class="' + cls + '">' +
+              (v == null || isNaN(v) ? "—" : (v >= 0 ? "+" : "") + num(v, 2)) +
+              "</td>";
           }).join("") + "</tr>";
       });
     });
-    var head = '<th class="band"></th><th class="l">Instrument</th><th>Last</th>' +
+    var head = '<th class="l">Instrument</th><th>Last</th>' +
       HZ.map(function (h) {
         return '<th' + (h === hz ? ' class="on"' : "") + ">" + h + "</th>";
       }).join("");
-    return '<div><div class="eyebrow">' + group + "</div>" +
+    return '<div><div class="eyebrow">' + group +
+      '<span class="legend">' + legend + "</span></div>" +
       table(head, body) + "</div>";
   }
 
@@ -322,7 +311,7 @@ function renderBoard(d) {
     " instruments</span></div>" +
     '<div class="eyebrow">Sector performance · ' + hz + " %</div>" +
     '<div class="plot">' + barChart(agg, width() - 22) + "</div>" +
-    '<div class="grid2" style="margin-top:14px">' +
+    '<div class="grid2" style="margin-top:16px">' +
     panel("Financials") + panel("Commodities") + "</div>"
   );
 }
