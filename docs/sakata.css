@@ -171,6 +171,27 @@ td.l a:hover{color:var(--teal);border-bottom-color:var(--teal-b)}
   color:var(--teal);text-transform:uppercase;letter-spacing:.05em}
 .mkt p{margin:0;font-size:14.5px;color:var(--body);line-height:1.7;max-width:76ch}
 
+/* -------------------------------------------------------------- drivers */
+.dgrid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:880px){.dgrid{grid-template-columns:1fr}}
+.dcard{border:1px solid var(--line);border-radius:8px;background:#fff;
+  padding:14px 16px 12px}
+.dhead{display:flex;align-items:center;gap:2px;font-size:14px;color:var(--body);
+  padding-bottom:9px;margin-bottom:9px;border-bottom:1px solid var(--hair)}
+.dhead b{color:var(--ink);font-weight:700;margin-right:5px}
+.dsec{margin-left:auto;font-family:var(--display);font-size:10px;font-weight:600;
+  letter-spacing:.08em;text-transform:uppercase;color:var(--faint)}
+ol.dlist{margin:0;padding:0;list-style:none;counter-reset:d}
+ol.dlist li{counter-increment:d;position:relative;padding:0 0 9px 22px;
+  font-size:13px;line-height:1.55}
+ol.dlist li:last-child{padding-bottom:0}
+ol.dlist li::before{content:counter(d);position:absolute;left:0;top:1px;
+  font-family:var(--display);font-size:10px;font-weight:700;color:var(--teal);
+  width:15px;height:15px;border-radius:3px;background:#eefaf7;text-align:center;
+  line-height:15px}
+ol.dlist li b{display:block;color:var(--ink);font-weight:600;font-size:13px}
+ol.dlist li span{color:var(--mute)}
+
 /* --------------------------------------------------------------- digest */
 details{margin:26px 0;border:1px solid var(--line);border-radius:8px;
   overflow:hidden;background:#fff}
