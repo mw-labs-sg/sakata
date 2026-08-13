@@ -99,8 +99,15 @@ function barChart(items, w, opts) {
     s += '<rect x="' + x0 + '" y="' + (y + 3) + '" width="' + bw + '" height="' +
       bh + '" rx="1.5" fill="' + col + '" opacity="' + (d.v >= 0 ? ".92" : ".62") +
       '"/>';
-    s += '<text class="val" x="' + (d.v >= 0 ? xv + 8 : x0 - 8) + '" y="' +
-      (y + bh / 2 + 5) + '" text-anchor="' + (d.v >= 0 ? "start" : "end") + '">' +
+    /* The value sits at the outer end of its bar — except when the bar is
+       long enough that the outer end has run into the label column. Then it
+       parks just past the zero rule instead, where nothing else can be. */
+    var tx, anchor;
+    if (d.v >= 0) { tx = xv + 8; anchor = "start"; }
+    else if (x0 - 8 >= padL + 6) { tx = x0 - 8; anchor = "end"; }
+    else { tx = zero + 8; anchor = "start"; }
+    s += '<text class="val" x="' + tx + '" y="' + (y + bh / 2 + 5) +
+      '" text-anchor="' + anchor + '">' +
       (d.v >= 0 ? "+" : "") + num(d.v, 2) + "</text>";
   });
   return s + "</svg>";
