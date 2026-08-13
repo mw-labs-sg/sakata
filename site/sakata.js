@@ -936,20 +936,38 @@ function renderDrivers() {
 
 /* ------------------------------------------------------------------ News */
 function renderNews(d) {
-  var mk = Object.keys(d.markets || {});
-  var mkt = mk.length ? mk.map(function (c) {
-    var m = d.markets[c];
-    var u = META.universe.filter(function (x) { return x.code === c; })[0] || {};
-    return '<div class="mkt"><h6>' + esc(c + "  " + (u.name || "")) + "</h6><p>" +
-      esc(m.blurb) + "</p>" + (m.date ? '<span class="when">' + esc(m.date) +
-        "</span>" : "") + "</div>";
-  }).join("") : '<div class="skel">No commentary parsed in the last build.</div>';
+  var mk = d.markets || {};
+  if (!Object.keys(mk).length) {
+    return view('<div class="skel">No commentary parsed in the last build.</div>');
+  }
+
+  /* Split the way the Board splits. Financials and commodities answer to
+     different drivers, and reading a rates paragraph directly above a coffee
+     one costs a context switch on every scroll. Universe order within each
+     column, not alphabetical, so the sequence matches every other tab. */
+  function column(group) {
+    var items = META.universe.filter(function (u) {
+      return u.group === group && mk[u.code];
+    }).map(function (u) {
+      var m = mk[u.code];
+      return '<div class="mkt"><h6>' + esc(u.code + "  " + (u.name || "")) +
+        "</h6><p>" + esc(m.blurb) + "</p>" +
+        (m.date ? '<span class="when">' + esc(m.date) + "</span>" : "") +
+        "</div>";
+    }).join("");
+    if (!items) return "";
+    return '<div><div class="eyebrow">' + esc(group) + "</div>" +
+      '<div class="card">' + items + "</div></div>";
+  }
+
+  var cols = Object.keys(META.groups || { Financials: 1, Commodities: 1 })
+    .map(column).join("");
 
   view(
     '<div class="note">Overnight commentary per market, scraped at build time ' +
     "from Trading Economics. One paragraph per instrument, built to copy " +
     "wholesale into an LLM.</div>" +
-    '<div class="eyebrow">Market commentary</div><div class="card">' + mkt + "</div>"
+    '<div class="grid2 news">' + cols + "</div>"
   );
 }
 

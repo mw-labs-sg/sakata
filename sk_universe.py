@@ -67,6 +67,7 @@ TE_PAGE = {
     "6E":  "https://tradingeconomics.com/euro-area/currency",
     "6J":  "https://tradingeconomics.com/japan/currency",
     "BTC": "https://tradingeconomics.com/btcusd:cur",
+    "ETH": "https://tradingeconomics.com/ethusd:cur",
     "CL":  "https://tradingeconomics.com/commodity/crude-oil",
     "NG":  "https://tradingeconomics.com/commodity/natural-gas",
     "GC":  "https://tradingeconomics.com/commodity/gold",
