@@ -5,11 +5,16 @@
    one attribute on <html> and nothing else in the codebase knows a theme
    exists. Hard-code a colour anywhere else and it will be wrong in one mode.
 
-   TYPE. Space Grotesk carries the wordmark and section heads — technical,
-   slightly angular, unmistakably not a default UI face. Inter Tight runs the
-   chrome and the prose. JetBrains Mono owns every measured figure: column
-   headers, prices, percentages, the build stamp. Figures that align without
-   being asked are the reason a terminal reads faster than a webpage.
+   TYPE. Source Serif 4 carries the wordmark and section heads; Inter runs
+   everything else. The pairing is deliberate — it is the closest freely
+   licensable match to Styrene B and Tiempos Text, the faces Claude's own
+   interface uses, and those cannot be served from a public Pages site.
+
+   Figures stay in Inter with tabular lining numerals switched on, not in a
+   monospace. Real mono aligns perfectly and reads as a machine log; tabular
+   Inter aligns just as well in a table and reads as a document. The mono is
+   kept for exactly two jobs where a machine log is the right register: the
+   build stamp and the copyable digest.
 
    COLOUR. One teal accent, gains in the same teal family, losses in coral,
    everything else grey. Sector swatches stay desaturated so an identity tag
@@ -17,8 +22,8 @@
 
 /* --------------------------------------------------------- light (default) */
 :root{
-  --display:'Space Grotesk',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
-  --sans:'Inter Tight',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;
+  --display:'Source Serif 4',Georgia,'Times New Roman',serif;
+  --sans:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;
   --mono:'JetBrains Mono',ui-monospace,'SF Mono',Menlo,monospace;
 
   /* ground */
@@ -101,11 +106,11 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
    measure, so the eye lands on the name and exits at the build time. */
 .head{display:flex;align-items:center;gap:10px;margin-bottom:16px}
 .mark{flex:none;margin-bottom:2px;color:var(--teal)}
-.wordmark{font-family:var(--display);font-size:25px;font-weight:700;
-  letter-spacing:-.02em;color:var(--ink);margin:0;line-height:1}
+.wordmark{font-family:var(--display);font-size:27px;font-weight:600;
+  letter-spacing:-.01em;color:var(--ink);margin:0;line-height:1}
 .rule{flex:1;height:1px;background:var(--line);margin:2px 4px 0}
 .stamp{font-family:var(--mono);font-size:11px;font-weight:400;
-  color:var(--faint);white-space:nowrap;letter-spacing:-.01em}
+  color:var(--faint);white-space:nowrap;letter-spacing:-.02em}
 
 /* The switch states what it will do, not what it is: sun in dark, moon in
    light. One 30px square, the only round-cornered control in the header. */
@@ -124,7 +129,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
 .tabs{display:flex;flex-wrap:wrap;border-bottom:1px solid var(--line);
   margin-bottom:16px;position:sticky;top:0;z-index:6;background:var(--bg)}
 .tab{appearance:none;border:none;background:none;cursor:pointer;
-  padding:10px 15px 9px;font-family:var(--display);font-size:13.5px;
+  padding:10px 15px 9px;font-family:var(--sans);font-size:14px;
   font-weight:500;color:var(--mute);border-bottom:2px solid transparent;
   margin-bottom:-1px;transition:color .12s}
 .tab:first-child{padding-left:0}
@@ -136,8 +141,9 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;
   overflow:hidden;background:var(--surface)}
 .seg button{appearance:none;border:none;background:none;cursor:pointer;
-  font-family:var(--mono);font-size:12px;font-weight:500;color:var(--mute);
-  letter-spacing:-.01em;padding:7px 15px;border-right:1px solid var(--line)}
+  font-family:var(--sans);font-size:13px;font-weight:500;color:var(--mute);
+  padding:7px 16px;border-right:1px solid var(--line);
+  font-variant-numeric:tabular-nums}
 .seg button:last-child{border-right:none}
 .seg button:hover{color:var(--ink);background:var(--raised)}
 .seg button.on{color:var(--surface);background:var(--teal);font-weight:700}
@@ -148,8 +154,8 @@ select{font-family:var(--sans);font-size:14px;color:var(--ink);
 .spacer{margin-left:auto}
 
 /* ------------------------------------------------------------------ type */
-h5,.eyebrow{font-family:var(--display);font-size:15px;font-weight:600;
-  letter-spacing:-.005em;color:var(--ink);margin:22px 0 9px;
+h5,.eyebrow{font-family:var(--display);font-size:17px;font-weight:600;
+  letter-spacing:-.008em;color:var(--ink);margin:22px 0 9px;
   display:flex;align-items:baseline;flex-wrap:wrap}
 .eyebrow:first-child{margin-top:0}
 .note{font-size:14px;color:var(--mute);line-height:1.65;margin:0 0 12px;
@@ -162,8 +168,8 @@ h5,.eyebrow{font-family:var(--display);font-size:15px;font-weight:600;
 .chips{margin:0 0 12px}
 .chip{display:inline-block;padding:4px 10px;margin:0 7px 7px 0;
   border:1px solid var(--line);border-radius:6px;background:var(--surface);
-  font-family:var(--mono);font-size:11px;font-weight:400;color:var(--mute);
-  letter-spacing:-.01em}
+  font-family:var(--sans);font-size:12px;font-weight:500;color:var(--mute);
+  font-variant-numeric:tabular-nums}
 .skel{padding:52px 0;text-align:center;color:var(--faint);font-size:14px}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:20px}
 @media(max-width:880px){.grid2{grid-template-columns:1fr;gap:10px}}
@@ -172,17 +178,17 @@ h5,.eyebrow{font-family:var(--display);font-size:15px;font-weight:600;
 .card{border:1px solid var(--line);border-radius:10px;overflow:hidden;
   background:var(--surface);box-shadow:var(--shadow)}
 .scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
-table{border-collapse:collapse;width:100%;font-size:13px;line-height:1.45}
-thead th{background:var(--surface);color:var(--faint);font-family:var(--mono);
-  font-weight:500;font-size:10px;text-transform:uppercase;letter-spacing:.06em;
-  padding:8px 11px;text-align:right;border-bottom:1px solid var(--line);
+table{border-collapse:collapse;width:100%;font-size:13px;line-height:1.45;
+  font-variant-numeric:tabular-nums lining-nums}
+thead th{background:var(--surface);color:var(--faint);font-family:var(--sans);
+  font-weight:600;font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;
+  padding:7px 12px;text-align:right;border-bottom:1px solid var(--line);
   white-space:nowrap}
 thead th.l{text-align:left}
-td{font-family:var(--mono);font-size:12px;font-weight:400;letter-spacing:-.02em;
-  padding:5px 11px;text-align:right;border-bottom:1px solid var(--hair);
+td{font-family:var(--sans);font-size:13px;font-weight:450;
+  padding:4.5px 12px;text-align:right;border-bottom:1px solid var(--hair);
   white-space:nowrap;color:var(--body)}
-td.l{font-family:var(--sans);font-size:13px;letter-spacing:0;text-align:left;
-  color:var(--ink);font-weight:500}
+td.l{text-align:left;color:var(--ink);font-weight:500}
 tbody tr:last-child td{border-bottom:none}
 tbody tr:hover td{background:var(--raised)}
 
@@ -197,8 +203,8 @@ tbody tr:hover td{background:var(--raised)}
 td.l .nm{color:var(--mute);font-weight:400}
 
 /* Last is the anchor figure — everything else on the row derives from it. */
-td.last{color:var(--ink);font-weight:600;font-size:12.5px;
-  border-right:1px solid var(--hair);padding-right:15px}
+td.last{color:var(--ink);font-weight:600;font-size:13.5px;
+  border-right:1px solid var(--hair);padding-right:16px}
 
 /* The selected horizon gains weight, not a fill. A tinted cell reads as an
    error state; a heavier digit reads as focus. */
@@ -206,12 +212,12 @@ td.on{font-weight:700}
 thead th.on{color:var(--ink);font-weight:700}
 tr.out td{background:var(--raised)}
 tr.out:hover td{background:var(--hair)}
-tr.sec td{background:var(--raised);font-family:var(--mono);font-size:9.5px;
-  text-transform:uppercase;letter-spacing:.1em;color:var(--faint);
-  padding:6px 11px;font-weight:500}
+tr.sec td{background:var(--raised);font-family:var(--sans);font-size:10px;
+  text-transform:uppercase;letter-spacing:.09em;color:var(--faint);
+  padding:6px 12px;font-weight:600}
 
-.pos{color:var(--pos);font-weight:500}
-.neg{color:var(--neg);font-weight:500}
+.pos{color:var(--pos);font-weight:550}
+.neg{color:var(--neg);font-weight:550}
 .dim{color:var(--mute)}
 .faint{color:var(--faint)}
 .lg{color:var(--teal);font-weight:600}
@@ -223,12 +229,12 @@ td.l a:hover{color:var(--teal);border-bottom-color:var(--teal-b)}
 
 /* ---------------------------------------------------------------- charts */
 .chart{width:100%;display:block}
-.chart .axis{font-family:var(--mono);font-size:10px;fill:var(--faint);
-  letter-spacing:-.02em}
-.chart .lbl{font-family:var(--sans);font-size:12px;font-weight:500;
+.chart .axis{font-family:var(--sans);font-size:11px;fill:var(--faint);
+  font-variant-numeric:tabular-nums}
+.chart .lbl{font-family:var(--sans);font-size:12.5px;font-weight:500;
   fill:var(--body)}
-.chart .val{font-family:var(--mono);font-size:10.5px;font-weight:500;
-  fill:var(--mute);letter-spacing:-.02em}
+.chart .val{font-family:var(--sans);font-size:11.5px;font-weight:600;
+  fill:var(--mute);font-variant-numeric:tabular-nums}
 .chart .grid{stroke:var(--grid);stroke-width:1}
 .plot{border:1px solid var(--line);border-radius:10px;padding:10px 6px;
   background:var(--surface);box-shadow:var(--shadow)}
@@ -240,12 +246,12 @@ td.l a:hover{color:var(--teal);border-bottom-color:var(--teal-b)}
   font-weight:600;font-size:14.5px}
 .item a:hover{color:var(--teal)}
 .item p{margin:6px 0 0;font-size:14px;color:var(--mute);line-height:1.65}
-.item .when{font-family:var(--mono);font-size:10.5px;color:var(--faint);
-  display:block;margin-top:7px;letter-spacing:-.01em}
+.item .when{font-family:var(--sans);font-size:11.5px;color:var(--faint);
+  display:block;margin-top:7px;font-variant-numeric:tabular-nums}
 .mkt{padding:17px 18px;border-bottom:1px solid var(--hair)}
 .mkt:last-child{border-bottom:none}
-.mkt h6{margin:0 0 7px;font-family:var(--mono);font-size:11px;font-weight:600;
-  color:var(--teal);text-transform:uppercase;letter-spacing:.1em}
+.mkt h6{margin:0 0 7px;font-family:var(--sans);font-size:12px;font-weight:700;
+  color:var(--teal);text-transform:uppercase;letter-spacing:.07em}
 .mkt p{margin:0;font-size:14.5px;color:var(--body);line-height:1.7;max-width:76ch}
 
 /* --------------------------------------------------------------- drivers */
@@ -255,16 +261,15 @@ td.l a:hover{color:var(--teal);border-bottom-color:var(--teal-b)}
   padding:14px 16px 12px;box-shadow:var(--shadow)}
 .dhead{display:flex;align-items:center;gap:2px;font-size:14px;color:var(--body);
   padding-bottom:9px;margin-bottom:9px;border-bottom:1px solid var(--hair)}
-.dhead b{font-family:var(--display);color:var(--ink);font-weight:700;
-  margin-right:5px}
-.dsec{margin-left:auto;font-family:var(--mono);font-size:9.5px;font-weight:500;
-  letter-spacing:.1em;text-transform:uppercase;color:var(--faint)}
+.dhead b{color:var(--ink);font-weight:700;margin-right:5px}
+.dsec{margin-left:auto;font-family:var(--sans);font-size:10px;font-weight:600;
+  letter-spacing:.09em;text-transform:uppercase;color:var(--faint)}
 ol.dlist{margin:0;padding:0;list-style:none;counter-reset:d}
 ol.dlist li{counter-increment:d;position:relative;padding:0 0 9px 22px;
   font-size:13px;line-height:1.55}
 ol.dlist li:last-child{padding-bottom:0}
-ol.dlist li::before{content:counter(d);position:absolute;left:0;top:2px;
-  font-family:var(--mono);font-size:9.5px;font-weight:500;color:var(--teal);
+ol.dlist li::before{content:counter(d);position:absolute;left:0;top:1px;
+  font-family:var(--sans);font-size:10px;font-weight:700;color:var(--teal);
   width:15px;height:15px;border-radius:4px;background:var(--teal-w);
   text-align:center;line-height:15px}
 ol.dlist li b{display:block;color:var(--ink);font-weight:600;font-size:13px}
@@ -288,11 +293,10 @@ pre{margin:0;padding:16px;font-family:var(--mono);font-size:11px;line-height:1.6
 @media(max-width:640px){
   .wrap{padding:20px 15px 52px}
   body{font-size:14px}
-  .wordmark{font-size:20px}
-  table{font-size:12px}
-  td{padding:7px 9px;font-size:11.5px}
-  td.l{font-size:12.5px}
-  thead th{padding:8px 9px}
+  .wordmark{font-size:21px}
+  table{font-size:12.5px}
+  td{padding:7px 10px}
+  thead th{padding:9px 10px;font-size:10.5px}
   .tab{padding:11px 11px;font-size:13px}
   h5,.eyebrow{font-size:14.5px}
   .note{font-size:13.5px}
