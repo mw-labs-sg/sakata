@@ -226,6 +226,43 @@ def _window_field(name, by_bar):
     }
 
 
+def _persistence(out: dict, top=10):
+    """Which candidates hold across windows, not just win one.
+
+    The single most misleading thing a ranked field can do is present the top
+    of a 12-day window as a finding. Nine windows disagreeing is the honest
+    picture; nine windows agreeing is a signal, and it is the only evidence
+    available here that a relationship is structural rather than a fortnight
+    of luck. Ranked by count first, then by average rank, because appearing
+    8th in six windows beats appearing 1st in one.
+    """
+    seen = {}
+    for name, r in out.items():
+        for row in r["rows"][:top]:
+            key = ((row["long"] or "cash") + " / " + (row["short"] or "cash"),
+                   row["kind"])
+            e = seen.setdefault(key, {"windows": [], "ranks": [],
+                                      "sharpe": [], "er": []})
+            e["windows"].append(name)
+            e["ranks"].append(row["n"])
+            if row["sharpe"] is not None:
+                e["sharpe"].append(row["sharpe"])
+            if row["er"] is not None:
+                e["er"].append(row["er"])
+    rows = []
+    for (label, kind), e in seen.items():
+        rows.append({
+            "label": label, "kind": kind,
+            "count": len(e["windows"]), "windows": e["windows"],
+            "best": min(e["ranks"]),
+            "avgRank": _num(float(np.mean(e["ranks"])), 1),
+            "medSharpe": _num(float(np.median(e["sharpe"]))) if e["sharpe"] else None,
+            "medER": _num(float(np.median(e["er"])), 3) if e["er"] else None,
+        })
+    rows.sort(key=lambda r: (-r["count"], r["avgRank"]))
+    return rows[:12]
+
+
 def build_spreads(by_bar: dict) -> dict:
     """by_bar is {bar: {ticker: close Series}} — every window slices from it."""
     out, summary = {}, []
@@ -251,5 +288,11 @@ def build_spreads(by_bar: dict) -> dict:
         })
         print(f"    spreads {name}: {r['bars']} bars, {r['instruments']} "
               f"instruments, SE +/-{r['se']}")
+    persist = _persistence(out)
+    if persist:
+        top = persist[0]
+        print(f"    spreads: most persistent {top['label']} in "
+              f"{top['count']}/{len(out)} windows (avg rank {top['avgRank']})")
     return {"periods": [p for p in PERIODS if p in out], "mode": MODE,
-            "cap": RATIO_CAP, "topN": TOP_N, "summary": summary, "data": out}
+            "cap": RATIO_CAP, "topN": TOP_N, "summary": summary,
+            "persist": persist, "nWindows": len(out), "data": out}
