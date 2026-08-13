@@ -257,6 +257,7 @@ function palette() {
     pos: cssv("--pos", "#0a7c66"), neg: cssv("--neg", "#c2453b"),
     up: cssv("--up", "#0d9488"), down: cssv("--down", "#cf5a54"),
     teal: cssv("--teal", "#0d8f83"), deep: cssv("--teal-d", "#0d5f58"),
+    line: cssv("--line", "#e0e5e8"),
     amber: cssv("--amber", "#96701c"), mute: cssv("--mute", "#66727b"),
     faint: cssv("--faint", "#97a2ab"), axis: cssv("--axis", "#d3dade"),
     volbar: cssv("--volbar", "#e9edf1"), other: cssv("--sec-other", "#9aa2ab")
@@ -472,13 +473,13 @@ function renderTech(d) {
 /* --------------------------------------------------------------- Spreads */
 function digest(p) {
   var L = [];
-  L.push("SAKATA · " + p.period + " · " + p.barName + " bars");
+  L.push("SAKATA · " + p.window + " · " + p.note);
   L.push("generated    " + (META.generated || "") + " UTC");
-  L.push("window       " + p.period + ", " + Math.round(p.pct * 100) +
-    "% elapsed (day " + p.span + " of " + p.total + "), closes " + p.ends);
+  L.push("window       " + p.window + ", " + p.start + " to " + p.end +
+    " (" + p.span + " calendar days)");
   L.push("sample       " + p.bars + " bars, " + p.instruments +
     " instruments, annualised x" + p.ann);
-  L.push("Sharpe SE    +/-" + p.se + " now, +/-" + p.seEnd + " at period close");
+  L.push("Sharpe SE    +/-" + p.se + " over this span");
   L.push("field        " + p.nOut + " outrights + " + p.nPair + " pairs" +
     (p.nCapped ? ", " + p.nCapped + " hidden by the 5:1 leg cap" : ""));
   L.push("medians      pair Sharpe " + p.medPair + " vs outright " + p.medOut +
@@ -517,28 +518,51 @@ function digest(p) {
 
 function renderSpreads(d) {
   var per = S.spreads.period;
-  if (!d.data[per]) per = S.spreads.period = d.periods.filter(function (p) {
-    return d.data[p];
-  })[0];
+  if (!d.data[per]) per = S.spreads.period = d.periods[0];
   var p = d.data[per];
   if (!p) return view('<div class="skel">No spread field was built.</div>');
 
+  /* ---- the cross-window scan. One window's winner is an artefact until you
+     know whether the neighbouring windows agree, and where the best OUTRIGHT
+     landed says whether spreading earned its complexity at all. */
+  var sumHead = '<th class="l">Window</th><th class="l">Top candidate</th>' +
+    '<th class="l">Kind</th><th>Sharpe</th><th>± SE</th><th>ER</th>' +
+    '<th>Tot%</th><th>Bars</th><th class="l">Best outright</th><th>at #</th>';
+  var sumBody = (d.summary || []).map(function (r) {
+    var on = r.window === per;
+    return '<tr class="' + (on ? "out" : "") + '">' +
+      '<td class="l"><a href="#" data-win="' + esc(r.window) + '">' +
+      esc(r.window) + "</a></td>" +
+      '<td class="l">' + esc(r.label || "—") + "</td>" +
+      '<td class="l ' + (r.kind === "outright" ? "sh" : "lg") + '">' +
+      esc(r.kind || "—") + "</td>" +
+      cell(r.sharpe, 2, "last") + cell(r.se, 2, "faint") +
+      cell(r.er, 3, "dim") + pct(r.tot, 1) + cell(r.bars, 0, "faint") +
+      '<td class="l dim">' + esc(r.bestOut || "—") + "</td>" +
+      cell(r.outRank, 0, (r.outRank && r.outRank <= 5) ? "sh" : "faint") +
+      "</tr>";
+  }).join("");
+
+  var sel = '<select data-sel="spWindow">' + d.periods.map(function (w) {
+    return '<option value="' + w + '"' + (w === per ? " selected" : "") + ">" +
+      esc(w) + "</option>";
+  }).join("") + "</select>";
+
   var chips = [
-    per + " · " + p.barName + " bars",
-    p.bars + " bars · " + p.instruments + " instruments",
-    "Sharpe SE ±" + p.se + " → ±" + p.seEnd + " at close",
-    Math.round(p.pct * 100) + "% elapsed · closes " + p.ends,
+    p.note, p.bars + " bars · " + p.instruments + " instruments",
+    "Sharpe SE ±" + p.se, p.start + " → " + p.end,
     "vol-adjusted legs", "cap " + d.cap + ":1"
   ].map(function (c) { return '<span class="chip">' + esc(c) + "</span>"; }).join("");
 
   var verdict = [];
-  if (p.bestOut) verdict.push("best outright <b>" + esc(p.bestOut) + "</b>");
   if (p.bestPair) verdict.push("best pair <b>" + esc(p.bestPair) + "</b>");
+  if (p.bestOut) verdict.push("best outright <b>" + esc(p.bestOut) +
+    "</b> at rank " + p.outRank);
   verdict.push("median Sharpe — pairs <b>" + p.medPair + "</b>, outrights <b>" +
     p.medOut + "</b>");
   if (p.medOut >= p.medPair) {
-    verdict.push("<b>outrights win the like-for-like — spreading is not paying " +
-      "on this horizon</b>");
+    verdict.push("<b>outrights win the like-for-like — spreading is not " +
+      "paying on this horizon</b>");
   }
 
   var warn = "";
@@ -572,16 +596,50 @@ function renderSpreads(d) {
   }).join("");
 
   view(
-    '<div class="bar">' + seg("spPeriod", d.periods.filter(function (x) {
-      return d.data[x];
-    }), per) + "</div>" +
+    '<div class="eyebrow">Optimal by window</div>' +
+    '<div class="note">Top-ranked candidate in each window on the same ' +
+    'weighting. A position that holds across neighbouring windows is a ' +
+    'different object from one that only wins the shortest. Click a window ' +
+    'to open it.</div>' + table(sumHead, sumBody) +
+    '<div class="eyebrow" style="margin-top:24px">Window</div>' +
+    '<div class="bar">' + sel + '</div>' +
     '<div class="chips">' + chips + "</div>" +
     '<div class="note">' + verdict.join(" · ") + "</div>" + warn +
-    table(head, body) +
+    spreadCharts(p) + table(head, body) +
     "<details><summary>Digest — copy this into an LLM</summary>" +
     '<button class="btn" data-copy="dg">Copy digest</button>' +
     '<pre id="dg">' + esc(digest(p)) + "</pre></details>"
   );
+}
+
+/* Three lines per candidate: each leg rebased to 100, and the spread itself.
+   The table cannot separate a spread that worked because both legs trended
+   and the gap widened from one that worked because a leg collapsed. This
+   can, at a glance, which is the whole reason it is here. */
+function spreadCharts(p) {
+  if (!p.charts || !p.charts.length) return "";
+  var wide = width() > 820;
+  var cols = wide ? 3 : 1;
+  var w = Math.floor((width() - (cols - 1) * 12) / cols) - 24;
+  var cards = p.charts.map(function (c) {
+    var series = [];
+    if (c.lg) series.push({ k: c.lgName, v: c.lg, c: C.pos, w: 1.2, o: 0.85 });
+    if (c.sh) series.push({ k: c.shName, v: c.sh, c: C.neg, w: 1.2, o: 0.85 });
+    series.push({ k: "spread", v: c.sp, c: C.deep, w: 2.2 });
+    var legend = series.map(function (s) {
+      return '<span class="key"><i class="sw" style="background:' + s.c +
+        '"></i>' + esc(s.k) + "</span>";
+    }).join("");
+    return '<div class="plot"><div class="ctitle"><b>' + c.n + ". " +
+      esc(c.label) + "</b><span>Sharpe " + c.sharpe + " · ER " + c.er +
+      " · " + (c.tot >= 0 ? "+" : "") + c.tot + "%</span></div>" +
+      '<div class="clegend">' + legend + "</div>" +
+      lineChart(c.t, series, null, w, 150, 1) + "</div>";
+  }).join("");
+  return '<div class="eyebrow">Why they ranked</div>' +
+    '<div class="note">Both legs rebased to 100 at the window open, with the ' +
+    'vol-adjusted spread over them.</div>' +
+    '<div class="cgrid">' + cards + "</div>";
 }
 
 /* ----------------------------------------------------------------- Curve */
@@ -856,10 +914,12 @@ document.addEventListener("click", function (e) {
     var id = sg.parentNode.dataset.seg, v = sg.dataset.v;
     if (id === "boardHz") S.board.hz = v;
     if (id === "techHz") S.tech.hz = v;
-    if (id === "spPeriod") S.spreads.period = v;
     if (id === "drGroup") S.drivers.group = v;
     route(); return;
   }
+
+  var win = e.target.closest("[data-win]");
+  if (win) { e.preventDefault(); S.spreads.period = win.dataset.win; route(); return; }
 
   var code = e.target.closest("[data-code]");
   if (code) { e.preventDefault(); S.tech.code = code.dataset.code; route(); return; }
@@ -882,6 +942,7 @@ document.addEventListener("click", function (e) {
 document.addEventListener("change", function (e) {
   var s = e.target.closest("[data-sel]");
   if (!s) return;
+  if (s.dataset.sel === "spWindow") S.spreads.period = s.value;
   if (s.dataset.sel === "techCode") S.tech.code = s.value;
   if (s.dataset.sel === "curveCode") S.curve.code = s.value;
   if (s.dataset.sel === "evFilter") S.events.filter = s.value;
@@ -892,7 +953,7 @@ var rz;
 window.addEventListener("resize", function () {
   clearTimeout(rz);
   rz = setTimeout(function () {
-    if (["Board", "Technical", "Curve"].indexOf(S.tab) >= 0) route();
+    if (["Board", "Technical", "Curve", "Spreads"].indexOf(S.tab) >= 0) route();
   }, 220);
 });
 

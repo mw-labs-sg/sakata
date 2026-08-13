@@ -244,6 +244,19 @@ td.l a:hover{color:var(--teal);border-bottom-color:var(--teal-b)}
 .plot{border:1px solid var(--line);border-radius:10px;padding:10px 6px;
   background:var(--surface);box-shadow:var(--shadow)}
 
+/* Small multiples. Three across on a desktop, one on a phone — a 300px-wide
+   chart is the narrowest that still shows the shape of a spread. */
+.cgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:6px}
+@media(max-width:820px){.cgrid{grid-template-columns:1fr}}
+.ctitle{display:flex;align-items:baseline;justify-content:space-between;gap:8px;
+  padding:0 6px 2px;font-size:12.5px;color:var(--ink)}
+.ctitle b{font-weight:600}
+.ctitle span{font-size:11px;color:var(--faint);white-space:nowrap;
+  font-variant-numeric:tabular-nums}
+.clegend{display:flex;flex-wrap:wrap;gap:10px;padding:0 6px 4px;
+  font-size:10.5px;color:var(--mute)}
+.clegend .sw{width:7px;height:7px;margin-right:5px}
+
 /* ------------------------------------------------------------------ news */
 .item{border-bottom:1px solid var(--hair);padding:15px 18px}
 .item:last-child{border-bottom:none}
