@@ -43,7 +43,8 @@ def num(x):
 # ------------------------------------------------------------------ prices
 def _synth(interval, n=None):
     """Deterministic fake OHLC so --dry exercises the whole path offline."""
-    n, freq = ((1400, "h") if interval == "1h" else
+    n, freq = ((1500, "15min") if interval == "15m" else
+               (1400, "h") if interval == "1h" else
                (3000, "h") if interval == "1h_long" else
                (2500, "B") if interval == "1d" else
                (900, "W-MON") if interval == "1wk" else (1400, "h"))

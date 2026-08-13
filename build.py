@@ -46,6 +46,8 @@ def main() -> int:
     # Two network passes, not three. 4h and weekly are aggregations of bars
     # already in hand, so fetching them separately buys nothing and costs a
     # round trip that can fail on its own.
+    print("prices: 15-minute 60d")
+    m15 = S.fetch_ohlc("15m", "60d")
     print("prices: hourly 730d")
     hourly = S.fetch_ohlc("1h", "730d")
     print("prices: daily 10y")
@@ -65,7 +67,14 @@ def main() -> int:
     write("technical.json", T.build_technical(by_bar))
 
     print("spreads")
-    write("spreads.json", SP.build_spreads(daily, hourly))
+    # Closes only, keyed by ticker — every window slices from these, so the
+    # nine of them cost no extra network at all.
+    def closes(frames):
+        return {U.TICKER[c]: df["close"].dropna()
+                for c, df in frames.items() if df is not None and len(df)}
+    write("spreads.json", SP.build_spreads({
+        "15m": closes(m15), "1h": closes(hourly),
+        "4h": closes(four_h), "1d": closes(daily)}))
 
     if "margins" not in skip:
         print("margins")
