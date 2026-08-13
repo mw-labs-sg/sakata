@@ -815,20 +815,11 @@ function renderNews(d) {
         "</span>" : "") + "</div>";
   }).join("") : '<div class="skel">No commentary parsed in the last build.</div>';
 
-  var wire = (d.wire || []).map(function (i) {
-    return '<div class="item"><a href="' + esc(i.link) + '" target="_blank" ' +
-      'rel="noopener">' + esc(i.title) + "</a>" +
-      (i.summary ? "<p>" + esc(i.summary) + "</p>" : "") +
-      (i.when ? '<span class="when">' + esc(i.when) + "</span>" : "") + "</div>";
-  }).join("");
-
   view(
     '<div class="note">Overnight commentary per market, scraped at build time ' +
-    "from Trading Economics, plus the CoinDesk wire. Built to copy wholesale " +
-    "into an LLM.</div>" +
-    '<div class="eyebrow">Market commentary</div><div class="card">' + mkt + "</div>" +
-    (wire ? '<div class="eyebrow">Crypto wire</div><div class="card">' + wire +
-      "</div>" : "")
+    "from Trading Economics. One paragraph per instrument, built to copy " +
+    "wholesale into an LLM.</div>" +
+    '<div class="eyebrow">Market commentary</div><div class="card">' + mkt + "</div>"
   );
 }
 
