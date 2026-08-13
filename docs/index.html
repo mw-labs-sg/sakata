@@ -3,11 +3,26 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#ffffff">
+<meta name="theme-color" content="#f4f6f7">
 <title>Sakata · futures terminal</title>
+<!-- Theme is resolved before first paint. Doing this in sakata.js instead
+     would flash a white page on a dark-mode phone at every tab change. -->
+<script>
+(function () {
+  var t, src = "stored";
+  try { t = localStorage.getItem("sk-theme"); } catch (e) { t = null; }
+  if (t !== "dark" && t !== "light") {
+    src = "system";
+    t = (window.matchMedia &&
+         window.matchMedia("(prefers-color-scheme: dark)").matches) ? "dark" : "light";
+  }
+  document.documentElement.setAttribute("data-theme", t);
+  document.documentElement.setAttribute("data-theme-src", src);
+})();
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="sakata.css">
 </head>
 <body>
@@ -15,10 +30,14 @@
 <div class="wrap">
 
   <header class="head">
-    <svg class="mark" width="26" height="32" viewBox="0 0 26 32" fill="none" aria-hidden="true"><path d="M13 31V13" stroke="#0b7a63" stroke-width="2.2" stroke-linecap="round"/><path d="M13 22.5c0-3.4 2-5.6 5.6-6-.1 3.5-2 5.7-5.6 6z" fill="#0b7a63"/><path d="M13 22.5c0-3.4-2-5.6-5.6-6 .1 3.5 2 5.7 5.6 6z" fill="#0b7a63"/><path d="M13 15.5c0-3.4 2-5.6 5.6-6-.1 3.5-2 5.7-5.6 6z" fill="#0b7a63" opacity=".72"/><path d="M13 15.5c0-3.4-2-5.6-5.6-6 .1 3.5 2 5.7 5.6 6z" fill="#0b7a63" opacity=".72"/><path d="M13 9c0-3.1 1.6-5 4.6-5.6C17.5 6.5 16 8.4 13 9z" fill="#0b7a63" opacity=".45"/><path d="M13 9c0-3.1-1.6-5-4.6-5.6C8.5 6.5 10 8.4 13 9z" fill="#0b7a63" opacity=".45"/></svg>
+    <svg class="mark" width="26" height="32" viewBox="0 0 26 32" fill="none" aria-hidden="true"><path d="M13 31V13" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><path d="M13 22.5c0-3.4 2-5.6 5.6-6-.1 3.5-2 5.7-5.6 6z" fill="currentColor"/><path d="M13 22.5c0-3.4-2-5.6-5.6-6 .1 3.5 2 5.7 5.6 6z" fill="currentColor"/><path d="M13 15.5c0-3.4 2-5.6 5.6-6-.1 3.5-2 5.7-5.6 6z" fill="currentColor" opacity=".72"/><path d="M13 15.5c0-3.4-2-5.6-5.6-6 .1 3.5 2 5.7 5.6 6z" fill="currentColor" opacity=".72"/><path d="M13 9c0-3.1 1.6-5 4.6-5.6C17.5 6.5 16 8.4 13 9z" fill="currentColor" opacity=".45"/><path d="M13 9c0-3.1-1.6-5-4.6-5.6C8.5 6.5 10 8.4 13 9z" fill="currentColor" opacity=".45"/></svg>
     <h1 class="wordmark">Sakata</h1>
     <span class="rule"></span>
     <span class="stamp" id="stamp">loading</span>
+    <button class="theme" id="theme" type="button" aria-label="Switch theme" title="Switch theme">
+      <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 14.6A8.6 8.6 0 1 1 9.4 3.5a6.9 6.9 0 0 0 11.1 11.1z"/></svg>
+      <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.2v2.3M12 19.5v2.3M4.2 12H1.9M22.1 12h-2.3M6.5 6.5 4.9 4.9M19.1 19.1l-1.6-1.6M17.5 6.5l1.6-1.6M4.9 19.1l1.6-1.6"/></svg>
+    </button>
   </header>
 
   <nav class="tabs" id="tabs"></nav>
