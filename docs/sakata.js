@@ -298,17 +298,7 @@ function setTheme(t, remember) {
 }
 setTheme(document.documentElement.getAttribute("data-theme") || "light", false);
 
-/* Follow the OS until the switch is touched, then stop. */
-if (window.matchMedia) {
-  var mq = window.matchMedia("(prefers-color-scheme: dark)");
-  var onScheme = function (e) {
-    if (document.documentElement.getAttribute("data-theme-src") === "stored") return;
-    setTheme(e.matches ? "dark" : "light", false);
-    if (typeof route === "function") route();
-  };
-  if (mq.addEventListener) mq.addEventListener("change", onScheme);
-  else if (mq.addListener) mq.addListener(onScheme);
-}
+/* No OS listener. Dark is the product's default, not a guess at the room. */
 
 /* ------------------------------------------------------------- app state */
 var S = {
