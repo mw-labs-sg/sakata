@@ -3,19 +3,18 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#f4f6f7">
+<meta name="theme-color" content="#0b0f12">
 <title>Sakata · futures terminal</title>
 <!-- Theme is resolved before first paint. Doing this in sakata.js instead
-     would flash a white page on a dark-mode phone at every tab change. -->
+     would flash the wrong ground at every tab change. Dark is the default;
+     the OS preference is deliberately not consulted, because a terminal
+     should not change colour because the laptop thinks it is daytime. A
+     stored choice from the header switch always wins. -->
 <script>
 (function () {
   var t, src = "stored";
   try { t = localStorage.getItem("sk-theme"); } catch (e) { t = null; }
-  if (t !== "dark" && t !== "light") {
-    src = "system";
-    t = (window.matchMedia &&
-         window.matchMedia("(prefers-color-scheme: dark)").matches) ? "dark" : "light";
-  }
+  if (t !== "dark" && t !== "light") { src = "default"; t = "dark"; }
   document.documentElement.setAttribute("data-theme", t);
   document.documentElement.setAttribute("data-theme-src", src);
 })();
