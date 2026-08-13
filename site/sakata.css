@@ -137,9 +137,13 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
 /* ------------------------------------------------------------------ tabs */
 .tabs{display:flex;flex-wrap:wrap;border-bottom:1px solid var(--line);
   margin-bottom:16px;position:sticky;top:0;z-index:6;background:var(--bg)}
+/* Capitals need tracking. At normal spacing an all-caps run reads as a
+   block rather than as words, so .07em goes back in and the size comes down
+   — caps carry more optical weight than lowercase at the same px. */
 .tab{appearance:none;border:none;background:none;cursor:pointer;
-  padding:10px 15px 9px;font-family:var(--sans);font-size:14px;
-  font-weight:500;color:var(--mute);border-bottom:2px solid transparent;
+  padding:10px 14px 9px;font-family:var(--sans);font-size:12px;
+  font-weight:600;text-transform:uppercase;letter-spacing:.07em;
+  color:var(--mute);border-bottom:2px solid transparent;
   margin-bottom:-1px;transition:color .12s}
 .tab:first-child{padding-left:0}
 .tab:hover{color:var(--ink)}

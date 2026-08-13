@@ -14,10 +14,13 @@ import shutil
 import sys
 from pathlib import Path
 
-import sk_drivers as DR
+import sk_board as BOARD
+import sk_curve as CURVE
+import sk_knowledge as KN
+import sk_margins as MARGIN
 import sk_sources as S
 import sk_spreads as SP
-import sk_tabs as T
+import sk_technical as TECH
 import sk_universe as U
 
 ROOT = Path(__file__).parent
@@ -36,7 +39,7 @@ def write(name: str, obj) -> None:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--dry", action="store_true", help="synthetic prices, no network")
-    ap.add_argument("--skip", default="", help="comma list: news,curve,margins")
+    ap.add_argument("--skip", default="", help="comma list: curve,margins")
     args = ap.parse_args()
     S.DRY = args.dry
     skip = {s.strip() for s in args.skip.split(",") if s.strip()}
@@ -61,10 +64,10 @@ def main() -> int:
 
     # ---------------------------------------------------------- compute
     print("board")
-    write("board.json", T.build_board(daily))
+    write("board.json", BOARD.build_board(daily))
 
     print("technical")
-    write("technical.json", T.build_technical(by_bar))
+    write("technical.json", TECH.build_technical(by_bar))
 
     print("spreads")
     # Closes only, keyed by ticker — every window slices from these, so the
@@ -78,15 +81,11 @@ def main() -> int:
 
     if "margins" not in skip:
         print("margins")
-        write("margins.json", T.build_margins(S.fetch_margins(), daily))
+        write("margins.json", MARGIN.build_margins(S.fetch_margins(), daily))
 
     if "curve" not in skip:
         print("curve")
-        write("curve.json", T.build_curve(S.fetch_curves()))
-
-    if "news" not in skip:
-        print("news")
-        write("news.json", S.fetch_news())
+        write("curve.json", CURVE.build_curve(S.fetch_curves()))
 
     # ------------------------------------------------------------ meta
     write("meta.json", {
@@ -96,16 +95,25 @@ def main() -> int:
                       "group": U.GROUP_OF[U.SECTOR[c]], "dec": U.DEC[c]}
                      for c in U.CODES],
         "groups": U.GROUPS,
-        "drivers": {c: [{"t": t, "d": d} for t, d in DR.DRIVERS.get(c, [])]
-                    for c in U.CODES},
+        "knowledge": {c: [{"t": t, "d": d} for t, d in KN.KNOWLEDGE.get(c, [])]
+                      for c in U.CODES},
+        # News is fetched IN THE BROWSER now, so the page needs the page list.
+        "te": U.TE_PAGE,
         "dry": bool(args.dry),
     })
 
     # ------------------------------------------------------------ shell
     OUT.mkdir(exist_ok=True)
-    for f in ("index.html", "sakata.css", "sakata.js"):
-        shutil.copy(SITE / f, OUT / f)
-        print(f"  copied {f}")
+    # Copy the tree, not a hardcoded list. The shell is one file per tab now,
+    # so a named list would silently drop any file added later — exactly the
+    # failure that looks like "my change did not deploy".
+    for src in sorted(SITE.rglob("*")):
+        if src.is_dir():
+            continue
+        dst = OUT / src.relative_to(SITE)
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(src, dst)
+        print(f"  copied {dst.relative_to(OUT)}")
     (OUT / ".nojekyll").write_text("")
     print(f"\ndone — open {OUT / 'index.html'}")
     return 0

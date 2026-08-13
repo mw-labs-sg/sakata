@@ -16,17 +16,39 @@ phone.
 
 ## Layout
 
+One file per tab, on both sides. A tab is a Python module that computes it
+and a JS file that draws it, and nothing else needs opening to change one.
+
 ```
 build.py            orchestrator: fetch -> compute -> docs/
+pull.py             refresh ONE dataset by hand, no build, no Action
 sk_universe.py      the instrument universe. Add an instrument HERE and only here.
-sk_sources.py       every network call (Yahoo, CME, AMP, Trading Economics, RSS)
-sk_tabs.py          compute for Board, Technical, Curve, Margins
-sk_spreads.py       the spread/outright field, per calendar period
+sk_sources.py       every network call (Yahoo, CME, AMP)
+sk_fmt.py           JSON number formatting shared by the tab modules
+sk_board.py         Board
+sk_technical.py     Technical — Range Levels, bias, reward:risk
+sk_spreads.py       Spreads — the ranked field across nine windows
+sk_curve.py         Curve
+sk_margins.py       Margins
+sk_knowledge.py     Knowledge — five drivers per contract, hand-maintained
 sakata_stats.py     the statistics themselves (Sharpe, ER, alignment, ranking)
-site/               index.html · sakata.css · sakata.js   (the shell, edited by hand)
+
+site/               the shell, edited by hand
+  index.html        script order lives here
+  sakata.css        every colour, as tokens, light and dark
+  js/core.js        state, routing, palette, table helpers
+  js/charts.js      bar, line and candle primitives
+  js/<tab>.js       one per tab: board, technical, spreads, curve,
+                    margins, events, knowledge, news
+  js/boot.js        runs last
+
 docs/               PUBLISHED OUTPUT — built, committed, never edited by hand
 .github/workflows/  the build schedule
 ```
+
+Events and News have no Python module. Events is pure calendar arithmetic done
+in the browser, so it stays correct when the build is days old; News is fetched
+live from the page on every load.
 
 ## Run it
 

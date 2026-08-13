@@ -50,6 +50,18 @@
   <main id="view" class="view"><div class="skel">Loading…</div></main>
 
 </div>
-<script src="sakata.js"></script>
+<!-- Order matters: core defines the router and helpers, the tab files
+     register themselves, boot runs last. No bundler by design. -->
+<script src="js/core.js"></script>
+<script src="js/charts.js"></script>
+<script src="js/board.js"></script>
+<script src="js/technical.js"></script>
+<script src="js/spreads.js"></script>
+<script src="js/curve.js"></script>
+<script src="js/margins.js"></script>
+<script src="js/events.js"></script>
+<script src="js/knowledge.js"></script>
+<script src="js/news.js"></script>
+<script src="js/boot.js"></script>
 </body>
 </html>

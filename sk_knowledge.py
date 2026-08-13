@@ -1,4 +1,4 @@
-"""Sakata — what actually moves each contract.
+"""Sakata — the Knowledge tab: what actually moves each contract.
 
 Five drivers per instrument, ordered roughly by how often they set the tone
 rather than by magnitude: a driver that matters enormously twice a decade sits
@@ -10,7 +10,7 @@ Each entry is (headline, mechanism). Keep mechanisms to one clause and say
 which way it pushes; a driver you cannot sign is not a driver, it is a topic.
 """
 
-DRIVERS = {
+KNOWLEDGE = {
 # ---------------------------------------------------------------- indices
 "ES": [
  ("Fed path and real yields", "Discount rate for every cash flow; rising real yields compress multiples before they dent earnings."),

@@ -1,9 +1,8 @@
 """pull.py — refresh ONE dataset now, without a full build or an Action.
 
-    python pull.py news
     python pull.py margins
     python pull.py curve
-    python pull.py news margins
+    python pull.py margins curve
 
 Writes straight into docs/data/, leaving every other file untouched, so a
 broken scraper can never take out prices you already have. This is the same
@@ -18,15 +17,15 @@ import json
 import sys
 from pathlib import Path
 
+import sk_curve as CURVE
+import sk_margins as MARGIN
 import sk_sources as S
-import sk_tabs as T
 
 DATA = Path(__file__).parent / "docs" / "data"
 
 JOBS = {
-    "news":    lambda: S.fetch_news(),
-    "margins": lambda: T.build_margins(S.fetch_margins(), _daily()),
-    "curve":   lambda: T.build_curve(S.fetch_curves()),
+    "margins": lambda: MARGIN.build_margins(S.fetch_margins(), _daily()),
+    "curve":   lambda: CURVE.build_curve(S.fetch_curves()),
 }
 _cache = {}
 

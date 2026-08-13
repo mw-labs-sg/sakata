@@ -60,14 +60,17 @@ MULT = {
 }
 
 # Trading Economics commentary pages, per instrument.
+# Crypto is deliberately absent. Their btcusd/ethusd pages carry a commentary
+# paragraph that goes weeks without changing — a July paragraph was still
+# showing in mid-August — so the tab would present three-week-old text with
+# today's layout around it. Stale commentary that looks current is worse than
+# no commentary, and the Drivers tab already says what moves the two of them.
 TE_PAGE = {
     "ES":  "https://tradingeconomics.com/united-states/stock-market",
     "NKD": "https://tradingeconomics.com/japan/stock-market",
     "ZB":  "https://tradingeconomics.com/united-states/government-bond-yield",
     "6E":  "https://tradingeconomics.com/euro-area/currency",
     "6J":  "https://tradingeconomics.com/japan/currency",
-    "BTC": "https://tradingeconomics.com/btcusd:cur",
-    "ETH": "https://tradingeconomics.com/ethusd:cur",
     "CL":  "https://tradingeconomics.com/commodity/crude-oil",
     "NG":  "https://tradingeconomics.com/commodity/natural-gas",
     "GC":  "https://tradingeconomics.com/commodity/gold",
