@@ -282,7 +282,14 @@ td.l a:hover{color:var(--teal);border-bottom-color:var(--teal-b)}
 .mkt:last-child{border-bottom:none}
 .mkt h6{margin:0 0 7px;font-family:var(--sans);font-size:12px;font-weight:700;
   color:var(--teal);text-transform:uppercase;letter-spacing:.07em}
-.mkt p{margin:0;font-size:14.5px;color:var(--body);line-height:1.7;max-width:76ch}
+/* Justified, with hyphenation on. Justification without hyphens opens
+   rivers in a column this narrow; with them the right edge is clean and the
+   word spacing stays even. */
+.mkt p{margin:0;font-size:14px;color:var(--body);line-height:1.7;
+  text-align:justify;text-justify:inter-word;hyphens:auto;-webkit-hyphens:auto}
+.news .card{height:100%}
+.news .eyebrow{margin-top:0}
+@media(max-width:880px){.mkt p{text-align:left;hyphens:manual}}
 
 /* --------------------------------------------------------------- drivers */
 .dgrid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
