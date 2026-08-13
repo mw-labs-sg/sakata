@@ -35,6 +35,51 @@ function contours() {
 
 /* ----------------------------------------------------------------- utils */
 var cache = {};
+
+/* Data age. A number with no timestamp beside it is a number you cannot act
+   on, so the header says how old the build is in plain words and turns amber
+   once it is old enough to matter. */
+function ageOf(generated) {
+  if (!generated) return null;
+  var t = Date.parse(generated.replace(" ", "T") + "Z");
+  if (isNaN(t)) return null;
+  return Math.max(Math.round((Date.now() - t) / 60000), 0);
+}
+function ageText(mins) {
+  if (mins == null) return "";
+  if (mins < 2) return "just now";
+  if (mins < 60) return mins + "m ago";
+  var h = Math.floor(mins / 60);
+  if (h < 24) return h + "h ago";
+  return Math.floor(h / 24) + "d ago";
+}
+function stampNow() {
+  var el = document.getElementById("stamp");
+  if (!el || !META) return;
+  var mins = ageOf(META.generated);
+  el.textContent = (META.generated || "") + " UTC · " + ageText(mins) +
+    (META.dry ? " · DRY" : "");
+  el.className = "stamp" + (mins != null && mins > 480 ? " stale" : "");
+}
+
+/* Refresh re-fetches the committed JSON, cache-busted. It cannot make the
+   BUILD run — that is a GitHub Action, and a page cannot trigger one without
+   carrying a token, which a public page must never do. So this answers "am I
+   looking at the newest published build", and the Actions "Run workflow"
+   button answers "publish a newer one". */
+function refresh(btn) {
+  cache = {};
+  window.SK_V = String(Date.now());
+  if (btn) btn.classList.add("spin");
+  load("meta").then(function (m) {
+    META = m;
+    stampNow();
+    route();
+  }).catch(fail).then(function () {
+    if (btn) setTimeout(function () { btn.classList.remove("spin"); }, 400);
+  });
+}
+
 function load(name) {
   if (cache[name]) return cache[name];
   cache[name] = fetch("data/" + name + ".json?v=" + (window.SK_V || ""))
@@ -543,6 +588,25 @@ function renderSpreads(d) {
       "</tr>";
   }).join("");
 
+  /* Which candidates hold across windows. This is the answer to "which pair
+     is actually optimal" — one window's winner is a fortnight of luck until
+     the neighbouring windows agree with it. */
+  var pers = (d.persist || []).slice(0, 8);
+  var persHead = '<th class="l">Position</th><th class="l">Kind</th>' +
+    '<th>Windows</th><th>Best #</th><th>Avg #</th><th>Med Sharpe</th>' +
+    '<th>Med ER</th><th class="l">Appears in</th>';
+  var persBody = pers.map(function (r) {
+    var strong = r.count >= Math.ceil((d.nWindows || 9) / 2);
+    return '<tr class="' + (strong ? "out" : "") + '">' +
+      '<td class="l">' + esc(r.label) + "</td>" +
+      '<td class="l ' + (r.kind === "outright" ? "sh" : "lg") + '">' +
+      esc(r.kind) + "</td>" +
+      '<td class="last">' + r.count + "/" + (d.nWindows || 9) + "</td>" +
+      cell(r.best, 0, "dim") + cell(r.avgRank, 1, "dim") +
+      cell(r.medSharpe, 2, "dim") + cell(r.medER, 3, "dim") +
+      '<td class="l faint">' + esc(r.windows.join(" ")) + "</td></tr>";
+  }).join("");
+
   var sel = '<select data-sel="spWindow">' + d.periods.map(function (w) {
     return '<option value="' + w + '"' + (w === per ? " selected" : "") + ">" +
       esc(w) + "</option>";
@@ -565,19 +629,20 @@ function renderSpreads(d) {
       "paying on this horizon</b>");
   }
 
+  /* On a short span the Sharpe column is not evidence, and that fact needs
+     to be ON the screen — but as a flag, not a paragraph. The reasoning
+     lives in the digest, which is where you go when you want the argument. */
   var warn = "";
   if (p.se > 2.5) {
-    warn = '<div class="warn"><b>At ' + p.span + " calendar days the Sharpe " +
-      "standard error is ±" + p.se + "</b>, so the composite is not supportable " +
-      "here — a Sharpe of 6 is barely two SE from zero. Read the ER column " +
-      "instead: it describes what the window did rather than estimating a " +
-      "forward parameter. Bar size cannot help, because SE depends only on " +
-      "calendar span. Expected best-of-" + p.nField + " Sharpe from pure noise " +
-      "is ~" + Math.round(p.noise) + ".</div>";
+    warn = '<div class="flag">Sharpe unsupportable at ' + p.span +
+      " days — noise alone tops out near " + Math.round(p.noise) +
+      " over " + p.nField + " candidates. Rank on ER.</div>";
   }
 
+  var weak = p.se > 2.5;
   var head = '<th class="l">#</th><th class="l">Long</th><th class="l">Short</th>' +
-    '<th class="l">Sector</th><th>Score</th><th>Sharpe</th><th>ER</th>' +
+    '<th class="l">Sector</th><th>Score</th><th' + (weak ? ' class="dim"' : "") +
+    ">Sharpe</th><th" + (weak ? ' class="on"' : "") + ">ER</th>" +
     "<th>Win%</th><th>Tot%</th><th>Vol%</th><th>MDD%</th><th>Corr</th><th>Ratio</th>";
   var body = p.rows.map(function (r) {
     var lg = r.long ? '<span class="lg">' + esc(r.long) + "</span>"
@@ -589,7 +654,7 @@ function renderSpreads(d) {
       '<td class="l faint">' + r.n + '</td><td class="l">' + lg +
       '</td><td class="l">' + sh + '</td><td class="l faint">' + esc(r.sector) +
       "</td>" + cell(r.score, 1, "dim") +
-      cell(r.sharpe, 2, r.sharpe >= 0 ? "pos" : "neg") +
+      cell(r.sharpe, 2, weak ? "faint" : (r.sharpe >= 0 ? "pos" : "neg")) +
       cell(r.er, 3, erCls) + cell(r.win, 0, "dim") + pct(r.tot, 1) +
       cell(r.vol, 1, "dim") + cell(r.mdd, 1, "neg") + cell(r.corr, 2, "dim") +
       cell(r.ratio, 2, "dim") + "</tr>";
@@ -601,6 +666,13 @@ function renderSpreads(d) {
     'weighting. A position that holds across neighbouring windows is a ' +
     'different object from one that only wins the shortest. Click a window ' +
     'to open it.</div>' + table(sumHead, sumBody) +
+    (pers.length ? '<div class="eyebrow" style="margin-top:24px">' +
+      "Holds across windows</div>" +
+      '<div class="note">How often each position appears in the top 10 of a ' +
+      "window, ranked by count then by average rank — appearing 8th in six " +
+      "windows is worth more than 1st in one. This is the closest thing here " +
+      "to evidence that a relationship is structural rather than lucky.</div>" +
+      table(persHead, persBody) : "") +
     '<div class="eyebrow" style="margin-top:24px">Window</div>' +
     '<div class="bar">' + sel + '</div>' +
     '<div class="chips">' + chips + "</div>" +
@@ -898,6 +970,9 @@ function route() {
 }
 
 document.addEventListener("click", function (e) {
+  var rf = e.target.closest("#refresh");
+  if (rf) { refresh(rf); return; }
+
   var th = e.target.closest("#theme");
   if (th) {
     var now = document.documentElement.getAttribute("data-theme");
@@ -965,8 +1040,7 @@ var hash = (location.hash || "").replace("#", "");
 if (TABS.indexOf(hash) >= 0) S.tab = hash;
 load("meta").then(function (m) {
   META = m;
-  document.getElementById("stamp").textContent =
-    (m.generated || "") + " UTC" + (m.dry ? " · DRY" : "");
+  stampNow();
   route();
 }).catch(function (e) {
   document.getElementById("stamp").textContent = "no data";
