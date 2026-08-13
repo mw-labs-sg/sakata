@@ -79,8 +79,6 @@ TE_PAGE = {
     "KC":  "https://tradingeconomics.com/commodity/coffee",
 }
 
-RSS_FEEDS = {"CoinDesk": "https://www.coindesk.com/arc/outboundfeeds/rss/"}
-
 # Range Levels ladder: horizon -> bar, calendar segment, history to request.
 LADDER = {
     "Day":   dict(bar="1h",  seg="D", period="730d", note="1H bars"),

@@ -43,16 +43,18 @@ def main() -> int:
     now = dt.datetime.now(dt.timezone.utc)
 
     # ---------------------------------------------------------- prices
+    # Two network passes, not three. 4h and weekly are aggregations of bars
+    # already in hand, so fetching them separately buys nothing and costs a
+    # round trip that can fail on its own.
     print("prices: hourly 730d")
     hourly = S.fetch_ohlc("1h", "730d")
     print("prices: daily 10y")
     daily = S.fetch_ohlc("1d", "10y")
-    print("prices: weekly max")
-    weekly = S.fetch_ohlc("1wk", "max")
     if len(daily) < 2 and len(hourly) < 2:
         print("no price data at all — aborting so the last good build survives")
         return 1
     four_h = {k: S.resample_4h(v) for k, v in hourly.items()}
+    weekly = {k: S.resample_weekly(v) for k, v in daily.items()}
     by_bar = {"1h": hourly, "4h": four_h, "1d": daily, "1wk": weekly}
 
     # ---------------------------------------------------------- compute

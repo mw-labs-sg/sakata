@@ -13,8 +13,6 @@ import datetime as dt
 import io
 import json
 import re
-import xml.etree.ElementTree as ET
-from email.utils import parsedate_to_datetime
 
 import numpy as np
 import pandas as pd
@@ -64,35 +62,94 @@ def _synth(interval, n=None):
     return out
 
 
+def _tidy(h, interval):
+    """One frame, normalised: lowercase OHLC, naive index, no duplicate bars."""
+    if h is None or len(h) == 0:
+        return None
+    h = h.copy()
+    h.columns = [str(c).lower() for c in h.columns]
+    if not {"open", "high", "low", "close"}.issubset(h.columns):
+        return None
+    h = h[["open", "high", "low", "close"]].dropna()
+    if h.empty:
+        return None
+    if getattr(h.index, "tz", None) is not None:
+        h.index = h.index.tz_localize(None)
+    if interval == "1d":
+        h.index = h.index.normalize()
+    return h[~h.index.duplicated(keep="last")]
+
+
 def fetch_ohlc(interval: str, period: str) -> dict:
-    """{code: DataFrame[open,high,low,close]} — one Yahoo call per instrument."""
+    """{code: DataFrame[open,high,low,close]} for the whole universe.
+
+    ONE batched request, not one per instrument. yfinance will take the full
+    ticker list and return a column-multiindexed frame, which is a single
+    HTTP round trip instead of nineteen. That matters more than it looks: a
+    rate limit or a flaky response is a per-request event, so nineteen serial
+    requests is nineteen chances to lose an instrument, and the failure is
+    silent — the tab just renders short. The per-ticker path survives only as
+    a fallback for whatever the batch did not return.
+    """
     if DRY:
         return _synth(interval)
     import yfinance as yf
-    out = {}
-    for code in U.CODES:
+
+    tickers = [U.TICKER[c] for c in U.CODES]
+    raw, out = None, {}
+    kw = dict(period=period, interval=interval, group_by="ticker",
+              auto_adjust=True, threads=True, progress=False)
+    for attempt in (dict(kw, session=session()), kw):
+        try:
+            raw = yf.download(tickers, **attempt)
+            break
+        except TypeError:
+            continue            # older/newer yfinance disagree about session=
+        except Exception as e:
+            print(f"    {interval} batch failed: {str(e)[:70]}")
+            break
+
+    if raw is not None and len(raw):
+        multi = isinstance(raw.columns, pd.MultiIndex)
+        for code in U.CODES:
+            tk = U.TICKER[code]
+            try:
+                h = raw[tk] if multi else raw
+            except KeyError:
+                continue
+            t = _tidy(h, interval)
+            if t is not None:
+                out[code] = t
+
+    missing = [c for c in U.CODES if c not in out]
+    for code in missing:
         try:
             h = yf.Ticker(U.TICKER[code], session=session()).history(
                 period=period, interval=interval, auto_adjust=True)
-            if h is None or h.empty:
+            t = _tidy(h, interval)
+            if t is None:
                 print(f"    {interval} {code}: empty")
                 continue
-            h.columns = [str(c).lower() for c in h.columns]
-            if not {"open", "high", "low", "close"}.issubset(h.columns):
-                continue
-            h = h[["open", "high", "low", "close"]].dropna()
-            if getattr(h.index, "tz", None) is not None:
-                h.index = h.index.tz_localize(None)
-            if interval == "1d":
-                h.index = h.index.normalize()
-            out[code] = h[~h.index.duplicated(keep="last")]
+            out[code] = t
         except Exception as e:
             print(f"    {interval} {code} failed: {str(e)[:70]}")
+    if missing:
+        print(f"    {interval}: {len(missing)} refetched singly "
+              f"({', '.join(missing[:6])})")
     return out
 
 
 def resample_4h(df: pd.DataFrame) -> pd.DataFrame:
     return (df.resample("4h", label="left", closed="left")
+            .agg({"open": "first", "high": "max", "low": "min",
+                  "close": "last"}).dropna())
+
+
+def resample_weekly(df: pd.DataFrame) -> pd.DataFrame:
+    """Weekly bars from daily. There is no reason to ask Yahoo for these —
+    a weekly bar IS the daily bars aggregated, and ten years of daily gives
+    ~520 weekly bars, comfortably past the 200 the Year rung needs."""
+    return (df.resample("W-MON", label="left", closed="left")
             .agg({"open": "first", "high": "max", "low": "min",
                   "close": "last"}).dropna())
 
@@ -261,66 +318,14 @@ def fetch_te(url: str) -> dict:
     return {"headline": headline, "blurb": blurb, "date": date}
 
 
-def _strip_html(s):
-    s = re.sub(r"<[^>]+>", " ", s or "")
-    import html as _h
-    return re.sub(r"\s+", " ", _h.unescape(s)).strip()
-
-
-def fetch_rss(url: str, n: int = 14) -> list:
-    try:
-        xml = session().get(url, timeout=25).text
-        root = ET.fromstring(xml)
-    except Exception:
-        return []
-    nodes = root.findall(".//item")
-    atom = False
-    if not nodes:
-        nodes = root.findall(".//{http://www.w3.org/2005/Atom}entry")
-        atom = True
-    a = "{http://www.w3.org/2005/Atom}"
-
-    def txt(node, *tags):
-        for t in tags:
-            el = node.find(t)
-            if el is not None:
-                if el.text:
-                    return el.text
-                if el.get("href"):
-                    return el.get("href")
-        return ""
-
-    out = []
-    for it in nodes[:n]:
-        if atom:
-            title, link = txt(it, f"{a}title"), txt(it, f"{a}link")
-            raw, summ = txt(it, f"{a}updated", f"{a}published"), txt(it, f"{a}summary")
-        else:
-            title, link = txt(it, "title"), txt(it, "link")
-            raw, summ = txt(it, "pubDate"), txt(it, "description")
-        when = ""
-        if raw:
-            try:
-                when = parsedate_to_datetime(raw).strftime("%Y-%m-%d %H:%M")
-            except Exception:
-                when = raw[:16]
-        summ = _strip_html(summ)
-        if len(summ) > 240:
-            summ = summ[:240].rsplit(" ", 1)[0] + "\u2026"
-        title = _strip_html(title)
-        if title:
-            out.append({"title": title, "link": link.strip(),
-                        "when": when, "summary": summ})
-    return out
-
-
 def fetch_news() -> dict:
+    """Per-instrument commentary only. The CoinDesk wire was dropped: a
+    general crypto feed is not instrument commentary, it pushed the part
+    that is below the fold, and it is read better in a reader."""
     if DRY:
         return {"markets": {c: {"blurb": f"Synthetic commentary for {c}.",
                                 "date": str(dt.date.today())}
-                            for c in list(U.TE_PAGE)[:6]},
-                "wire": [{"title": "Synthetic headline", "link": "#",
-                          "when": "2026-01-01 00:00", "summary": "dry run"}]}
+                            for c in list(U.TE_PAGE)[:6]}}
     markets = {}
     for code, url in U.TE_PAGE.items():
         d = fetch_te(url)
@@ -328,7 +333,4 @@ def fetch_news() -> dict:
             markets[code] = {"blurb": d["blurb"], "date": d.get("date", "")}
         else:
             print(f"    TE {code}: nothing parsed")
-    wire = []
-    for name, url in U.RSS_FEEDS.items():
-        wire += fetch_rss(url)
-    return {"markets": markets, "wire": wire}
+    return {"markets": markets}
