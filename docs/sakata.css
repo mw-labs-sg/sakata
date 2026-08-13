@@ -5,16 +5,20 @@
    one attribute on <html> and nothing else in the codebase knows a theme
    exists. Hard-code a colour anywhere else and it will be wrong in one mode.
 
-   TYPE. Source Serif 4 carries the wordmark and section heads; Inter runs
-   everything else. The pairing is deliberate — it is the closest freely
-   licensable match to Styrene B and Tiempos Text, the faces Claude's own
-   interface uses, and those cannot be served from a public Pages site.
+   TYPE. One family — Inter — for everything on the page. Hierarchy comes
+   from weight, size and tracking rather than from a second face, which is
+   how a dense screen stays calm: a serif heading over a sans table asks the
+   eye to change mode at every section break, and there are nine of them.
 
-   Figures stay in Inter with tabular lining numerals switched on, not in a
-   monospace. Real mono aligns perfectly and reads as a machine log; tabular
-   Inter aligns just as well in a table and reads as a document. The mono is
-   kept for exactly two jobs where a machine log is the right register: the
-   build stamp and the copyable digest.
+   Figures use Inter's tabular lining numerals rather than a monospace. Real
+   mono aligns perfectly and reads as a machine log; tabular Inter aligns
+   just as well in a table and reads as a document. Mono is kept for exactly
+   two jobs where a machine log IS the right register: the build stamp and
+   the copyable digest.
+
+   --display stays a separate token even though it currently resolves to the
+   same stack. Headings and data are different jobs; keeping the seam means
+   changing one without disturbing the other later.
 
    COLOUR. One teal accent, gains in the same teal family, losses in coral,
    everything else grey. Sector swatches stay desaturated so an identity tag
@@ -22,7 +26,7 @@
 
 /* --------------------------------------------------------- light (default) */
 :root{
-  --display:'Source Serif 4',Georgia,'Times New Roman',serif;
+  --display:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;
   --sans:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;
   --mono:'JetBrains Mono',ui-monospace,'SF Mono',Menlo,monospace;
 
@@ -106,8 +110,8 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
    measure, so the eye lands on the name and exits at the build time. */
 .head{display:flex;align-items:center;gap:10px;margin-bottom:16px}
 .mark{flex:none;margin-bottom:2px;color:var(--teal)}
-.wordmark{font-family:var(--display);font-size:27px;font-weight:600;
-  letter-spacing:-.01em;color:var(--ink);margin:0;line-height:1}
+.wordmark{font-family:var(--display);font-size:23px;font-weight:800;
+  letter-spacing:-.035em;color:var(--ink);margin:0;line-height:1}
 .rule{flex:1;height:1px;background:var(--line);margin:2px 4px 0}
 .stamp{font-family:var(--mono);font-size:11px;font-weight:400;
   color:var(--faint);white-space:nowrap;letter-spacing:-.02em}
@@ -154,8 +158,8 @@ select{font-family:var(--sans);font-size:14px;color:var(--ink);
 .spacer{margin-left:auto}
 
 /* ------------------------------------------------------------------ type */
-h5,.eyebrow{font-family:var(--display);font-size:17px;font-weight:600;
-  letter-spacing:-.008em;color:var(--ink);margin:22px 0 9px;
+h5,.eyebrow{font-family:var(--display);font-size:14px;font-weight:700;
+  letter-spacing:-.012em;color:var(--ink);margin:24px 0 10px;
   display:flex;align-items:baseline;flex-wrap:wrap}
 .eyebrow:first-child{margin-top:0}
 .note{font-size:14px;color:var(--mute);line-height:1.65;margin:0 0 12px;
@@ -196,8 +200,9 @@ tbody tr:hover td{background:var(--raised)}
    its bar in the chart at zero vertical cost. */
 .sw{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:8px;
   vertical-align:1px;flex:none}
-.legend{display:inline-flex;flex-wrap:wrap;gap:13px;margin-left:14px;
-  font-family:var(--sans);font-size:11.5px;font-weight:500;color:var(--mute)}
+.legend{display:inline-flex;flex-wrap:wrap;gap:12px;margin-left:16px;
+  font-family:var(--sans);font-size:11px;font-weight:500;color:var(--faint);
+  letter-spacing:0}
 .key{display:inline-flex;align-items:center;white-space:nowrap}
 .key .sw{margin-right:6px;width:7px;height:7px}
 td.l .nm{color:var(--mute);font-weight:400}
@@ -290,7 +295,7 @@ pre{margin:0;padding:16px;font-family:var(--mono);font-size:11px;line-height:1.6
 @media(max-width:640px){
   .wrap{padding:20px 15px 52px}
   body{font-size:14px}
-  .wordmark{font-size:21px}
+  .wordmark{font-size:19px}
   table{font-size:12.5px}
   td{padding:7px 10px}
   thead th{padding:9px 10px;font-size:10.5px}
