@@ -1,55 +1,130 @@
-/* Sakata — static terminal.
+/* Sakata — static futures terminal.
 
-   Type: DM Sans for names, headings and chrome; Inter for anything measured.
-   DM Sans is geometric with generous counters, which is what gives modern
-   fintech sites their clean confident feel. Inter keeps the numbers, because
-   its tabular figures are the most reliable on the web and columns must align.
+   THEME. Every colour in the product is declared once, here, as a token. The
+   JS reads the same tokens back through getComputedStyle, so a theme flip is
+   one attribute on <html> and nothing else in the codebase knows a theme
+   exists. Hard-code a colour anywhere else and it will be wrong in one mode.
 
-   Colour: one bright teal. Gains teal, losses a muted coral, everything else
-   grey. Two saturated colours competing reads as a dashboard; one accent with
-   a quiet counter reads as a product. */
+   TYPE. Space Grotesk carries the wordmark and section heads — technical,
+   slightly angular, unmistakably not a default UI face. Inter Tight runs the
+   chrome and the prose. JetBrains Mono owns every measured figure: column
+   headers, prices, percentages, the build stamp. Figures that align without
+   being asked are the reason a terminal reads faster than a webpage.
 
+   COLOUR. One teal accent, gains in the same teal family, losses in coral,
+   everything else grey. Sector swatches stay desaturated so an identity tag
+   can never be mistaken for a signal. */
+
+/* --------------------------------------------------------- light (default) */
 :root{
-  --serif:'Source Serif 4',Georgia,'Times New Roman',serif;
-  --display:'Public Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
-  --sans:'Public Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;
-  --mono:ui-monospace,'SF Mono',Menlo,monospace;
+  --display:'Space Grotesk',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --sans:'Inter Tight',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;
+  --mono:'JetBrains Mono',ui-monospace,'SF Mono',Menlo,monospace;
 
-  --ink:#101820; --body:#39434f; --mute:#69737f; --faint:#99a2ac;
-  --line:#e4e8ec; --hair:#f0f3f5; --wash:#f8fafb;
+  /* ground */
+  --bg:#f4f6f7;                 /* page: a half-step off white so cards lift */
+  --surface:#ffffff;            /* cards, tables, controls */
+  --raised:#fafbfc;             /* hover, section rows, summary bars */
+  --line:#e0e5e8;               /* structural border */
+  --hair:#eef1f3;               /* row rule */
 
-  --teal:#0d9488;               /* accent on white — passes contrast */
-  --teal-b:#14b8a6;             /* the bright mint, for fills and marks */
-  --teal-d:#0f5f57;             /* deepest tint, for conviction */
-  --teal-w:#effcfa;
-  --pos:#0b7a63; --neg:#b3261e; --amber:#8c6d1f;
+  /* ink */
+  --ink:#0d1418; --body:#3a464e; --mute:#66727b; --faint:#97a2ab;
+
+  /* accent */
+  --teal:#0d8f83;               /* accent on light — passes contrast */
+  --teal-b:#14b8a6;             /* the bright mint, for marks and fills */
+  --teal-d:#0d5f58;             /* deepest tint, for conviction */
+  --teal-w:#eefaf8;             /* tint ground */
+
+  /* signal */
+  --pos:#0a7c66; --neg:#c2453b; --amber:#96701c;
+  --warn-bg:#fdfaf3; --warn-line:#ecdfc4; --warn-ink:#6b4f1a; --warn-strong:#4a3610;
+
+  /* chart */
+  --grid:#eef1f3; --axis:#d3dade; --volbar:#e9edf1;
+  --up:#0d9488; --down:#cf5a54;
+  --shadow:0 1px 2px rgba(13,20,24,.04);
+
+  /* sector identity — muted by design */
+  --sec-indices:#3b6ea5; --sec-bonds:#5c7d99; --sec-currencies:#7a6ba8;
+  --sec-crypto:#4c8f86;  --sec-energy:#8c5a3c; --sec-metals:#a8894f;
+  --sec-grains:#7d8f4e;  --sec-softs:#4f8f7d;  --sec-other:#9aa2ab;
+
+  /* bias ladder, −3 … +3 */
+  --bias3:#0d5f58; --bias2:#0d9488; --bias1:#5fbcb1; --bias0:#9aa4ad;
+  --biasn1:#dda29e; --biasn2:#cf5a54; --biasn3:#a33f3a;
+
+  --caret:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%2366727b' stroke-width='1.5'/%3E%3C/svg%3E");
+}
+
+/* ---------------------------------------------------------------- dark */
+/* Not black. #0b0f12 is a cool near-black: a white wick reads on it without
+   glare at 6am, and the coral stops vibrating the way it does on #000. */
+:root[data-theme="dark"]{
+  --bg:#0b0f12; --surface:#11171b; --raised:#161d22;
+  --line:#232c33; --hair:#1a2229;
+
+  --ink:#e9eff2; --body:#b6c2c9; --mute:#8b979f; --faint:#68757d;
+
+  --teal:#2dd4bf; --teal-b:#5eead4; --teal-d:#8ff0e2; --teal-w:#10322f;
+
+  --pos:#34d3a8; --neg:#f0736a; --amber:#d3a355;
+  --warn-bg:#1c1a12; --warn-line:#3a3222; --warn-ink:#d8c79c; --warn-strong:#f0e3c2;
+
+  --grid:#1a2229; --axis:#2b353d; --volbar:#1e262d;
+  --up:#2dd4bf; --down:#f0736a;
+  --shadow:0 1px 2px rgba(0,0,0,.40);
+
+  --sec-indices:#6f9fd8; --sec-bonds:#8fa9bf; --sec-currencies:#a596d6;
+  --sec-crypto:#5fb8ac;  --sec-energy:#c08360; --sec-metals:#d0ae6b;
+  --sec-grains:#a5b96f;  --sec-softs:#6bb9a4;  --sec-other:#7d8891;
+
+  --bias3:#8ff0e2; --bias2:#2dd4bf; --bias1:#189d92; --bias0:#78848d;
+  --biasn1:#a75f59; --biasn2:#f0736a; --biasn3:#ff9d94;
+
+  --caret:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%238b979f' stroke-width='1.5'/%3E%3C/svg%3E");
 }
 
 *{box-sizing:border-box}
-html{-webkit-text-size-adjust:100%}
-body{margin:0;background:#fff;color:var(--ink);font-family:var(--sans);
+html{-webkit-text-size-adjust:100%;background:var(--bg)}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
   font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased;
   text-rendering:optimizeLegibility;font-feature-settings:'tnum' 1,'lnum' 1}
+::selection{background:var(--teal-w);color:var(--ink)}
+:focus-visible{outline:2px solid var(--teal);outline-offset:2px;border-radius:3px}
 
-.wrap{max-width:1120px;margin:0 auto;padding:22px 24px 56px}
+.wrap{max-width:1160px;margin:0 auto;padding:22px 24px 56px}
 
 /* ---------------------------------------------------------------- header */
-/* Mark and wordmark read as one lockup, so the gap is optical — tight enough
-   to bind them, wide enough that the stalk does not touch the S. */
-.head{display:flex;align-items:center;gap:9px;margin-bottom:16px}
-.mark{flex:none;margin-bottom:2px}
-.wordmark{font-family:var(--serif);font-size:28px;font-weight:600;
-  letter-spacing:-.01em;color:var(--ink);margin:0;line-height:1}
-.rule{flex:1;height:1px;background:var(--line);margin:2px 6px 0}
-.stamp{font-family:var(--display);font-size:12px;font-weight:500;
-  color:var(--faint);white-space:nowrap;letter-spacing:.03em;
-  font-variant-numeric:tabular-nums}
+/* Mark, wordmark, hairline, stamp, switch — one lockup spanning the full
+   measure, so the eye lands on the name and exits at the build time. */
+.head{display:flex;align-items:center;gap:10px;margin-bottom:16px}
+.mark{flex:none;margin-bottom:2px;color:var(--teal)}
+.wordmark{font-family:var(--display);font-size:25px;font-weight:700;
+  letter-spacing:-.02em;color:var(--ink);margin:0;line-height:1}
+.rule{flex:1;height:1px;background:var(--line);margin:2px 4px 0}
+.stamp{font-family:var(--mono);font-size:11px;font-weight:400;
+  color:var(--faint);white-space:nowrap;letter-spacing:-.01em}
+
+/* The switch states what it will do, not what it is: sun in dark, moon in
+   light. One 30px square, the only round-cornered control in the header. */
+.theme{appearance:none;display:inline-flex;align-items:center;
+  justify-content:center;width:30px;height:30px;flex:none;padding:0;
+  cursor:pointer;color:var(--mute);background:var(--surface);
+  border:1px solid var(--line);border-radius:8px;
+  transition:color .14s,border-color .14s}
+.theme:hover{color:var(--teal);border-color:var(--teal)}
+.theme svg{width:15px;height:15px;display:block}
+.theme .sun{display:none}
+:root[data-theme="dark"] .theme .sun{display:block}
+:root[data-theme="dark"] .theme .moon{display:none}
 
 /* ------------------------------------------------------------------ tabs */
 .tabs{display:flex;flex-wrap:wrap;border-bottom:1px solid var(--line);
-  margin-bottom:16px;position:sticky;top:0;z-index:6;background:#fff}
+  margin-bottom:16px;position:sticky;top:0;z-index:6;background:var(--bg)}
 .tab{appearance:none;border:none;background:none;cursor:pointer;
-  padding:10px 16px 9px;font-family:var(--display);font-size:14.5px;
+  padding:10px 15px 9px;font-family:var(--display);font-size:13.5px;
   font-weight:500;color:var(--mute);border-bottom:2px solid transparent;
   margin-bottom:-1px;transition:color .12s}
 .tab:first-child{padding-left:0}
@@ -58,84 +133,85 @@ body{margin:0;background:#fff;color:var(--ink);font-family:var(--sans);
 
 /* -------------------------------------------------------------- controls */
 .bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 12px}
-.seg{display:inline-flex;border:1px solid var(--line);border-radius:7px;
-  overflow:hidden;background:#fff}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;
+  overflow:hidden;background:var(--surface)}
 .seg button{appearance:none;border:none;background:none;cursor:pointer;
-  font-family:var(--display);font-size:13px;font-weight:500;color:var(--mute);
-  padding:7px 17px;border-right:1px solid var(--line)}
+  font-family:var(--mono);font-size:12px;font-weight:500;color:var(--mute);
+  letter-spacing:-.01em;padding:7px 15px;border-right:1px solid var(--line)}
 .seg button:last-child{border-right:none}
-.seg button:hover{color:var(--ink);background:var(--wash)}
-.seg button.on{color:#fff;background:var(--teal);font-weight:700}
-select{font-family:var(--display);font-size:14px;color:var(--ink);
-  padding:7px 32px 7px 13px;border:1px solid var(--line);border-radius:7px;
-  background:#fff;appearance:none;
-  background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%2369737f' stroke-width='1.5'/%3E%3C/svg%3E");
+.seg button:hover{color:var(--ink);background:var(--raised)}
+.seg button.on{color:var(--surface);background:var(--teal);font-weight:700}
+select{font-family:var(--sans);font-size:14px;color:var(--ink);
+  padding:7px 32px 7px 13px;border:1px solid var(--line);border-radius:8px;
+  background-color:var(--surface);appearance:none;background-image:var(--caret);
   background-repeat:no-repeat;background-position:right 13px center}
 .spacer{margin-left:auto}
 
-/* ----------------------------------------------------------------- type */
-h5,.eyebrow{font-family:var(--serif);font-size:18px;font-weight:600;
-  letter-spacing:-.008em;color:var(--ink);margin:20px 0 9px;text-transform:none;
+/* ------------------------------------------------------------------ type */
+h5,.eyebrow{font-family:var(--display);font-size:15px;font-weight:600;
+  letter-spacing:-.005em;color:var(--ink);margin:22px 0 9px;
   display:flex;align-items:baseline;flex-wrap:wrap}
 .eyebrow:first-child{margin-top:0}
 .note{font-size:14px;color:var(--mute);line-height:1.65;margin:0 0 12px;
   max-width:74ch}
 .note b{color:var(--ink);font-weight:600}
-.warn{background:#fdfaf3;border:1px solid #ecdfc4;padding:13px 16px;
-  font-size:13.5px;line-height:1.65;margin:0 0 18px;border-radius:7px;
-  color:#6b4f1a;max-width:78ch}
-.warn b{color:#4a3610;font-weight:600}
+.warn{background:var(--warn-bg);border:1px solid var(--warn-line);
+  padding:13px 16px;font-size:13.5px;line-height:1.65;margin:0 0 18px;
+  border-radius:8px;color:var(--warn-ink);max-width:78ch}
+.warn b{color:var(--warn-strong);font-weight:600}
 .chips{margin:0 0 12px}
-.chip{display:inline-block;padding:4px 11px;margin:0 7px 7px 0;
-  border:1px solid var(--line);border-radius:6px;background:#fff;
-  font-size:12.5px;font-weight:500;color:var(--mute);
-  font-variant-numeric:tabular-nums}
+.chip{display:inline-block;padding:4px 10px;margin:0 7px 7px 0;
+  border:1px solid var(--line);border-radius:6px;background:var(--surface);
+  font-family:var(--mono);font-size:11px;font-weight:400;color:var(--mute);
+  letter-spacing:-.01em}
 .skel{padding:52px 0;text-align:center;color:var(--faint);font-size:14px}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:20px}
 @media(max-width:880px){.grid2{grid-template-columns:1fr;gap:10px}}
 
-/* --------------------------------------------------------------- tables */
-.card{border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#fff}
+/* ---------------------------------------------------------------- tables */
+.card{border:1px solid var(--line);border-radius:10px;overflow:hidden;
+  background:var(--surface);box-shadow:var(--shadow)}
 .scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
-table{border-collapse:collapse;width:100%;font-size:13px;line-height:1.45;
-  font-variant-numeric:tabular-nums lining-nums}
-thead th{background:#fff;color:var(--faint);font-family:var(--display);
-  font-weight:600;font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;
-  padding:7px 13px;text-align:right;border-bottom:1px solid var(--line);
+table{border-collapse:collapse;width:100%;font-size:13px;line-height:1.45}
+thead th{background:var(--surface);color:var(--faint);font-family:var(--mono);
+  font-weight:500;font-size:10px;text-transform:uppercase;letter-spacing:.06em;
+  padding:8px 11px;text-align:right;border-bottom:1px solid var(--line);
   white-space:nowrap}
 thead th.l{text-align:left}
-td{font-weight:450;padding:4.5px 12px;text-align:right;
-  border-bottom:1px solid var(--hair);white-space:nowrap;color:var(--body)}
-td.l{text-align:left;color:var(--ink);font-weight:500}
+td{font-family:var(--mono);font-size:12px;font-weight:400;letter-spacing:-.02em;
+  padding:5px 11px;text-align:right;border-bottom:1px solid var(--hair);
+  white-space:nowrap;color:var(--body)}
+td.l{font-family:var(--sans);font-size:13px;letter-spacing:0;text-align:left;
+  color:var(--ink);font-weight:500}
 tbody tr:last-child td{border-bottom:none}
-tbody tr:hover td{background:var(--wash)}
+tbody tr:hover td{background:var(--raised)}
 
-/* Sector identity is a swatch, not a label. Rotated text in a gutter was
-   unreadable and a repeated header row cost 30px each; a 8px square carries
-   the same grouping at zero cost and ties the row to its bar in the chart. */
+/* Sector identity is a swatch, not a label — an 8px square ties the row to
+   its bar in the chart at zero vertical cost. */
 .sw{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:8px;
   vertical-align:1px;flex:none}
-.legend{display:inline-flex;flex-wrap:wrap;gap:14px;margin-left:14px;
-  font-family:var(--display);font-size:11px;font-weight:500;color:var(--mute);
-  letter-spacing:.01em;text-transform:none}
+.legend{display:inline-flex;flex-wrap:wrap;gap:13px;margin-left:14px;
+  font-family:var(--sans);font-size:11.5px;font-weight:500;color:var(--mute)}
 .key{display:inline-flex;align-items:center;white-space:nowrap}
 .key .sw{margin-right:6px;width:7px;height:7px}
 td.l .nm{color:var(--mute);font-weight:400}
 
-/* Last is the anchor figure — everything else on the row is a derivative
-   of it, so it carries the weight. */
-td.last{color:var(--ink);font-weight:600;font-size:13.5px;
-  border-right:1px solid var(--hair);padding-right:16px}
+/* Last is the anchor figure — everything else on the row derives from it. */
+td.last{color:var(--ink);font-weight:600;font-size:12.5px;
+  border-right:1px solid var(--hair);padding-right:15px}
 
-/* The selected horizon gains weight, not a coloured fill. A tinted cell
-   reads as an error state; a heavier digit reads as focus. */
+/* The selected horizon gains weight, not a fill. A tinted cell reads as an
+   error state; a heavier digit reads as focus. */
 td.on{font-weight:700}
 thead th.on{color:var(--ink);font-weight:700}
-tr.out td{background:var(--wash)}
-tr.out:hover td{background:#f2f5f7}
+tr.out td{background:var(--raised)}
+tr.out:hover td{background:var(--hair)}
+tr.sec td{background:var(--raised);font-family:var(--mono);font-size:9.5px;
+  text-transform:uppercase;letter-spacing:.1em;color:var(--faint);
+  padding:6px 11px;font-weight:500}
 
-.pos{color:var(--pos);font-weight:550}
-.neg{color:var(--neg);font-weight:550}
+.pos{color:var(--pos);font-weight:500}
+.neg{color:var(--neg);font-weight:500}
 .dim{color:var(--mute)}
 .faint{color:var(--faint)}
 .lg{color:var(--teal);font-weight:600}
@@ -145,63 +221,65 @@ tr.out:hover td{background:#f2f5f7}
 td.l a{color:var(--ink);text-decoration:none;border-bottom:1px solid transparent}
 td.l a:hover{color:var(--teal);border-bottom-color:var(--teal-b)}
 
-/* --------------------------------------------------------------- charts */
+/* ---------------------------------------------------------------- charts */
 .chart{width:100%;display:block}
-.chart .axis{font-family:var(--sans);font-size:11px;fill:var(--faint);
-  font-variant-numeric:tabular-nums}
-.chart .lbl{font-family:var(--display);font-size:12.5px;font-weight:500;
+.chart .axis{font-family:var(--mono);font-size:10px;fill:var(--faint);
+  letter-spacing:-.02em}
+.chart .lbl{font-family:var(--sans);font-size:12px;font-weight:500;
   fill:var(--body)}
-.chart .val{font-family:var(--display);font-size:11.5px;font-weight:600;
-  fill:var(--mute);font-variant-numeric:tabular-nums}
-.chart .grid{stroke:var(--hair);stroke-width:1}
-.plot{border:1px solid var(--line);border-radius:8px;padding:10px 6px;background:#fff}
+.chart .val{font-family:var(--mono);font-size:10.5px;font-weight:500;
+  fill:var(--mute);letter-spacing:-.02em}
+.chart .grid{stroke:var(--grid);stroke-width:1}
+.plot{border:1px solid var(--line);border-radius:10px;padding:10px 6px;
+  background:var(--surface);box-shadow:var(--shadow)}
 
-/* ----------------------------------------------------------------- news */
+/* ------------------------------------------------------------------ news */
 .item{border-bottom:1px solid var(--hair);padding:15px 18px}
 .item:last-child{border-bottom:none}
-.item a{font-family:var(--display);color:var(--ink);text-decoration:none;
-  font-weight:700;font-size:14.5px}
+.item a{font-family:var(--sans);color:var(--ink);text-decoration:none;
+  font-weight:600;font-size:14.5px}
 .item a:hover{color:var(--teal)}
 .item p{margin:6px 0 0;font-size:14px;color:var(--mute);line-height:1.65}
-.item .when{font-size:12px;color:var(--faint);display:block;margin-top:7px;
-  font-variant-numeric:tabular-nums}
+.item .when{font-family:var(--mono);font-size:10.5px;color:var(--faint);
+  display:block;margin-top:7px;letter-spacing:-.01em}
 .mkt{padding:17px 18px;border-bottom:1px solid var(--hair)}
 .mkt:last-child{border-bottom:none}
-.mkt h6{margin:0 0 7px;font-family:var(--display);font-size:14px;font-weight:700;
-  color:var(--teal);text-transform:uppercase;letter-spacing:.05em}
+.mkt h6{margin:0 0 7px;font-family:var(--mono);font-size:11px;font-weight:600;
+  color:var(--teal);text-transform:uppercase;letter-spacing:.1em}
 .mkt p{margin:0;font-size:14.5px;color:var(--body);line-height:1.7;max-width:76ch}
 
-/* -------------------------------------------------------------- drivers */
+/* --------------------------------------------------------------- drivers */
 .dgrid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 @media(max-width:880px){.dgrid{grid-template-columns:1fr}}
-.dcard{border:1px solid var(--line);border-radius:8px;background:#fff;
-  padding:14px 16px 12px}
+.dcard{border:1px solid var(--line);border-radius:10px;background:var(--surface);
+  padding:14px 16px 12px;box-shadow:var(--shadow)}
 .dhead{display:flex;align-items:center;gap:2px;font-size:14px;color:var(--body);
   padding-bottom:9px;margin-bottom:9px;border-bottom:1px solid var(--hair)}
-.dhead b{color:var(--ink);font-weight:700;margin-right:5px}
-.dsec{margin-left:auto;font-family:var(--display);font-size:10px;font-weight:600;
-  letter-spacing:.08em;text-transform:uppercase;color:var(--faint)}
+.dhead b{font-family:var(--display);color:var(--ink);font-weight:700;
+  margin-right:5px}
+.dsec{margin-left:auto;font-family:var(--mono);font-size:9.5px;font-weight:500;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--faint)}
 ol.dlist{margin:0;padding:0;list-style:none;counter-reset:d}
 ol.dlist li{counter-increment:d;position:relative;padding:0 0 9px 22px;
   font-size:13px;line-height:1.55}
 ol.dlist li:last-child{padding-bottom:0}
-ol.dlist li::before{content:counter(d);position:absolute;left:0;top:1px;
-  font-family:var(--display);font-size:10px;font-weight:700;color:var(--teal);
-  width:15px;height:15px;border-radius:3px;background:#eefaf7;text-align:center;
-  line-height:15px}
+ol.dlist li::before{content:counter(d);position:absolute;left:0;top:2px;
+  font-family:var(--mono);font-size:9.5px;font-weight:500;color:var(--teal);
+  width:15px;height:15px;border-radius:4px;background:var(--teal-w);
+  text-align:center;line-height:15px}
 ol.dlist li b{display:block;color:var(--ink);font-weight:600;font-size:13px}
 ol.dlist li span{color:var(--mute)}
 
-/* --------------------------------------------------------------- digest */
-details{margin:26px 0;border:1px solid var(--line);border-radius:8px;
-  overflow:hidden;background:#fff}
-summary{padding:12px 16px;background:var(--wash);cursor:pointer;
-  font-family:var(--display);font-size:13.5px;font-weight:500;color:var(--body)}
-pre{margin:0;padding:16px;font-family:var(--mono);font-size:11.5px;line-height:1.55;
+/* ---------------------------------------------------------------- digest */
+details{margin:26px 0;border:1px solid var(--line);border-radius:10px;
+  overflow:hidden;background:var(--surface)}
+summary{padding:12px 16px;background:var(--raised);cursor:pointer;
+  font-family:var(--sans);font-size:13.5px;font-weight:500;color:var(--body)}
+pre{margin:0;padding:16px;font-family:var(--mono);font-size:11px;line-height:1.6;
   overflow-x:auto;white-space:pre;color:var(--body)}
-.btn{margin:12px 16px;padding:6px 15px;font-family:var(--display);font-size:13px;
-  font-weight:500;border:1px solid var(--line);border-radius:7px;background:#fff;
-  color:var(--mute);cursor:pointer}
+.btn{margin:12px 16px;padding:6px 14px;font-family:var(--sans);font-size:13px;
+  font-weight:500;border:1px solid var(--line);border-radius:8px;
+  background:var(--surface);color:var(--mute);cursor:pointer}
 .btn:hover{border-color:var(--teal);color:var(--teal)}
 
 .foot{margin-top:38px;padding-top:16px;border-top:1px solid var(--line);
@@ -210,11 +288,16 @@ pre{margin:0;padding:16px;font-family:var(--mono);font-size:11.5px;line-height:1
 @media(max-width:640px){
   .wrap{padding:20px 15px 52px}
   body{font-size:14px}
-  .wordmark{font-size:21px;letter-spacing:.11em}
-  table{font-size:12.5px}
-  td{padding:7px 10px}
-  thead th{padding:9px 10px;font-size:10.5px}
-  .tab{padding:11px 12px;font-size:13.5px}
-  h5,.eyebrow{font-size:16px}
+  .wordmark{font-size:20px}
+  table{font-size:12px}
+  td{padding:7px 9px;font-size:11.5px}
+  td.l{font-size:12.5px}
+  thead th{padding:8px 9px}
+  .tab{padding:11px 11px;font-size:13px}
+  h5,.eyebrow{font-size:14.5px}
   .note{font-size:13.5px}
+}
+
+@media(prefers-reduced-motion:reduce){
+  *{transition:none!important;animation:none!important}
 }

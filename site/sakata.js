@@ -90,9 +90,9 @@ function barChart(items, w, opts) {
   /* Zero is the only rule that earns a line. Gridlines behind eight bars are
      furniture: the value sits at the end of each bar instead. */
   s += '<line x1="' + zero + '" y1="' + padT + '" x2="' + zero + '" y2="' +
-    (h - padB) + '" stroke="#d7dde3" stroke-width="1"/>';
+    (h - padB) + '" stroke="' + C.axis + '" stroke-width="1"/>';
   items.forEach(function (d, i) {
-    var y = padT + i * rowH, bh = 14, col = d.c || "#5c7d99";
+    var y = padT + i * rowH, bh = 14, col = d.c || C.other;
     var xv = x(d.v), x0 = Math.min(xv, zero), bw = Math.max(Math.abs(xv - zero), 2);
     s += '<text class="lbl" x="' + (padL - 12) + '" y="' + (y + bh / 2 + 5) +
       '" text-anchor="end">' + esc(d.k) + "</text>";
@@ -136,7 +136,7 @@ function lineChart(labels, series, bars, w, h, dec) {
         if (v == null) return;
         var bh = v / bmax * ih * 0.42;
         s += '<rect x="' + (x(i) - 3) + '" y="' + (padT + ih - bh) +
-          '" width="6" height="' + bh + '" fill="#e9edf1" opacity=".95" rx="1"/>';
+          '" width="6" height="' + bh + '" fill="' + C.volbar + '" opacity=".95" rx="1"/>';
       });
     }
   }
@@ -183,7 +183,7 @@ function candles(t, o, hh, l, c, overlays, w, h, dec) {
   }
   for (var i = 0; i < n; i++) {
     if (c[i] == null) continue;
-    var up = c[i] >= o[i], col = up ? "#0d9488" : "#cf5a54";
+    var up = c[i] >= o[i], col = up ? C.up : C.down;
     s += '<line x1="' + x(i) + '" y1="' + y(hh[i]) + '" x2="' + x(i) +
       '" y2="' + y(l[i]) + '" stroke="' + col + '" stroke-width="1" opacity=".75"/>';
     var yo = y(o[i]), yc = y(c[i]);
@@ -220,16 +220,87 @@ function width() {
   return Math.max((v ? v.clientWidth : 900) - 2, 320);
 }
 
+/* ------------------------------------------------------------- palette */
+/* Every colour the charts draw with is a CSS custom property, read back at
+   render time. That is what makes the theme switch total: SVG fills cannot
+   inherit a variable through a presentation attribute, so the JS has to ask
+   for the resolved value — and asking means there is still exactly one place
+   a colour is defined, in sakata.css. */
+function cssv(name, fallback) {
+  try {
+    var v = getComputedStyle(document.documentElement)
+      .getPropertyValue(name).trim();
+    return v || fallback;
+  } catch (e) { return fallback; }
+}
+
+var C = {};
+
 /* Sector palette. Cool and muted by design: these are identity tags, not
    signals, so nothing here may be confused with the red/green of a number.
    That is why no sector is allowed a saturated warm red. */
-var SECTOR_COL = {
-  "Indices": "#3b6ea5", "Bonds": "#5c7d99", "Currencies": "#7a6ba8",
-  "Crypto": "#4c8f86", "Energy": "#8c5a3c", "Metals": "#a8894f",
-  "Grains": "#7d8f4e", "Softs": "#4f8f7d"
-};
+var SECTOR_COL = {};
+
+/* One hue up, one down. Tints carry conviction so the eye reads strength
+   before it reads the digit. */
+var BIAS_COL = {};
+
+function palette() {
+  C = {
+    pos: cssv("--pos", "#0a7c66"), neg: cssv("--neg", "#c2453b"),
+    up: cssv("--up", "#0d9488"), down: cssv("--down", "#cf5a54"),
+    teal: cssv("--teal", "#0d8f83"), deep: cssv("--teal-d", "#0d5f58"),
+    amber: cssv("--amber", "#96701c"), mute: cssv("--mute", "#66727b"),
+    faint: cssv("--faint", "#97a2ab"), axis: cssv("--axis", "#d3dade"),
+    volbar: cssv("--volbar", "#e9edf1"), other: cssv("--sec-other", "#9aa2ab")
+  };
+  SECTOR_COL = {
+    "Indices": cssv("--sec-indices", "#3b6ea5"),
+    "Bonds": cssv("--sec-bonds", "#5c7d99"),
+    "Currencies": cssv("--sec-currencies", "#7a6ba8"),
+    "Crypto": cssv("--sec-crypto", "#4c8f86"),
+    "Energy": cssv("--sec-energy", "#8c5a3c"),
+    "Metals": cssv("--sec-metals", "#a8894f"),
+    "Grains": cssv("--sec-grains", "#7d8f4e"),
+    "Softs": cssv("--sec-softs", "#4f8f7d")
+  };
+  BIAS_COL = {
+    "3": cssv("--bias3", "#0d5f58"), "2": cssv("--bias2", "#0d9488"),
+    "1": cssv("--bias1", "#5fbcb1"), "0": cssv("--bias0", "#9aa4ad"),
+    "-1": cssv("--biasn1", "#dda29e"), "-2": cssv("--biasn2", "#cf5a54"),
+    "-3": cssv("--biasn3", "#a33f3a")
+  };
+}
+palette();
+
 function swatch(sec) {
-  return '<i class="sw" style="background:' + (SECTOR_COL[sec] || "#9aa2ab") + '"></i>';
+  return '<i class="sw" style="background:' + (SECTOR_COL[sec] || C.other) + '"></i>';
+}
+
+/* ------------------------------------------------------------------ theme */
+function setTheme(t, remember) {
+  var root = document.documentElement;
+  root.setAttribute("data-theme", t);
+  if (remember) {
+    root.setAttribute("data-theme-src", "stored");
+    try { localStorage.setItem("sk-theme", t); } catch (e) {}
+  }
+  var m = document.querySelector('meta[name="theme-color"]');
+  if (m) m.setAttribute("content", cssv("--bg", "#ffffff"));
+  palette();
+}
+setTheme(document.documentElement.getAttribute("data-theme") || "light", false);
+
+/* Follow the OS until the switch is touched, then stop. */
+if (window.matchMedia) {
+  var mq = window.matchMedia("(prefers-color-scheme: dark)");
+  var onScheme = function (e) {
+    if (document.documentElement.getAttribute("data-theme-src") === "stored") return;
+    setTheme(e.matches ? "dark" : "light", false);
+    if (typeof route === "function") route();
+  };
+  if (mq.addEventListener) mq.addEventListener("change", onScheme);
+  else if (mq.addListener) mq.addListener(onScheme);
 }
 
 /* ------------------------------------------------------------- app state */
@@ -319,12 +390,6 @@ function renderBoard(d) {
 }
 
 /* ------------------------------------------------------------- Technical */
-/* One hue up, one down. Tints carry conviction so the eye reads strength
-   before it reads the digit. */
-var BIAS_COL = {
-  "3": "#0f5f57", "2": "#0d9488", "1": "#6cc0b6", "0": "#99a2ac",
-  "-1": "#e0a09c", "-2": "#cf5a54", "-3": "#a33f3a"
-};
 function renderTech(d) {
   var order = d.order, grid = d.grid;
   var codes = Object.keys(grid);
@@ -356,7 +421,7 @@ function renderTech(d) {
     });
     body += '<tr><td class="l ind"><a href="#" data-code="' + u.code + '">' +
       esc(u.code) + " " + esc(u.name) + "</a></td>" + cells +
-      '<td style="color:' + (tot >= 0 ? "#0d9488" : "#cf5a54") +
+      '<td style="color:' + (tot >= 0 ? C.pos : C.neg) +
       ';font-weight:600">' + (tot > 0 ? "+" : "") + tot + "</td></tr>";
   });
 
@@ -366,11 +431,11 @@ function renderTech(d) {
   var c = g[S.tech.hz] || {};
   var dec = (META.universe.filter(function (u) { return u.code === S.tech.code; })[0] || {}).dec;
   var chart = c.t ? candles(c.t, c.o, c.h, c.l, c.c, [
-    { k: "PH", v: c.ph, c: "#cf5a54", dash: "4 3" },
-    { k: "PL", v: c.pl, c: "#0d9488", dash: "4 3" },
-    { k: "Mid", v: c.md, c: "#99a2ac", dash: "2 4" },
-    { k: "RB", v: c.vb, c: "#0f5f57" },
-    { k: "RS", v: c.vs, c: "#a16207" }
+    { k: "PH", v: c.ph, c: C.down, dash: "4 3" },
+    { k: "PL", v: c.pl, c: C.up, dash: "4 3" },
+    { k: "Mid", v: c.md, c: C.faint, dash: "2 4" },
+    { k: "RB", v: c.vb, c: C.deep },
+    { k: "RS", v: c.vs, c: C.amber }
   ], width() - 22, 300, dec) : '<div class="skel">no series</div>';
 
   var lv = [
@@ -576,7 +641,7 @@ function renderCurve(d) {
     (c.rollPct >= 0 ? "+" : "") + num(c.rollPct, 2) + "% · carry ann " +
     (c.carryAnn >= 0 ? "+" : "") + num(c.carryAnn, 1) + "%</div>" +
     '<div class="plot">' +
-    lineChart(months, [{ k: "Settle", v: settle, c: "#0d9488", w: 2.4 }], oi,
+    lineChart(months, [{ k: "Settle", v: settle, c: C.teal, w: 2.4 }], oi,
       width() - 22, 280, 2) + "</div>" +
     '<div class="eyebrow">Settlements</div>' +
     table('<th class="l">Month</th><th>Settle</th><th>Change</th><th>Volume</th>' +
@@ -787,6 +852,14 @@ function route() {
 }
 
 document.addEventListener("click", function (e) {
+  var th = e.target.closest("#theme");
+  if (th) {
+    var now = document.documentElement.getAttribute("data-theme");
+    setTheme(now === "dark" ? "light" : "dark", true);
+    route();                       /* charts carry baked-in colours; redraw */
+    return;
+  }
+
   var tab = e.target.closest("[data-tab]");
   if (tab) { S.tab = tab.dataset.tab; location.hash = S.tab; route(); return; }
 
