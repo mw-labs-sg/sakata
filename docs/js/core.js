@@ -203,8 +203,11 @@ var S = {
 
 var HZ = ["Day", "WTD", "MTD", "QTD", "YTD"];
 
-var TABS = ["Board", "Technical", "Spreads", "Curve", "Margins", "Knowledge",
-  "Events", "News"];
+/* Tab order is reading order: what happened (Board), what is being said
+   about it (News), what is scheduled (Events), then the analytical tabs,
+   with the standing reference last. */
+var TABS = ["Board", "News", "Events", "Margins", "Technical", "Spreads",
+  "Curve", "Knowledge"];
 
 var META = null;
 
