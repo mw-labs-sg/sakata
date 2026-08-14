@@ -1,176 +1,210 @@
-"""Sakata on Streamlit.
+"""Sakata — the whole terminal, computed on load.
 
-Two layers of cache, both 15 minutes: prices, and the computed spread field.
-The field is the expensive one — nine windows, ~190 candidates each — so it is
-computed once and every window switch reads from the same object.
+Structure mirrors the static build: this file is the orchestrator, sk_render
+holds one function per tab, sk_charts holds the SVG primitives, and sk_ui
+holds the palette and helpers. The sk_*.py compute modules are untouched — the
+same code that fed build.py feeds this.
+
+Caching replaces the build schedule. Prices and the spread field hold for 15
+minutes, matching the shortest bar; Curve, Margins and News hold for an hour
+because their sources move once a day and refuse frequent callers.
 """
 import datetime as dt
+import json
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
-import pandas as pd
-import plotly.graph_objects as go
 import streamlit as st
 
 import sk_board as BOARD
+import sk_curve as CURVE
+import sk_margins as MARGIN
+import sk_render as R
 import sk_sources as S
 import sk_spreads as SP
-import sk_theme as TH
+import sk_technical as TECH
+import sk_ui as UI
 import sk_universe as U
 
-st.set_page_config(page_title="Sakata · futures terminal", layout="wide")
+st.set_page_config(page_title="Sakata · futures terminal", layout="wide",
+                   initial_sidebar_state="collapsed")
 S.DRY = False
-TTL = 900          # 15 minutes, matching the shortest bar
+TTL_FAST, TTL_SLOW = 900, 3600
+DOCS = Path(__file__).parent / "docs" / "data"
 
 
-@st.cache_data(ttl=TTL, show_spinner="fetching prices…")
+def _fallback(name: str):
+    """The last committed build, for when a live source refuses. Cheap
+    insurance: the static site's JSON is still in the repo."""
+    try:
+        return json.loads((DOCS / f"{name}.json").read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
+# ------------------------------------------------------------------ data
+@st.cache_data(ttl=TTL_FAST, show_spinner="fetching prices…")
 def prices(interval: str, period: str) -> dict:
     return S.fetch_ohlc(interval, period)
 
 
-@st.cache_data(ttl=TTL, show_spinner="ranking the field…")
-def spread_field() -> dict:
-    """Every window, sliced from four bar sizes. Mirrors build.py exactly."""
-    m15 = prices("15m", "60d")
+@st.cache_data(ttl=TTL_FAST)
+def by_bar() -> dict:
     hourly = prices("1h", "730d")
     daily = prices("1d", "10y")
-    four_h = {k: S.resample_4h(v) for k, v in hourly.items()}
+    return {"1h": hourly,
+            "4h": {k: S.resample_4h(v) for k, v in hourly.items()},
+            "1d": daily,
+            "1wk": {k: S.resample_weekly(v) for k, v in daily.items()}}
+
+
+@st.cache_data(ttl=TTL_FAST, show_spinner="ranking the field…")
+def spread_field() -> dict:
+    bb = by_bar()
+    m15 = prices("15m", "60d")
 
     def closes(frames):
         return {U.TICKER[c]: df["close"].dropna()
                 for c, df in frames.items() if df is not None and len(df)}
 
-    return SP.build_spreads({"15m": closes(m15), "1h": closes(hourly),
-                             "4h": closes(four_h), "1d": closes(daily)})
+    return SP.build_spreads({"15m": closes(m15), "1h": closes(bb["1h"]),
+                             "4h": closes(bb["4h"]), "1d": closes(bb["1d"])})
 
 
-TH.apply(stamp=dt.datetime.utcnow().strftime("%d %b %H:%M UTC"))
-if st.button("Refresh now"):
+@st.cache_data(ttl=TTL_FAST, show_spinner="reading the ladder…")
+def technical_grid() -> dict:
+    return TECH.build_technical(by_bar())
+
+
+@st.cache_data(ttl=TTL_SLOW, show_spinner="pulling CME settlements…")
+def curve_data() -> dict:
+    try:
+        d = CURVE.build_curve(S.fetch_curves())
+    except Exception:
+        d = None
+    # An empty result is a failed scrape wearing a success costume. Never let
+    # it replace a good one.
+    return d if (d and d.get("curves")) else (_fallback("curve") or {"curves": {}})
+
+
+@st.cache_data(ttl=TTL_SLOW, show_spinner="pulling margins…")
+def margin_data() -> dict:
+    try:
+        raw = S.fetch_margins()
+    except Exception:
+        raw = {}
+    if not raw:
+        return _fallback("margins") or {"rows": []}
+    return MARGIN.build_margins(raw, prices("1d", "10y"))
+
+
+@st.cache_data(ttl=TTL_SLOW, show_spinner="reading the wires…")
+def news_data() -> dict:
+    """Trading Economics, fetched in parallel. Sequential would be fifteen
+    pages at up to 25 seconds each; five at a time keeps it under ten."""
+    out = {}
+    with ThreadPoolExecutor(max_workers=5) as ex:
+        futures = {code: ex.submit(S.fetch_te, url)
+                   for code, url in U.TE_PAGE.items()}
+        for code, f in futures.items():
+            try:
+                d = f.result(timeout=40)
+            except Exception:
+                continue
+            if d.get("blurb"):
+                out[code] = {"blurb": d["blurb"], "date": d.get("date", "")}
+    return out
+
+
+# ------------------------------------------------------------------ shell
+if "dark" not in st.session_state:
+    st.session_state.dark = True
+
+UI.apply(st.session_state.dark,
+         stamp=dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M") + " UTC · live")
+
+bar = st.columns([1, 1, 8])
+if bar[0].button("Refresh"):
     st.cache_data.clear()
     st.rerun()
+if bar[1].button("Light" if st.session_state.dark else "Dark"):
+    st.session_state.dark = not st.session_state.dark
+    st.rerun()
 
-tab_board, tab_spreads = st.tabs(["Board", "Spreads"])
+# Tab order is reading order: what happened, what is being said about it, what
+# is scheduled, then the analytical tabs, with the standing reference last.
+TABS = ["Board", "News", "Events", "Margins", "Technical", "Spreads",
+        "Curve", "Knowledge"]
+t = st.tabs(TABS)
 
-# ------------------------------------------------------------------ board
-with tab_board:
+# ----------------------------------------------------------------- Board
+with t[0]:
+    hz = st.radio("Horizon", R.HZ, horizontal=True, key="board_hz",
+                  label_visibility="collapsed")
     daily = prices("1d", "10y")
     if not daily:
-        st.error("No daily data — Yahoo returned nothing.")
-        st.stop()
-    df = pd.DataFrame(BOARD.build_board(daily)["rows"])
-    pct = ("Day", "WTD", "MTD", "QTD", "YTD")
+        st.error("No daily prices — Yahoo returned nothing.")
+    else:
+        UI.md(R.board(BOARD.build_board(daily), hz))
 
-    def pct_style(v):
-        if pd.isna(v):
-            return ""
-        return f"color:{TH.T['pos'] if v > 0 else TH.T['neg']}"
+# ------------------------------------------------------------------ News
+with t[1]:
+    UI.md(R.news(news_data()))
 
-    for group in U.GROUPS:
-        sub = df[df["group"] == group]
-        if sub.empty:
-            continue
-        st.markdown(f'<div class="sk-ctitle">{group}</div>',
-                    unsafe_allow_html=True)
-        view = sub[["code", "name", "sector", "last", *pct]].copy()
-        st.dataframe(
-            view.style.map(pct_style, subset=list(pct))
-                .format({c: "{:+.2f}%" for c in pct}, na_rep="—"),
-            hide_index=True, use_container_width=True,
-            row_height=30)
+# ---------------------------------------------------------------- Events
+with t[2]:
+    filt = st.selectbox("Contract", R.event_codes(), key="ev_filter",
+                        label_visibility="collapsed")
+    UI.md(R.events(filt))
 
-# ---------------------------------------------------------------- spreads
-with tab_spreads:
+# --------------------------------------------------------------- Margins
+with t[3]:
+    UI.md(R.margins(margin_data()))
+
+# ------------------------------------------------------------- Technical
+with t[4]:
+    grid = technical_grid()
+    codes = [c for c in U.CODES if c in grid["grid"]]
+    if not codes:
+        st.error("No technical grid — not enough price history.")
+    else:
+        cc = st.columns([3, 5])
+        code = cc[0].selectbox("Instrument", codes, key="tech_code",
+                               format_func=lambda c: f"{c}  {U.NAME[c]}",
+                               label_visibility="collapsed")
+        avail = [h for h in grid["order"] if h in grid["grid"][code]]
+        hzt = cc[1].radio("Horizon", avail, horizontal=True, key="tech_hz",
+                          label_visibility="collapsed")
+        UI.md(R.technical(grid, code, hzt, U.DEC[code]))
+
+# --------------------------------------------------------------- Spreads
+with t[5]:
     field = spread_field()
     if not field.get("periods"):
         st.error("No spread windows built — not enough price history.")
-        st.stop()
+    else:
+        per = st.radio("Window", field["periods"], horizontal=True,
+                       key="sp_window", label_visibility="collapsed")
+        UI.md(R.spreads(field, per))
+        with st.expander("Digest — copy this into an LLM"):
+            st.code(R.digest(field["data"][per],
+                             dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M")),
+                    language=None)
 
-    window = st.radio("Window", field["periods"], horizontal=True,
-                      label_visibility="collapsed")
-    w = field["data"][window]
+# ----------------------------------------------------------------- Curve
+with t[6]:
+    cd = curve_data()
+    codes = list(cd.get("curves", {}))
+    if not codes:
+        UI.md(R.curve(cd, ""))
+    else:
+        code = st.selectbox("Contract", codes, key="cv_code",
+                            format_func=lambda c: f"{c}  {U.NAME.get(c, c)}",
+                            label_visibility="collapsed")
+        UI.md(R.curve(cd, code))
 
-    TH.caption(f"{w['note']} · {w['start']} to {w['end']}")
-
-    c = st.columns(5)
-    c[0].metric("Bars", w["bars"])
-    c[1].metric("Instruments", w["instruments"])
-    c[2].metric("Sharpe SE", f"±{w['se']}")
-    c[3].metric("Field", w["nField"])
-    c[4].metric("Best outright", f"#{w['outRank']}" if w["outRank"] else "—")
-
-    # The noise band is the point of shipping SE. A Sharpe inside it is not a
-    # finding, however high it reads.
-    if w["noise"]:
-        TH.caption(f"Anything under a Sharpe of {w['noise']} is inside the "
-                   f"noise band for a window this short.")
-    if w["dropped"]:
-        TH.caption("Dropped for coverage: " + ", ".join(w["dropped"]))
-
-    # ------------------------------------------------------------- table
-    rows = pd.DataFrame(w["rows"])
-    rows["position"] = [
-        (f"{r.long}/{r.short}" if r.long and r.short
-         else f"long {r.long}" if r.long else f"short {r.short}")
-        for r in rows.itertuples()]
-    cols = ["n", "position", "kind", "sector", "score", "sharpe", "er",
-            "win", "tot", "vol", "mdd", "corr", "ratio"]
-    st.dataframe(
-        rows[cols].style
-            .map(lambda v: f"color:{TH.T['pos'] if v and v > 0 else TH.T['neg']}",
-                 subset=["tot"])
-            .format({"score": "{:.1f}", "sharpe": "{:.2f}", "er": "{:.3f}",
-                     "win": "{:.0f}", "tot": "{:+.1f}", "vol": "{:.1f}",
-                     "mdd": "{:.1f}", "corr": "{:.2f}", "ratio": "{:.2f}"},
-                    na_rep="—"),
-        hide_index=True, use_container_width=True, height=430, row_height=30)
-
-    # ------------------------------------------------------------ charts
-    st.markdown("")
-    for ch in w["charts"]:
-        TH.ctitle(f"{ch['n']}. {ch['label']}",
-                  f"Sharpe {ch['sharpe']} · ER {ch['er']} · {ch['tot']:+}%")
-        fig = go.Figure()
-        if ch["lg"]:
-            fig.add_scatter(x=ch["t"], y=ch["lg"], name=ch["lgName"],
-                            line=dict(width=1, color=TH.T["mute"]))
-        if ch["sh"]:
-            fig.add_scatter(x=ch["t"], y=ch["sh"], name=ch["shName"],
-                            line=dict(width=1, color=TH.T["faint"]),
-                            line_dash="dot")
-        fig.add_scatter(x=ch["t"], y=ch["sp"], name="spread",
-                        line=dict(width=2.2, color=TH.T["teal"]))
-        fig.update_layout(height=250, hovermode="x unified",
-                          xaxis=TH.thin_ticks(ch["t"]))
-        st.plotly_chart(fig, use_container_width=True,
-                        config={"displayModeBar": False})
-
-    # -------------------------------------------------------- persistence
-    if field.get("persist"):
-        TH.ctitle("Holds across windows")
-        TH.caption("Nine windows agreeing is the only evidence here that a "
-                   "relationship is structural rather than a fortnight of luck.")
-        st.dataframe(
-            pd.DataFrame(field["persist"])[
-                ["label", "kind", "count", "best", "avgRank",
-                 "medSharpe", "medER"]],
-            hide_index=True, use_container_width=True, row_height=30)
-
-    # -------------------------------------------------------------- digest
-    # st.code ships a copy button, so the whole window can be lifted in one
-    # click. Selecting by hand triggers Streamlit's "C" shortcut and clears
-    # the cache instead.
-    TH.ctitle("Digest", "copy button, top right")
-    lines = [f"SAKATA · {window} · {w['note']}",
-             f"{w['start']} to {w['end']} · {w['bars']} bars · "
-             f"{w['instruments']} instruments",
-             f"Sharpe SE ±{w['se']} — treat anything under {w['noise']} as noise",
-             f"Field {w['nField']} ({w['nOut']} outright, {w['nPair']} pairs, "
-             f"{w['nCapped']} capped on ratio)",
-             f"Median Sharpe: outright {w['medOut']}, pair {w['medPair']}",
-             f"Best outright {w['bestOut']} at rank {w['outRank']}",
-             ""]
-    for r in w["rows"][:15]:
-        pos = (f"{r['long']}/{r['short']}" if r["long"] and r["short"]
-               else f"long {r['long']}" if r["long"] else f"short {r['short']}")
-        lines.append(f"{r['n']:>3}  {pos:<12} {r['kind']:<8} "
-                     f"Sharpe {r['sharpe']:>6}  ER {r['er']:>6}  "
-                     f"tot {r['tot']:>6}%  vol {r['vol']:>5}%")
-    st.code("\n".join(lines), language=None)
+# ------------------------------------------------------------- Knowledge
+with t[7]:
+    grp = st.radio("Group", ["All", "Financials", "Commodities"],
+                   horizontal=True, key="kn_group", label_visibility="collapsed")
+    UI.md(R.knowledge(grp))
