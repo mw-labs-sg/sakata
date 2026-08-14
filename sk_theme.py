@@ -39,10 +39,13 @@ _CSS = f"""
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-html, body, [class*="css"] {{
-  font-family: {SANS};
+html, body, [class*="css"], .stApp, .stApp * {{
+  font-family: {SANS} !important;
   font-feature-settings: 'tnum' 1, 'lnum' 1;
 }}
+/* Mono survives the blanket rule above — the stamp and the digest are the
+   two places where a machine log IS the right register. */
+.sk-stamp, code, pre, pre * {{ font-family: {MONO} !important; }}
 
 /* Kill Streamlit's default top padding — the header lockup is ours. */
 .block-container {{ max-width: 1160px; padding: 1.6rem 1.5rem 4rem; }}
