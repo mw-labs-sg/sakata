@@ -1,0 +1,19 @@
+# Sakata — Streamlit theme.
+# These five values are the only colours Streamlit itself lets you set. Every
+# other token from sakata.css is applied through the CSS block in sk_theme.py.
+# Dark is the default here for the same reason it is in index.html: a terminal
+# should not change colour because the laptop thinks it is daytime.
+
+[theme]
+base = "dark"
+primaryColor = "#2dd4bf"
+backgroundColor = "#0b0f12"
+secondaryBackgroundColor = "#11171b"
+textColor = "#e9eff2"
+font = "sans serif"
+
+[server]
+headless = true
+
+[browser]
+gatherUsageStats = false
