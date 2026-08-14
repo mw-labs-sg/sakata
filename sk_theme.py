@@ -124,8 +124,14 @@ _MARK = """
 
 
 def apply(stamp: str = "") -> None:
-    """Inject the CSS and draw the header lockup. Call once, at the top."""
-    st.markdown(_CSS, unsafe_allow_html=True)
+    """Inject the CSS and draw the header lockup. Call once, at the top.
+
+    The blank lines have to go. Markdown ends a raw-HTML block at the first
+    empty line, so a readable stylesheet gets cut off partway and the rest is
+    rendered as paragraphs of CSS text on the page.
+    """
+    css = "\n".join(ln for ln in _CSS.splitlines() if ln.strip())
+    st.markdown(css, unsafe_allow_html=True)
     st.markdown(
         f'<div class="sk-head">{_MARK}'
         f'<h1 class="sk-word">Sakata</h1>'
