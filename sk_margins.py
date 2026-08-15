@@ -41,6 +41,23 @@ def _atr(df, period=14):
     return float(tr.rolling(period).mean().iloc[-1])
 
 
+def _atr_series(df, window=20):
+    """Rolling ATR as a series, so it can be ranked against its own history.
+
+    Same windows as RV — 20 and 100 — rather than the conventional 14. The
+    point of this tab is comparing the two measures, and a 14-day ATR beside a
+    20-day vol invites the reader to attribute a difference to the market when
+    it is really a difference in lookback.
+    """
+    if df is None or len(df) < window + 5:
+        return None
+    hi, lo, cl = df["high"], df["low"], df["close"]
+    pc = cl.shift(1)
+    tr = pd.concat([(hi - lo), (hi - pc).abs(), (lo - pc).abs()],
+                   axis=1).max(axis=1)
+    return tr.rolling(window).mean().dropna()
+
+
 def _vol_series(df, window):
     """Rolling annualised vol, as a series so it can be ranked against itself."""
     if df is None or len(df) < window + 5:
@@ -82,8 +99,17 @@ def build_margins(margins: dict, daily: dict) -> dict:
         vol100 = float(slow.iloc[-1]) if slow is not None and len(slow) else None
         pct = _pctile(fast)
 
-        atr = _atr(df)
+        # ATR in points, then in dollars. The dollar figure is what actually
+        # tells you anything: a 0.5 move in NG and a 5-point move in ES are
+        # incomparable until the multiplier is applied.
+        a_fast = _atr_series(df, VOL_WIN)
+        a_slow = _atr_series(df, VOL_SLOW)
+        atr = float(a_fast.iloc[-1]) if a_fast is not None and len(a_fast) else None
+        atr100 = float(a_slow.iloc[-1]) if a_slow is not None and len(a_slow) else None
+        atr_pct = _pctile(a_fast)
         drange = atr * mult if (atr and mult) else None
+        drange100 = atr100 * mult if (atr100 and mult) else None
+
         rows.append({
             "code": code, "name": U.NAME[code], "sector": U.SECTOR[code],
             "group": U.GROUP_OF[U.SECTOR[code]], "dec": U.DEC[code],
@@ -95,6 +121,8 @@ def build_margins(margins: dict, daily: dict) -> dict:
             "notional": _r(notl, 0), "marginPct": _r(mpct, 2),
             "annVol": _r(vol, 1), "vol100": _r(vol100, 1),
             "volPct": _r(pct, 0),
+            "atr": _r(drange, 0), "atr100": _r(drange100, 0),
+            "atrPct": _r(atr_pct, 0),
             # 20d over 100d: above 1.0 means the fast measure has pulled away
             # from its own base rate, which is the setup that precedes a hike
             # rather than follows it.

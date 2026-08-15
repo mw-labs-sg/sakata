@@ -400,33 +400,56 @@ def curve(d: dict, code: str) -> str:
 
 # ---------------------------------------------------------------- Margins
 MARGIN_SORTS = {
+    "RV %ile": ("volPct", True),
+    "ATR %ile": ("atrPct", True),
     "Marg/Vol": ("margVol", False),
-    "RV Percentile": ("volPct", True),
-    "RV 20d": ("annVol", True),
-    "Margin %": ("marginPct", True),
     "Days ATR": ("daysATR", False),
-    "Maint $": ("maint", True),
-    "Notional $": ("notional", True),
+    "RV 20d": ("annVol", True),
+    "ATR $": ("atr", True),
+    "Margin %": ("marginPct", True),
+    "Notional": ("notional", True),
 }
 
+# Two lines per header. Ten columns of one-line labels forces the table wider
+# than the page; stacking the qualifier under the measure buys the width back
+# without abbreviating anything into guesswork.
+_H = [("", "Instrument", "l"), ("", "Last", ""),
+      ("RV", "20d", ""), ("RV", "100d", ""), ("RV", "%ile", ""),
+      ("ATR $", "20d", ""), ("ATR $", "100d", ""), ("ATR", "%ile", ""),
+      ("Marg", "/Vol", ""), ("Days", "ATR", ""),
+      ("Marg", "%", ""), ("Maint", "$", ""), ("Notional", "$", "")]
 
-def margins(d: dict, sort: str = "Marg/Vol") -> str:
+
+def _head() -> str:
+    out = ""
+    for top, bot, cls in _H:
+        c = f' class="{cls}"' if cls else ""
+        lead = (f'<span style="display:block;font-size:9px;opacity:.65">'
+                f'{top}</span>' if top else "")
+        out += f"<th{c}>{lead}{bot}</th>"
+    return out
+
+
+def margins(d: dict, sort: str = "RV %ile") -> str:
     """Financials above, Commodities below.
 
-    Stacked rather than side by side: this table is nine columns wide, and
+    Stacked rather than side by side: this table is thirteen columns wide, and
     two of them across a laptop would wrap every number. The Board can sit
     side by side because it carries six narrow columns; this one cannot.
+
+    Column order is live-first. Everything through Days ATR moves daily;
+    margin and notional are reference, kept so the arithmetic is checkable but
+    no longer occupying the position the eye reaches first.
     """
     t = _tok()
-    key, desc = MARGIN_SORTS.get(sort, MARGIN_SORTS["Marg/Vol"])
-    # A tab that quietly serves last week's margins looks identical to one
-    # serving today's. Say which it is.
+    key, desc = MARGIN_SORTS.get(sort, MARGIN_SORTS["RV %ile"])
     flag = f'<div class="flag">{esc(d["warn"])}</div>' if d.get("warn") else ""
 
-    head = ('<th class="l">Instrument</th><th>Last</th><th>Maint $</th>'
-            "<th>Notional $</th><th>Marg %</th><th>RV 20d</th>"
-            "<th>RV 100d</th><th>RV Percentile</th><th>Marg/Vol</th>"
-            "<th>Days ATR</th>")
+    def pcell(p):
+        if p is None:
+            return '<td class="faint">—</td>', ""
+        cls = "neg" if p >= 80 else "pos" if p <= 20 else "dim"
+        return f'<td class="{cls}">{p:.0f}</td>', cls
 
     def panel(group):
         rows = [r for r in d["rows"] if r.get("group") == group]
@@ -436,27 +459,30 @@ def margins(d: dict, sort: str = "Marg/Vol") -> str:
                                  -(r.get(key) or 0) if desc else (r.get(key) or 0)))
         body = ""
         for r in rows:
-            p = r.get("volPct")
-            # Only the tails earn a wash. Everything between the 20th and 80th
-            # is an ordinary week for that contract and should read as ground.
+            vp, ap = r.get("volPct"), r.get("atrPct")
+            # The wash keys off RV, not ATR. They agree most of the time, and
+            # tinting on both would give two rows the same colour for
+            # different reasons — which is worse than tinting on one.
             tint = ""
-            if p is not None and p >= 80:
+            if vp is not None and vp >= 80:
                 tint = f'background:{t.get("neg")}1a'
-            elif p is not None and p <= 20:
+            elif vp is not None and vp <= 20:
                 tint = f'background:{t.get("teal")}14'
-            pc = ('<td class="faint">—</td>' if p is None else
-                  f'<td class="{"neg" if p >= 80 else "pos" if p <= 20 else "dim"}">'
-                  f'{p:.0f}</td>')
+            vpc, _ = pcell(vp)
+            apc, _ = pcell(ap)
             body += (f'<tr style="{tint}"><td class="l">'
                      f'{swatch(r.get("sector", ""))}{esc(r.get("code"))} '
                      f'<span class="nm">{esc(r.get("name"))}</span></td>'
                      + cell(r.get("last"), r.get("dec", 2), "dim")
-                     + cell(r.get("maint"), 0) + cell(r.get("notional"), 0, "dim")
-                     + cell(r.get("marginPct"), 2) + cell(r.get("annVol"), 1)
-                     + cell(r.get("vol100"), 1, "dim") + pc
-                     + cell(r.get("margVol"), 2)
-                     + cell(r.get("daysATR"), 1, "dim") + "</tr>")
-        return eyebrow(group) + table(head, body)
+                     + cell(r.get("annVol"), 1) + cell(r.get("vol100"), 1, "dim")
+                     + vpc
+                     + cell(r.get("atr"), 0) + cell(r.get("atr100"), 0, "dim")
+                     + apc
+                     + cell(r.get("margVol"), 2) + cell(r.get("daysATR"), 1, "dim")
+                     + cell(r.get("marginPct"), 2, "dim")
+                     + cell(r.get("maint"), 0, "dim")
+                     + cell(r.get("notional"), 0, "dim") + "</tr>")
+        return eyebrow(group) + table(_head(), body)
 
     return flag + panel("Financials") + panel("Commodities")
 
