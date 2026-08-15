@@ -32,6 +32,13 @@ st.set_page_config(page_title="Sakata · futures terminal", layout="wide",
                    initial_sidebar_state="collapsed")
 S.DRY = False
 TTL_FAST, TTL_SLOW = 900, 3600
+
+# Bump this after changing anything in sk_margins, sk_spreads, sk_technical or
+# sk_sources. st.cache_data hashes only the DECORATED function's own source, so
+# editing an imported module leaves every cache here convinced nothing changed
+# — which twice looked like a broken feature and was a stale entry. Passing the
+# string in as an argument makes the cache key depend on it.
+CACHE_V = "2026-08-15a"
 DOCS = Path(__file__).parent / "docs" / "data"
 
 
@@ -46,12 +53,12 @@ def _fallback(name: str):
 
 # ------------------------------------------------------------------ data
 @st.cache_data(ttl=TTL_FAST, show_spinner="fetching prices…")
-def prices(interval: str, period: str) -> dict:
+def prices(interval: str, period: str, v: str = CACHE_V) -> dict:
     return S.fetch_ohlc(interval, period)
 
 
 @st.cache_data(ttl=TTL_FAST)
-def by_bar() -> dict:
+def by_bar(v: str = CACHE_V) -> dict:
     hourly = prices("1h", "730d")
     daily = prices("1d", "10y")
     return {"1h": hourly,
@@ -61,7 +68,7 @@ def by_bar() -> dict:
 
 
 @st.cache_data(ttl=TTL_FAST, show_spinner="ranking the field…")
-def spread_field() -> dict:
+def spread_field(v: str = CACHE_V) -> dict:
     bb = by_bar()
     m15 = prices("15m", "60d")
 
@@ -74,12 +81,12 @@ def spread_field() -> dict:
 
 
 @st.cache_data(ttl=TTL_FAST, show_spinner="reading the ladder…")
-def technical_grid() -> dict:
+def technical_grid(v: str = CACHE_V) -> dict:
     return TECH.build_technical(by_bar())
 
 
 @st.cache_data(ttl=TTL_SLOW, show_spinner="pulling CME settlements…")
-def curve_data() -> dict:
+def curve_data(v: str = CACHE_V) -> dict:
     try:
         d = CURVE.build_curve(S.fetch_curves())
     except Exception:
@@ -90,7 +97,7 @@ def curve_data() -> dict:
 
 
 @st.cache_data(ttl=TTL_SLOW, show_spinner="pulling margins…")
-def margin_data() -> dict:
+def margin_data(v: str = CACHE_V) -> dict:
     """AMP is the fragile half; the vol columns are not.
 
     If the scrape fails we still recompute everything derived from prices and
@@ -120,7 +127,7 @@ def margin_data() -> dict:
 
 
 @st.cache_data(ttl=TTL_SLOW, show_spinner="reading the wires…")
-def news_data() -> dict:
+def news_data(v: str = CACHE_V) -> dict:
     """Trading Economics, fetched in parallel. Sequential would be fifteen
     pages at up to 25 seconds each; five at a time keeps it under ten."""
     out = {}
