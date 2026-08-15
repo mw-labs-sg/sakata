@@ -551,6 +551,13 @@ def knowledge(group: str = "All") -> str:
 
 
 # ------------------------------------------------------------------- News
+def _tok() -> dict:
+    """Live tokens for the few places that need an inline style."""
+    from sk_ui import tokens
+    import streamlit as st
+    return tokens(st.session_state.get("dark", True))
+
+
 def news(markets: dict) -> str:
     """Fetched server-side now rather than through a CORS proxy in the browser.
     That removes the one tab that depended on a third party neither we nor the
@@ -558,6 +565,7 @@ def news(markets: dict) -> str:
     if not markets:
         return ('<div class="skel">No commentary came back — Trading Economics '
                 "may be refusing this host. Try Refresh.</div>")
+    t = _tok()
     cols = ""
     for group, secs in U.GROUPS.items():
         items = ""
@@ -567,16 +575,22 @@ def news(markets: dict) -> str:
             m = markets.get(code)
             if not m:
                 continue
-            # The source goes on the row it belongs to, not in a paragraph at
-            # the top of the tab. One click from the blurb to the full page.
+            # Date and source are a footer, not a trailing sentence. Pushed to
+            # opposite ends of a hairline row so neither reads as part of the
+            # blurb. Styled inline because Streamlit's own link rule outranks
+            # a class selector here.
             src = U.TE_PAGE.get(code, "")
             link = (f'<a href="{esc(src)}" target="_blank" rel="noopener" '
-                    f'class="when">source ↗</a>' if src else "")
-            when = (f'<span class="when">{esc(m.get("date"))}</span>'
-                    if m.get("date") else "")
-            items += (f'<div class="mkt"><h6>{esc(code)}  '
-                      f'{esc(U.NAME[code])}</h6><p>{esc(m["blurb"])}</p>'
-                      f'{when} {link}</div>')
+                    f'style="color:{t["teal"]};text-decoration:none;'
+                    f'font-size:11px">source ↗</a>' if src else "")
+            items += (
+                f'<div class="mkt"><h6>{esc(code)}  {esc(U.NAME[code])}</h6>'
+                f'<p style="text-align:left;hyphens:none">{esc(m["blurb"])}</p>'
+                f'<div style="display:flex;justify-content:space-between;'
+                f'align-items:baseline;margin-top:10px;padding-top:8px;'
+                f'border-top:1px solid {t["line"]}">'
+                f'<span style="font-size:11px;color:{t["faint"]}">'
+                f'{esc(m.get("date") or "")}</span>{link}</div></div>')
         if items:
             cols += (f'<div>{eyebrow(group)}<div class="card">{items}</div>'
                      f"</div>")

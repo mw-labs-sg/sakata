@@ -119,6 +119,15 @@ def _bridge(t: dict) -> str:
    well clear of the date so the two do not read as one string. */
 .news .mkt a {{ color: {t.get('teal')} !important; text-decoration: none; margin-left: 16px; font-size: 11px; letter-spacing: .01em; }}
 .news .mkt a:hover {{ text-decoration: underline; }}
+/* Justified text at this column width opens rivers of whitespace — the ES
+   blurb was stretching six words across a full line. Ragged right reads
+   better and the eye keeps its place. */
+.news .mkt p {{ text-align: left !important; hyphens: none !important; font-size: 13.5px; line-height: 1.62; }}
+.news .mkt {{ padding: 14px 16px; }}
+.news .mkt h6 {{ letter-spacing: .09em; }}
+/* Commodities blurbs run three times longer than Financials, so the two
+   columns fall out of step within one screen. Cap and scroll instead. */
+.news .card {{ max-height: 76vh; overflow-y: auto; }}
 .stSelectbox div[data-baseweb="select"] > div {{ background: {t.get('surface')}; border-color: {t.get('line')}; font-size: 13px; }}
 .stRadio [role="radiogroup"] {{ gap: 4px; flex-wrap: wrap; }}
 /* Icon buttons: square, quiet, teal on hover — the header switches from
