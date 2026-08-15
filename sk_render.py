@@ -399,46 +399,66 @@ def curve(d: dict, code: str) -> str:
 
 
 # ---------------------------------------------------------------- Margins
-def margins(d: dict, sort: str = "margVol") -> str:
-    """Sorted thinnest-cushion first. Rows tint on the vol percentile rather
-    than on the vol level: 22% means nothing on its own, 22% at the top of its
-    own year means the exchange is looking at the margin file."""
+MARGIN_SORTS = {
+    "Marg/Vol": ("margVol", False),
+    "RV Percentile": ("volPct", True),
+    "RV 20d": ("annVol", True),
+    "Margin %": ("marginPct", True),
+    "Days ATR": ("daysATR", False),
+    "Maint $": ("maint", True),
+    "Notional $": ("notional", True),
+}
+
+
+def margins(d: dict, sort: str = "Marg/Vol") -> str:
+    """Financials above, Commodities below.
+
+    Stacked rather than side by side: this table is nine columns wide, and
+    two of them across a laptop would wrap every number. The Board can sit
+    side by side because it carries six narrow columns; this one cannot.
+    """
     t = _tok()
-    rows = sorted(d["rows"],
-                  key=lambda r: (r.get(sort) is None, r.get(sort) or 0))
+    key, desc = MARGIN_SORTS.get(sort, MARGIN_SORTS["Marg/Vol"])
     # A tab that quietly serves last week's margins looks identical to one
     # serving today's. Say which it is.
     flag = f'<div class="flag">{esc(d["warn"])}</div>' if d.get("warn") else ""
-    head = ('<th class="l">Instrument</th><th>Maint $</th><th>Notional $</th>'
-            "<th>Marg %</th><th>RV 20d</th><th>RV 100d</th>"
-            "<th>RV Percentile</th><th>Marg/Vol</th><th>Days ATR</th>")
-    body = ""
-    for r in rows:
-        # .get throughout, not indexing. The fallback in app.py can serve
-        # margins.json from an older build whose rows predate these columns,
-        # and a missing column should render as a dash rather than take the
-        # whole tab down.
-        p = r.get("volPct")
-        # Only the tails earn a wash. Everything between the 20th and 80th is
-        # an ordinary week for that contract and should read as background.
-        tint = ""
-        if p is not None and p >= 80:
-            tint = f'background:{t.get("neg")}1a'
-        elif p is not None and p <= 20:
-            tint = f'background:{t.get("teal")}14'
-        pc = ('<td class="faint">—</td>' if p is None else
-              f'<td class="{"neg" if p >= 80 else "pos" if p <= 20 else "dim"}">'
-              f'{p:.0f}</td>')
-        body += (f'<tr style="{tint}"><td class="l">'
-                 f'{swatch(r.get("sector", ""))}'
-                 f'{esc(r.get("code"))} '
-                 f'<span class="nm">{esc(r.get("name"))}</span></td>'
-                 + cell(r.get("maint"), 0) + cell(r.get("notional"), 0, "dim")
-                 + cell(r.get("marginPct"), 2) + cell(r.get("annVol"), 1)
-                 + cell(r.get("vol100"), 1, "dim") + pc
-                 + cell(r.get("margVol"), 2)
-                 + cell(r.get("daysATR"), 1, "dim") + "</tr>")
-    return flag + table(head, body)
+
+    head = ('<th class="l">Instrument</th><th>Last</th><th>Maint $</th>'
+            "<th>Notional $</th><th>Marg %</th><th>RV 20d</th>"
+            "<th>RV 100d</th><th>RV Percentile</th><th>Marg/Vol</th>"
+            "<th>Days ATR</th>")
+
+    def panel(group):
+        rows = [r for r in d["rows"] if r.get("group") == group]
+        if not rows:
+            return ""
+        rows.sort(key=lambda r: (r.get(key) is None,
+                                 -(r.get(key) or 0) if desc else (r.get(key) or 0)))
+        body = ""
+        for r in rows:
+            p = r.get("volPct")
+            # Only the tails earn a wash. Everything between the 20th and 80th
+            # is an ordinary week for that contract and should read as ground.
+            tint = ""
+            if p is not None and p >= 80:
+                tint = f'background:{t.get("neg")}1a'
+            elif p is not None and p <= 20:
+                tint = f'background:{t.get("teal")}14'
+            pc = ('<td class="faint">—</td>' if p is None else
+                  f'<td class="{"neg" if p >= 80 else "pos" if p <= 20 else "dim"}">'
+                  f'{p:.0f}</td>')
+            body += (f'<tr style="{tint}"><td class="l">'
+                     f'{swatch(r.get("sector", ""))}{esc(r.get("code"))} '
+                     f'<span class="nm">{esc(r.get("name"))}</span></td>'
+                     + cell(r.get("last"), r.get("dec", 2), "dim")
+                     + cell(r.get("maint"), 0) + cell(r.get("notional"), 0, "dim")
+                     + cell(r.get("marginPct"), 2) + cell(r.get("annVol"), 1)
+                     + cell(r.get("vol100"), 1, "dim") + pc
+                     + cell(r.get("margVol"), 2)
+                     + cell(r.get("daysATR"), 1, "dim") + "</tr>")
+        return eyebrow(group) + table(head, body)
+
+    return flag + panel("Financials") + panel("Commodities")
 
 
 # --------------------------------------------------------------- Calendar

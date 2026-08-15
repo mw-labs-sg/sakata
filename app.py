@@ -192,7 +192,9 @@ with t[2]:
 
 # --------------------------------------------------------------- Margins
 with t[3]:
-    UI.md(R.margins(margin_data()))
+    msort = st.radio("Sort", list(R.MARGIN_SORTS), horizontal=True,
+                     key="mg_sort", label_visibility="collapsed")
+    UI.md(R.margins(margin_data(), msort))
 
 # ------------------------------------------------------------- Technical
 with t[4]:
