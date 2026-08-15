@@ -104,7 +104,7 @@ def margin_data() -> dict:
     """
     warn = ""
     try:
-        raw = AMP.fetch_amp(S.session())
+        raw, warn = AMP.fetch_amp(S.session())
     except Exception as e:
         raw = {}
         warn = f"{type(e).__name__}: {str(e)[:110]}"

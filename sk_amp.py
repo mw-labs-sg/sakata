@@ -125,8 +125,12 @@ CME_CSV = "https://www.cmegroup.com/CmeWS/mvc/Margins/OUTRIGHT.csv"
 CME_ONLY = {"BTC": "BTC", "ETH": "ETH"}
 
 
-def fetch_cme_crypto(session) -> dict:
-    """{code: {maint, day}} for the contracts AMP does not carry.
+def fetch_cme_crypto(session) -> tuple:
+    """({code: {maint, day}}, error) for the contracts AMP does not carry.
+
+    Returns the reason rather than swallowing it. A bare `except` here is what
+    made the AMP failure take two rounds to diagnose, and repeating the
+    mistake one function later would be careless.
 
     The file is tiered by contract period, several rows per product. Taking
     the first row would pick whichever tier happens to sort first, so this
@@ -135,29 +139,41 @@ def fetch_cme_crypto(session) -> dict:
     """
     out = {}
     try:
-        txt = session.get(CME_CSV, timeout=25).text
+        # 6,500 rows and a slow host: the 25s that suits an HTML page is not
+        # enough here, and a timeout looked identical to a block.
+        r = session.get(CME_CSV, timeout=60)
+        r.raise_for_status()
+        txt = r.text
+        if not txt.lstrip().startswith('"Exchange"'):
+            return out, f"CME returned {len(txt)} bytes that are not the CSV"
         df = pd.read_csv(io.StringIO(txt))
-    except Exception:
-        return out
+    except Exception as e:
+        return out, f"CME crypto: {type(e).__name__}: {str(e)[:90]}"
+
+    if "Product Code" not in df.columns:
+        return out, f"CME CSV columns changed: {list(df.columns)[:5]}"
     codes = df["Product Code"].astype(str).str.strip().str.upper()
+    missing = []
     for ours, theirs in CME_ONLY.items():
         hit = df[codes == theirs]
-        if hit.empty:
-            continue
         maint = pd.to_numeric(hit["Maintenance"], errors="coerce").dropna()
         if maint.empty:
+            missing.append(ours)
             continue
         out[ours] = {"maint": float(maint.mode().iloc[0]), "day": None,
                      "name": str(hit.iloc[0]["Product Name"])[:40]}
-    return out
+    err = (f"CME had no maintenance for {', '.join(missing)}"
+           if missing else "")
+    return out, err
 
 
-def fetch_amp(session) -> dict:
-    """One request, one parse, errors visible. `session` is sk_sources.session."""
+def fetch_amp(session) -> tuple:
+    """({code: {...}}, error). `session` is sk_sources.session."""
     r = session.get(AMP_URL, timeout=25)
     r.raise_for_status()
     out = parse_amp(r.text)
     # Crypto last, and only for what AMP did not already provide.
-    for code, rec in fetch_cme_crypto(session).items():
+    crypto, err = fetch_cme_crypto(session)
+    for code, rec in crypto.items():
         out.setdefault(code, rec)
-    return out
+    return out, err
