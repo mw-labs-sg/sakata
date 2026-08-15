@@ -18,7 +18,7 @@ import sk_universe as U
 from sk_fmt import r as _r
 
 VOL_WIN = 20        # the vol measure itself: one trading month
-VOL_SLOW = 60       # a slower read, to see whether the fast one is rising
+VOL_SLOW = 100      # the base rate: roughly five months, a full regime
 PCTILE_WIN = 252    # one year of daily observations to rank against
 
 
@@ -79,7 +79,7 @@ def build_margins(margins: dict, daily: dict) -> dict:
         fast = _vol_series(df, VOL_WIN)
         slow = _vol_series(df, VOL_SLOW)
         vol = float(fast.iloc[-1]) if fast is not None and len(fast) else None
-        vol60 = float(slow.iloc[-1]) if slow is not None and len(slow) else None
+        vol100 = float(slow.iloc[-1]) if slow is not None and len(slow) else None
         pct = _pctile(fast)
 
         atr = _atr(df)
@@ -88,11 +88,12 @@ def build_margins(margins: dict, daily: dict) -> dict:
             "code": code, "name": U.NAME[code], "sector": U.SECTOR[code],
             "maint": _r(maint, 0), "day": _r(m.get("day"), 0),
             "notional": _r(notl, 0), "marginPct": _r(mpct, 2),
-            "annVol": _r(vol, 1), "vol60": _r(vol60, 1),
+            "annVol": _r(vol, 1), "vol100": _r(vol100, 1),
             "volPct": _r(pct, 0),
-            # Vol rising into a thin cushion is the setup that precedes a
-            # hike, so ship the ratio rather than making the eye compute it.
-            "volTrend": _r(vol / vol60, 2) if (vol and vol60) else None,
+            # 20d over 100d: above 1.0 means the fast measure has pulled away
+            # from its own base rate, which is the setup that precedes a hike
+            # rather than follows it.
+            "volTrend": _r(vol / vol100, 2) if (vol and vol100) else None,
             "margVol": _r(mpct / vol, 2) if (mpct and vol) else None,
             "daysATR": _r(maint / drange, 2) if (maint and drange) else None,
             "src": "AMP" if maint else "—",

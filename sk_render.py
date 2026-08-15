@@ -407,8 +407,8 @@ def margins(d: dict, sort: str = "margVol") -> str:
     rows = sorted(d["rows"],
                   key=lambda r: (r.get(sort) is None, r.get(sort) or 0))
     head = ('<th class="l">Instrument</th><th>Maint $</th><th>Notional $</th>'
-            "<th>Marg %</th><th>Vol 20d</th><th>Vol 60d</th><th>%ile</th>"
-            "<th>Marg/Vol</th><th>Days ATR</th>")
+            "<th>Marg %</th><th>RV 20d</th><th>RV 100d</th>"
+            "<th>RV Percentile</th><th>Marg/Vol</th><th>Days ATR</th>")
     body = ""
     for r in rows:
         # .get throughout, not indexing. The fallback in app.py can serve
@@ -432,7 +432,7 @@ def margins(d: dict, sort: str = "margVol") -> str:
                  f'<span class="nm">{esc(r.get("name"))}</span></td>'
                  + cell(r.get("maint"), 0) + cell(r.get("notional"), 0, "dim")
                  + cell(r.get("marginPct"), 2) + cell(r.get("annVol"), 1)
-                 + cell(r.get("vol60"), 1, "dim") + pc
+                 + cell(r.get("vol100"), 1, "dim") + pc
                  + cell(r.get("margVol"), 2)
                  + cell(r.get("daysATR"), 1, "dim") + "</tr>")
     return table(head, body)
