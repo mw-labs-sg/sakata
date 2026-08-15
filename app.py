@@ -16,6 +16,7 @@ from pathlib import Path
 
 import streamlit as st
 
+import sk_amp as AMP
 import sk_board as BOARD
 import sk_calendar as CAL
 import sk_curve as CURVE
@@ -96,16 +97,26 @@ def margin_data() -> dict:
     graft the last known maintenance figures onto it, rather than serving a
     whole stale row. Vol and its percentile are then current even on a day the
     scraper is refused, which is the half of the tab that changes daily.
+
+    The reason for a failure is returned alongside the rows. An empty tab that
+    says nothing about why cost two rounds of guessing at whether AMP was
+    blocked; it was not, the parser had simply stopped matching.
     """
+    warn = ""
     try:
-        raw = S.fetch_margins()
-    except Exception:
+        raw = AMP.fetch_amp(S.session())
+    except Exception as e:
         raw = {}
+        warn = f"{type(e).__name__}: {str(e)[:110]}"
     if not raw:
         old = _fallback("margins") or {"rows": []}
         raw = {r["code"]: {"maint": r.get("maint"), "day": r.get("day")}
                for r in old.get("rows", []) if r.get("maint")}
-    return MARGIN.build_margins(raw, prices("1d", "10y"))
+        warn = (warn or "AMP returned nothing") + " — showing last known "
+        warn += "maintenance with live vol"
+    d = MARGIN.build_margins(raw, prices("1d", "10y"))
+    d["warn"] = warn
+    return d
 
 
 @st.cache_data(ttl=TTL_SLOW, show_spinner="reading the wires…")

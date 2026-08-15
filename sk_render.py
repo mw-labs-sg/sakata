@@ -406,6 +406,9 @@ def margins(d: dict, sort: str = "margVol") -> str:
     t = _tok()
     rows = sorted(d["rows"],
                   key=lambda r: (r.get(sort) is None, r.get(sort) or 0))
+    # A tab that quietly serves last week's margins looks identical to one
+    # serving today's. Say which it is.
+    flag = f'<div class="flag">{esc(d["warn"])}</div>' if d.get("warn") else ""
     head = ('<th class="l">Instrument</th><th>Maint $</th><th>Notional $</th>'
             "<th>Marg %</th><th>RV 20d</th><th>RV 100d</th>"
             "<th>RV Percentile</th><th>Marg/Vol</th><th>Days ATR</th>")
@@ -435,7 +438,7 @@ def margins(d: dict, sort: str = "margVol") -> str:
                  + cell(r.get("vol100"), 1, "dim") + pc
                  + cell(r.get("margVol"), 2)
                  + cell(r.get("daysATR"), 1, "dim") + "</tr>")
-    return table(head, body)
+    return flag + table(head, body)
 
 
 # --------------------------------------------------------------- Calendar
