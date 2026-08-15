@@ -17,6 +17,7 @@ from pathlib import Path
 import streamlit as st
 
 import sk_board as BOARD
+import sk_calendar as CAL
 import sk_curve as CURVE
 import sk_margins as MARGIN
 import sk_render as R
@@ -140,7 +141,7 @@ with hc[2]:
 # is scheduled, then the analytical tabs, with the standing reference last.
 # Uppercased here rather than in CSS: which element holds the label has moved
 # between Streamlit versions, so a selector is a thing that breaks on upgrade.
-TABS = ["Board", "News", "Events", "Margins", "Technical", "Spreads",
+TABS = ["Board", "News", "Calendar", "Margins", "Technical", "Spreads",
         "Curve", "Knowledge"]
 t = st.tabs([x.upper() for x in TABS])
 
@@ -158,11 +159,16 @@ with t[0]:
 with t[1]:
     UI.md(R.news(news_data()))
 
-# ---------------------------------------------------------------- Events
+# -------------------------------------------------------------- Calendar
 with t[2]:
-    filt = st.selectbox("Contract", R.event_codes(), key="ev_filter",
-                        label_visibility="collapsed")
-    UI.md(R.events(filt))
+    cc = st.columns([3, 5])
+    sym = cc[0].selectbox("Contract", CAL.symbols(), key="cal_sym",
+                          label_visibility="collapsed")
+    span = cc[1].radio("Horizon", ["2 weeks", "4 weeks", "8 weeks"],
+                       horizontal=True, index=1, key="cal_span",
+                       label_visibility="collapsed")
+    days = {"2 weeks": 14, "4 weeks": 28, "8 weeks": 56}[span]
+    UI.md(R.calendar(CAL.build(days, sym), days, CAL.exhausted()))
 
 # --------------------------------------------------------------- Margins
 with t[3]:

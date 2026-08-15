@@ -22,6 +22,13 @@ from sk_ui import (BIAS_COL, C, SECTOR_COL, cell, chips, esc, eyebrow, note,
 HZ = ["Day", "WTD", "MTD", "QTD", "YTD"]
 
 
+def _tok() -> dict:
+    """Live tokens for the few places that need an inline style."""
+    from sk_ui import tokens
+    import streamlit as st
+    return tokens(st.session_state.get("dark", True))
+
+
 # ------------------------------------------------------------------ Board
 def board(d: dict, hz: str = "Day") -> str:
     by_sec = {}
@@ -414,117 +421,99 @@ def margins(d: dict, sort: str = "margVol") -> str:
             + table(head, body))
 
 
-# ----------------------------------------------------------------- Events
-def _next_weekday(wd: int) -> dt.date:
-    t = dt.date.today()
-    return t + dt.timedelta(days=(wd - t.weekday() + 7) % 7)
+# --------------------------------------------------------------- Calendar
+TYPE_COL = {"Policy": "#a596d6", "Macro": "#6f9fd8", "Inventory": "#c08360",
+            "Report": "#a5b96f", "Positioning": "#d0ae6b",
+            "Holiday": "#8b979f", "Contract": "#5fb8ac"}
 
 
-def _first_friday(y: int, m: int) -> dt.date:
-    d = dt.date(y, m, 1)
-    return d + dt.timedelta(days=(4 - d.weekday() + 7) % 7)
+def _syms(codes, limit=6) -> str:
+    if not codes:
+        return '<span class="cash">—</span>'
+    shown = " ".join(codes[:limit])
+    more = f' <span class="faint">+{len(codes) - limit}</span>' if len(codes) > limit else ""
+    return shown + more
 
 
-def _next_first_friday() -> dt.date:
-    t = dt.date.today()
-    f = _first_friday(t.year, t.month)
-    if f < t:
-        f = _first_friday(t.year + (t.month == 12), t.month % 12 + 1)
-    return f
+def calendar(rows, horizon_days: int, warn=None) -> str:
+    """Today first, then the roll-down. Today is a separate block rather than
+    a highlighted row because it is the only part you act on this morning —
+    everything below it is planning."""
+    t = _tok()
+    today = [r for r in rows if r["days"] == 0]
+    rest = [r for r in rows if r["days"] > 0]
 
+    # ------------------------------------------------------------- today
+    stamp = dt.date.today().strftime("%A %d %B")
+    if today:
+        cards = ""
+        for r in today:
+            col = TYPE_COL.get(r["type"], t.get("mute"))
+            time = (f'<span style="font-family:var(--mono);font-size:12px;'
+                    f'color:{t.get("ink")}">{r["time_sg"]}</span>'
+                    f'<span style="font-size:10.5px;color:{t.get("faint")};'
+                    f'margin-left:5px">SGT</span>' if r["time_sg"] else "")
+            cards += (
+                f'<div style="display:flex;align-items:baseline;gap:14px;'
+                f'padding:9px 0;border-top:1px solid {t.get("hair", t.get("line"))}">'
+                f'<span style="flex:none;width:74px">{time}</span>'
+                f'<span style="flex:none;width:7px;height:7px;border-radius:50%;'
+                f'background:{col}"></span>'
+                f'<span style="flex:1;font-size:13.5px;color:{t.get("ink")}">'
+                f'{esc(r["event"])}</span>'
+                f'<span style="flex:none;font-size:11.5px;color:{t.get("mute")}">'
+                f'{_syms(r["symbols"], 8)}</span></div>')
+        today_block = (f'<div class="card" style="padding:14px 18px 16px">'
+                       f'<div style="font-size:11px;font-weight:650;'
+                       f'letter-spacing:.11em;text-transform:uppercase;'
+                       f'color:{t.get("teal")};margin-bottom:2px">Today · '
+                       f'{esc(stamp)}</div>{cards}</div>')
+    else:
+        today_block = (f'<div class="card" style="padding:16px 18px">'
+                       f'<div style="font-size:11px;font-weight:650;'
+                       f'letter-spacing:.11em;text-transform:uppercase;'
+                       f'color:{t.get("teal")}">Today · {esc(stamp)}</div>'
+                       f'<div style="font-size:13px;color:{t.get("mute")};'
+                       f'margin-top:6px">Nothing scheduled.</div></div>')
 
-def _last_business_day() -> dt.date:
-    t = dt.date.today()
+    # ----------------------------------------------------------- horizon
+    head = ('<th class="l">Date</th><th class="l">Symbol</th>'
+            '<th class="l">Time</th><th class="l">Event</th>'
+            '<th class="l">Countdown</th><th class="l">Type</th>')
+    body, last_week = "", None
+    for r in rest:
+        # A rule opens each new week so a month of rows stays navigable.
+        wk = r["date"].isocalendar()[1]
+        if wk != last_week:
+            last_week = wk
+            body += (f'<tr class="sec"><td class="l">Week of '
+                     f'{r["date"].strftime("%d %b")}</td>'
+                     f'<td colspan="5"></td></tr>')
+        col = TYPE_COL.get(r["type"], t.get("mute"))
+        soon = r["days"] <= 7
+        time = (f'{r["time_sg"]} <span class="faint">SGT</span>'
+                if r["time_sg"] else '<span class="faint">—</span>')
+        body += (
+            f'<tr><td class="l{" on" if soon else ""}">'
+            f'{"" if r["exact"] else "≈ "}{esc(r["date"].strftime("%a %d %b"))}</td>'
+            f'<td class="l faint">{_syms(r["symbols"])}</td>'
+            f'<td class="l dim">{time}<span class="faint" '
+            f'style="margin-left:7px">{r["time_et"]} ET</span></td>'
+            f'<td class="l">{esc(r["event"])}</td>'
+            f'<td class="l dim">{r["when"]}</td>'
+            f'<td class="l"><i class="sw" style="background:{col}"></i>'
+            f'{esc(r["type"])}</td></tr>')
 
-    def eom(y, m):
-        d = (dt.date(y + (m == 12), m % 12 + 1, 1) - dt.timedelta(days=1))
-        while d.weekday() > 4:
-            d -= dt.timedelta(days=1)
-        return d
+    flag = ""
+    if warn:
+        flag = (f'<div class="flag">Hand-maintained schedule exhausted for '
+                f'{", ".join(warn)} — those rows will stop appearing until '
+                f'the dates are extended in sk_calendar.py.</div>')
 
-    d = eom(t.year, t.month)
-    return d if d >= t else eom(t.year + (t.month == 12), t.month % 12 + 1)
-
-
-def _next_month_day(day: int) -> dt.date:
-    t = dt.date.today()
-    d = t.replace(day=day)
-    if d < t:
-        d = (t.replace(day=1) + dt.timedelta(days=32)).replace(day=day)
-    return d
-
-
-def _next_from(lst) -> dt.date:
-    t = dt.date.today()
-    up = [dt.date.fromisoformat(s) for s in lst
-          if dt.date.fromisoformat(s) >= t]
-    return up[0] if up else None
-
-
-FOMC = ["2026-09-16", "2026-10-28", "2026-12-09", "2027-01-27"]
-CPI = ["2026-08-12", "2026-09-11", "2026-10-13", "2026-11-12", "2026-12-10"]
-
-EVENTS = [
-    ("EIA Petroleum Status", lambda: _next_weekday(2), "10:30", "High", ["CL"], True),
-    ("EIA Nat Gas Storage", lambda: _next_weekday(3), "10:30", "High", ["NG"], True),
-    ("API Crude (private)", lambda: _next_weekday(1), "16:30", "Med", ["CL"], True),
-    ("Nonfarm Payrolls", _next_first_friday, "08:30", "High",
-     ["ES", "NQ", "NKD", "GC", "SI", "6E", "6J"], True),
-    ("Jobless Claims", lambda: _next_weekday(3), "08:30", "Med", ["ES", "NQ"], True),
-    ("FOMC Rate Decision", lambda: _next_from(FOMC), "14:00", "High",
-     ["ES", "NQ", "GC", "SI", "HG", "6E", "6J"], True),
-    ("CPI Inflation", lambda: _next_from(CPI), "08:30", "High",
-     ["ES", "NQ", "GC", "SI", "6E", "6J"], True),
-    ("PCE Inflation", _last_business_day, "08:30", "High",
-     ["ES", "NQ", "GC", "SI"], False),
-    ("USDA WASDE", lambda: _next_month_day(12), "12:00", "High",
-     ["ZC", "ZS", "ZW"], False),
-    ("USDA Crop Progress", lambda: _next_weekday(0), "16:00", "Med",
-     ["ZC", "ZS"], False),
-    ("USDA Export Sales", lambda: _next_weekday(3), "08:30", "Med",
-     ["ZC", "ZS", "ZW"], True),
-]
-
-
-def event_codes():
-    return ["All"] + [c for c in U.CODES
-                      if any(c in e[4] for e in EVENTS)]
-
-
-def events(filt: str = "All") -> str:
-    t = dt.date.today()
-    rows = []
-    for name, fn, time, impact, affects, exact in EVENTS:
-        try:
-            d = fn()
-        except Exception:
-            d = None
-        if not d or (filt != "All" and filt not in affects):
-            continue
-        days = (d - t).days
-        when = ("today" if days == 0 else "tomorrow" if days == 1
-                else f"in {days}d")
-        rows.append((d, when, name, time, impact, " ".join(affects), exact))
-    rows.sort(key=lambda r: r[0])
-
-    head = ('<th class="l">Date</th><th class="l">Time ET</th>'
-            '<th class="l">Event</th><th class="l">Impact</th>'
-            '<th class="l">Affects</th><th class="l">Countdown</th>')
-    body = "".join(
-        f'<tr><td class="l">{"" if r[6] else "≈ "}'
-        f'{esc(r[0].strftime("%a %b %d"))}</td>'
-        f'<td class="l dim">{r[3]}</td><td class="l">{esc(r[2])}</td>'
-        f'<td class="l {"neg" if r[4] == "High" else "dim"}">{r[4]}</td>'
-        f'<td class="l faint">{esc(r[5])}</td>'
-        f'<td class="l dim">{r[1]}</td></tr>' for r in rows)
-
-    return (note("Next scheduled catalyst per contract, computed from calendar "
-                 "rules — so these stay correct even if the price data is a day "
-                 "stale. <b>≈</b> marks an estimate; verify before trading. "
-                 "Euro and Yen also move on ECB and BOJ decisions, which are "
-                 "not on this list.")
-            + (table(head, body) if rows else
-               '<div class="skel">No upcoming events for that selection.</div>'))
+    return (today_block + flag
+            + eyebrow(f"Next {horizon_days} days")
+            + (table(head, body) if rest else
+               '<div class="skel">Nothing scheduled in this window.</div>'))
 
 
 # -------------------------------------------------------------- Knowledge
@@ -551,13 +540,6 @@ def knowledge(group: str = "All") -> str:
 
 
 # ------------------------------------------------------------------- News
-def _tok() -> dict:
-    """Live tokens for the few places that need an inline style."""
-    from sk_ui import tokens
-    import streamlit as st
-    return tokens(st.session_state.get("dark", True))
-
-
 def news(markets: dict) -> str:
     """Fetched server-side now rather than through a CORS proxy in the browser.
     That removes the one tab that depended on a third party neither we nor the
