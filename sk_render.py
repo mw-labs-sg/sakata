@@ -402,6 +402,7 @@ def curve(d: dict, code: str) -> str:
 MARGIN_SORTS = {
     "RV %ile": ("volPct", True),
     "ATR %ile": ("atrPct", True),
+    "RSI": ("rsi", True),
     "Marg/Vol": ("margVol", False),
     "Days ATR": ("daysATR", False),
     "RV 20d": ("annVol", True),
@@ -410,46 +411,46 @@ MARGIN_SORTS = {
     "Notional": ("notional", True),
 }
 
-# Two lines per header. Ten columns of one-line labels forces the table wider
-# than the page; stacking the qualifier under the measure buys the width back
-# without abbreviating anything into guesswork.
+# Two lines per header. Fourteen columns of one-line labels forces the table
+# wider than the page; stacking the qualifier under the measure buys the width
+# back without abbreviating anything into guesswork.
 _H = [("", "Instrument", "l"), ("", "Last", ""),
       ("RV", "20d", ""), ("RV", "100d", ""), ("RV", "%ile", ""),
       ("ATR $", "20d", ""), ("ATR $", "100d", ""), ("ATR", "%ile", ""),
+      ("RSI", "14d", ""),
       ("Marg", "/Vol", ""), ("Days", "ATR", ""),
       ("Marg", "%", ""), ("Maint", "$", ""), ("Notional", "$", "")]
 
 
 def _head() -> str:
-    """Two lines per header cell.
+    """Two lines per header cell, both in the reading ink.
 
     The qualifier was set at 9px on 0.65 opacity and read as damage rather
     than as hierarchy — at that size the eye cannot resolve whether RV/20d is
-    two words or one smudged one. Lifted to 10px at full weight in the muted
-    ink, with the measure below it in the normal header colour, so the two
-    lines read as a pair.
+    two words or one smudged one.
     """
     t = _tok()
     out = ""
     for top, bot, cls in _H:
         c = f' class="{cls}"' if cls else ""
         lead = (f'<span style="display:block;font-size:10px;font-weight:600;'
-                f'color:{t.get("mute")};letter-spacing:.07em;'
+                f'color:{t.get("body")};letter-spacing:.07em;'
                 f'margin-bottom:1px">{top}</span>' if top else "")
-        out += f"<th{c}>{lead}{bot}</th>"
+        out += (f'<th{c} style="color:{t.get("ink")};font-weight:600">'
+                f"{lead}{bot}</th>")
     return out
 
 
 def margins(d: dict, sort: str = "RV %ile") -> str:
     """Financials above, Commodities below.
 
-    Stacked rather than side by side: this table is thirteen columns wide, and
+    Stacked rather than side by side: this table is fourteen columns wide, and
     two of them across a laptop would wrap every number. The Board can sit
     side by side because it carries six narrow columns; this one cannot.
 
-    Column order is live-first. Everything through Days ATR moves daily;
-    margin and notional are reference, kept so the arithmetic is checkable but
-    no longer occupying the position the eye reaches first.
+    Column order is live-first. Everything through RSI moves daily; margin and
+    notional are reference, kept so the arithmetic is checkable but no longer
+    occupying the position the eye reaches first.
     """
     t = _tok()
     key, desc = MARGIN_SORTS.get(sort, MARGIN_SORTS["RV %ile"])
@@ -457,9 +458,19 @@ def margins(d: dict, sort: str = "RV %ile") -> str:
 
     def pcell(p):
         if p is None:
-            return '<td class="faint">—</td>', ""
+            return '<td class="faint">—</td>'
         cls = "neg" if p >= 80 else "pos" if p <= 20 else "dim"
-        return f'<td class="{cls}">{p:.0f}</td>', cls
+        return f'<td class="{cls}">{p:.0f}</td>'
+
+    def rsicell(v):
+        # Wilder's own thresholds. Coloured opposite to the vol columns on
+        # purpose: a high RV percentile is a risk warning, a high RSI is a
+        # directional reading, and using the same colour for both would
+        # invite reading them as the same kind of statement.
+        if v is None:
+            return '<td class="faint">—</td>'
+        cls = "neg" if v >= 70 else "pos" if v <= 30 else "dim"
+        return f'<td class="{cls}">{v:.0f}</td>'
 
     def panel(group):
         rows = [r for r in d["rows"] if r.get("group") == group]
@@ -469,7 +480,7 @@ def margins(d: dict, sort: str = "RV %ile") -> str:
                                  -(r.get(key) or 0) if desc else (r.get(key) or 0)))
         body = ""
         for r in rows:
-            vp, ap = r.get("volPct"), r.get("atrPct")
+            vp = r.get("volPct")
             # The wash keys off RV, not ATR. They agree most of the time, and
             # tinting on both would give two rows the same colour for
             # different reasons — which is worse than tinting on one.
@@ -478,23 +489,44 @@ def margins(d: dict, sort: str = "RV %ile") -> str:
                 tint = f'background:{t.get("neg")}1a'
             elif vp is not None and vp <= 20:
                 tint = f'background:{t.get("teal")}14'
-            vpc, _ = pcell(vp)
-            apc, _ = pcell(ap)
             body += (f'<tr style="{tint}"><td class="l">'
                      f'{swatch(r.get("sector", ""))}{esc(r.get("code"))} '
                      f'<span class="nm">{esc(r.get("name"))}</span></td>'
-                     + cell(r.get("last"), r.get("dec", 2), "dim")
+                     # Last in the reading ink: it is the number every other
+                     # column is derived from, so it should not be the
+                     # faintest thing on the row.
+                     f'<td style="color:{t.get("ink")}">'
+                     f'{num(r.get("last"), r.get("dec", 2)) or "—"}</td>'
                      + cell(r.get("annVol"), 1) + cell(r.get("vol100"), 1, "dim")
-                     + vpc
+                     + pcell(vp)
                      + cell(r.get("atr"), 0) + cell(r.get("atr100"), 0, "dim")
-                     + apc
+                     + pcell(r.get("atrPct")) + rsicell(r.get("rsi"))
                      + cell(r.get("margVol"), 2) + cell(r.get("daysATR"), 1, "dim")
                      + cell(r.get("marginPct"), 2, "dim")
                      + cell(r.get("maint"), 0, "dim")
                      + cell(r.get("notional"), 0, "dim") + "</tr>")
         return eyebrow(group) + table(_head(), body)
 
-    return flag + panel("Financials") + panel("Commodities")
+    # Where every derived number comes from. Without this the table asks you
+    # to trust nine calculations you cannot see.
+    method = note(
+        "<b>Notional</b> = last close × contract multiplier from "
+        "<code>sk_universe.MULT</code> — ES 50, NQ 20, GC 100, ZC 50, "
+        "6J 12,500,000. Yahoo supplies the close. "
+        "<b>Marg %</b> = maintenance ÷ notional. "
+        "<b>Marg/Vol</b> = Marg % ÷ RV 20d, so it asks how many points of "
+        "margin the exchange holds per point of realised volatility — lower "
+        "is a thinner cushion. "
+        "<b>Days ATR</b> = maintenance ÷ (ATR 20d × multiplier): how many "
+        "average days of movement the margin covers. "
+        "<b>RV</b> is close-to-close standard deviation annualised on bars "
+        "measured off the index, so crypto uses ~365 and futures ~252. "
+        "<b>%ile</b> ranks today's reading against the trailing 252 daily "
+        "observations of the same measure. "
+        "<b>Maintenance</b> is AMP retail, roughly 10% above raw CME; BTC and "
+        "ETH come from CME's own margin file.")
+
+    return flag + panel("Financials") + panel("Commodities") + method
 
 
 # --------------------------------------------------------------- Calendar

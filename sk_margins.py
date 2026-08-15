@@ -41,6 +41,29 @@ def _atr(df, period=14):
     return float(tr.rolling(period).mean().iloc[-1])
 
 
+def _rsi(df, period=14):
+    """Wilder's RSI (1978) on daily closes.
+
+    Included on request. Worth knowing what it is and is not: RSI measures
+    direction, not risk, so it answers a different question from every other
+    column here. It uses Wilder's smoothing — an EMA with alpha = 1/period —
+    rather than a simple mean, which is what distinguishes real RSI from the
+    approximations that circulate.
+    """
+    if df is None or len(df) < period + 5:
+        return None
+    d = df["close"].diff().dropna()
+    if len(d) < period + 1:
+        return None
+    up = d.clip(lower=0).ewm(alpha=1 / period, adjust=False).mean()
+    dn = (-d.clip(upper=0)).ewm(alpha=1 / period, adjust=False).mean()
+    last_dn = float(dn.iloc[-1])
+    if last_dn == 0:
+        return 100.0
+    rs = float(up.iloc[-1]) / last_dn
+    return float(100 - 100 / (1 + rs))
+
+
 def _atr_series(df, window=20):
     """Rolling ATR as a series, so it can be ranked against its own history.
 
@@ -122,7 +145,7 @@ def build_margins(margins: dict, daily: dict) -> dict:
             "annVol": _r(vol, 1), "vol100": _r(vol100, 1),
             "volPct": _r(pct, 0),
             "atr": _r(drange, 0), "atr100": _r(drange100, 0),
-            "atrPct": _r(atr_pct, 0),
+            "atrPct": _r(atr_pct, 0), "rsi": _r(_rsi(df), 0),
             # 20d over 100d: above 1.0 means the fast measure has pulled away
             # from its own base rate, which is the setup that precedes a hike
             # rather than follows it.
