@@ -129,6 +129,19 @@ CPI = ["2026-09-11", "2026-10-13", "2026-11-12", "2026-12-10",
        "2027-01-13", "2027-02-11", "2027-03-11"]
 ECB = ["2026-09-10", "2026-10-29", "2026-12-17", "2027-02-04"]
 BOJ = ["2026-09-18", "2026-10-30", "2026-12-18", "2027-01-22"]
+# Legislative dates that reprice a contract. Rare enough to hand-maintain,
+# and the Knowledge tab already names regulation as a BTC driver — this is
+# that driver arriving on a date.
+#
+# 15 Sep 2026 is the CLARITY Act cloture motion on H.R. 3633, eligible for
+# Senate action at 14:15 ET. It is a vote on whether to BEGIN debate, not on
+# passage, and it needs 60 — roughly six Democratic crossovers that have not
+# materialised since committee. Landing the day before FOMC makes it two
+# binary events for crypto inside 24 hours.
+LEGISLATION = {
+    "2026-09-15": ("CLARITY Act — Senate cloture vote (procedural)", "14:15",
+                   ["BTC", "ETH"]),
+}
 
 # The releases that move the whole board rather than one contract. Colour is
 # reserved for these: highlighting everything inside a week lit up the entire
@@ -258,6 +271,17 @@ def build(days: int = 28, symbol: str = "All", today=None) -> list:
             rows.append({"date": d, "symbols": syms, "time_et": et,
                          "time_sg": sg, "event": name, "type": kind,
                          "high": name in HIGH, "exact": exact})
+
+    for iso, (name, hhmm, syms) in LEGISLATION.items():
+        d = dt.date.fromisoformat(iso)
+        if not (today <= d <= end):
+            continue
+        if symbol != "All" and symbol not in syms:
+            continue
+        et, sg = _times(d, hhmm)
+        rows.append({"date": d, "symbols": syms, "time_et": et, "time_sg": sg,
+                     "event": name, "type": "Policy", "high": True,
+                     "exact": True})
 
     if symbol == "All":
         for src, region, label in (
