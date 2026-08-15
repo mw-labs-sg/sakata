@@ -105,6 +105,32 @@ def _pctile(series) -> float:
     return float((tail <= tail.iloc[-1]).mean() * 100)
 
 
+def _zscore(series) -> float:
+    """How far the latest reading sits from its own mean, in sigmas.
+
+    Taken on LOG volatility, not raw. Vol is bounded below at zero with a long
+    right tail, so a z-score on the raw series is biased and over-reports
+    extremes — which is precisely why the volatility literature models log-vol
+    rather than vol. Logging first makes the distribution roughly normal and
+    the sigma count mean what it says.
+
+    This is the column the percentile cannot give you. A percentile saturates:
+    two contracts both reading 100 might be +1.8σ and +4σ, and only one of
+    those is a genuine dislocation.
+    """
+    if series is None or len(series) < 60:
+        return None
+    tail = series.tail(PCTILE_WIN)
+    tail = tail[tail > 0]
+    if len(tail) < 60:
+        return None
+    lg = np.log(tail)
+    sd = float(lg.std())
+    if sd == 0:
+        return None
+    return float((float(lg.iloc[-1]) - float(lg.mean())) / sd)
+
+
 def build_margins(margins: dict, daily: dict) -> dict:
     rows = []
     for code in U.CODES:
@@ -121,6 +147,7 @@ def build_margins(margins: dict, daily: dict) -> dict:
         vol = float(fast.iloc[-1]) if fast is not None and len(fast) else None
         vol100 = float(slow.iloc[-1]) if slow is not None and len(slow) else None
         pct = _pctile(fast)
+        volz = _zscore(fast)
 
         # ATR in points, then in dollars. The dollar figure is what actually
         # tells you anything: a 0.5 move in NG and a 5-point move in ES are
@@ -130,6 +157,7 @@ def build_margins(margins: dict, daily: dict) -> dict:
         atr = float(a_fast.iloc[-1]) if a_fast is not None and len(a_fast) else None
         atr100 = float(a_slow.iloc[-1]) if a_slow is not None and len(a_slow) else None
         atr_pct = _pctile(a_fast)
+        atr_z = _zscore(a_fast)
         drange = atr * mult if (atr and mult) else None
         drange100 = atr100 * mult if (atr100 and mult) else None
 
@@ -143,9 +171,10 @@ def build_margins(margins: dict, daily: dict) -> dict:
             "maint": _r(maint, 0), "day": _r(m.get("day"), 0),
             "notional": _r(notl, 0), "marginPct": _r(mpct, 2),
             "annVol": _r(vol, 1), "vol100": _r(vol100, 1),
-            "volPct": _r(pct, 0),
+            "volPct": _r(pct, 0), "volZ": _r(volz, 1),
             "atr": _r(drange, 0), "atr100": _r(drange100, 0),
-            "atrPct": _r(atr_pct, 0), "rsi": _r(_rsi(df), 0),
+            "atrPct": _r(atr_pct, 0), "atrZ": _r(atr_z, 1),
+            "rsi": _r(_rsi(df), 0),
             # 20d over 100d: above 1.0 means the fast measure has pulled away
             # from its own base rate, which is the setup that precedes a hike
             # rather than follows it.

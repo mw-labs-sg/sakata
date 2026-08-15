@@ -401,7 +401,9 @@ def curve(d: dict, code: str) -> str:
 # ---------------------------------------------------------------- Margins
 MARGIN_SORTS = {
     "RV %ile": ("volPct", True),
+    "RV z": ("volZ", True),
     "ATR %ile": ("atrPct", True),
+    "ATR z": ("atrZ", True),
     "RSI": ("rsi", True),
     "Marg/Vol": ("margVol", False),
     "Days ATR": ("daysATR", False),
@@ -411,12 +413,14 @@ MARGIN_SORTS = {
     "Notional": ("notional", True),
 }
 
-# Two lines per header. Fourteen columns of one-line labels forces the table
+# Two lines per header. Sixteen columns of one-line labels forces the table
 # wider than the page; stacking the qualifier under the measure buys the width
 # back without abbreviating anything into guesswork.
 _H = [("", "Instrument", "l"), ("", "Last", ""),
       ("RV", "20d", ""), ("RV", "100d", ""), ("RV", "%ile", ""),
+      ("RV", "z", ""),
       ("ATR $", "20d", ""), ("ATR $", "100d", ""), ("ATR", "%ile", ""),
+      ("ATR", "z", ""),
       ("RSI", "14d", ""),
       ("Marg", "/Vol", ""), ("Days", "ATR", ""),
       ("Marg", "%", ""), ("Maint", "$", ""), ("Notional", "$", "")]
@@ -472,6 +476,15 @@ def margins(d: dict, sort: str = "RV %ile") -> str:
         cls = "neg" if v >= 70 else "pos" if v <= 30 else "dim"
         return f'<td class="{cls}">{v:.0f}</td>'
 
+    def zcell(z):
+        # ±2σ is the threshold, not ±1. On log-vol over a year a reading
+        # beyond one sigma happens roughly a third of the time and colouring
+        # it would light most of the table; beyond two is genuinely unusual.
+        if z is None:
+            return '<td class="faint">—</td>'
+        cls = "neg" if z >= 2 else "pos" if z <= -2 else "dim"
+        return f'<td class="{cls}">{z:+.1f}</td>'
+
     def panel(group):
         rows = [r for r in d["rows"] if r.get("group") == group]
         if not rows:
@@ -498,9 +511,10 @@ def margins(d: dict, sort: str = "RV %ile") -> str:
                      f'<td style="color:{t.get("ink")}">'
                      f'{num(r.get("last"), r.get("dec", 2)) or "—"}</td>'
                      + cell(r.get("annVol"), 1) + cell(r.get("vol100"), 1, "dim")
-                     + pcell(vp)
+                     + pcell(vp) + zcell(r.get("volZ"))
                      + cell(r.get("atr"), 0) + cell(r.get("atr100"), 0, "dim")
-                     + pcell(r.get("atrPct")) + rsicell(r.get("rsi"))
+                     + pcell(r.get("atrPct")) + zcell(r.get("atrZ"))
+                     + rsicell(r.get("rsi"))
                      + cell(r.get("margVol"), 2) + cell(r.get("daysATR"), 1, "dim")
                      + cell(r.get("marginPct"), 2, "dim")
                      + cell(r.get("maint"), 0, "dim")
@@ -527,6 +541,11 @@ def margins(d: dict, sort: str = "RV %ile") -> str:
         ("ATR $", "Wilder true range averaged over the window, × multiplier"),
         ("%ile", "Rank against the trailing 252 daily readings of the same "
                  "measure. Red ≥80, teal ≤20"),
+        ("z", "Sigmas from its own mean, taken on LOG vol — vol is bounded at "
+              "zero with a long right tail, so a raw z over-reports extremes. "
+              "Red ≥+2, teal ≤−2"),
+        ("%ile vs z", "%ile saturates: two contracts both reading 100 might "
+                      "be +1.8σ and +4σ. The z says how far past the edge"),
         ("RSI 14d", "Wilder (1978) on daily closes. Direction, not risk — "
                     "red ≥70, teal ≤30, opposite to the vol columns"),
     ]

@@ -38,7 +38,7 @@ TTL_FAST, TTL_SLOW = 900, 3600
 # editing an imported module leaves every cache here convinced nothing changed
 # — which twice looked like a broken feature and was a stale entry. Passing the
 # string in as an argument makes the cache key depend on it.
-CACHE_V = "2026-08-15b"
+CACHE_V = "2026-08-15c"
 DOCS = Path(__file__).parent / "docs" / "data"
 
 
