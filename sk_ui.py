@@ -107,12 +107,18 @@ def _bridge(t: dict) -> str:
 .sk-stamp, code, pre, pre * {{ font-family: var(--mono) !important; }}
 .stTabs [data-baseweb="tab-list"] {{ gap: 0; border-bottom: 1px solid {t.get('line')}; background: transparent; }}
 .stTabs [data-baseweb="tab"] {{ padding: 10px 15px 9px; }}
-/* The label is a nested <p>, and Streamlit sets text-transform on it. A rule
-   on the button alone is inherited and then overridden, so target the p. */
-.stTabs [data-baseweb="tab"] p, .stTabs [data-baseweb="tab"] {{ font-size: 11.5px !important; font-weight: 650 !important; letter-spacing: .1em !important; text-transform: uppercase !important; color: {t.get('mute')}; }}
-.stTabs [aria-selected="true"] p, .stTabs [aria-selected="true"] {{ color: {t.get('teal')} !important; }}
+/* Broadest selector that still only hits tabs. The label is nested inside a
+   markdown container, and which element it lands in has changed between
+   Streamlit versions — so transform the button and everything under it. */
+[data-baseweb="tab-list"] button, [data-baseweb="tab-list"] button * {{ font-size: 11.5px !important; font-weight: 650 !important; letter-spacing: .1em !important; text-transform: uppercase !important; }}
+[data-baseweb="tab-list"] button {{ color: {t.get('mute')} !important; }}
+[data-baseweb="tab-list"] button[aria-selected="true"], [data-baseweb="tab-list"] button[aria-selected="true"] * {{ color: {t.get('teal')} !important; }}
 .stTabs [data-baseweb="tab-highlight"] {{ background: {t.get('teal')}; }}
 .stTabs [data-baseweb="tab-border"] {{ display: none; }}
+/* The source link is a footnote, not a call to action — teal, quiet, and set
+   well clear of the date so the two do not read as one string. */
+.news .mkt a {{ color: {t.get('teal')} !important; text-decoration: none; margin-left: 16px; font-size: 11px; letter-spacing: .01em; }}
+.news .mkt a:hover {{ text-decoration: underline; }}
 .stSelectbox div[data-baseweb="select"] > div {{ background: {t.get('surface')}; border-color: {t.get('line')}; font-size: 13px; }}
 .stRadio [role="radiogroup"] {{ gap: 4px; flex-wrap: wrap; }}
 /* Icon buttons: square, quiet, teal on hover — the header switches from
