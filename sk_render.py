@@ -400,25 +400,36 @@ def curve(d: dict, code: str) -> str:
 
 # ---------------------------------------------------------------- Margins
 def margins(d: dict, sort: str = "margVol") -> str:
+    """Sorted thinnest-cushion first. Rows tint on the vol percentile rather
+    than on the vol level: 22% means nothing on its own, 22% at the top of its
+    own year means the exchange is looking at the margin file."""
+    t = _tok()
     rows = sorted(d["rows"],
                   key=lambda r: (r.get(sort) is None, r.get(sort) or 0))
-    head = ('<th class="l">Instrument</th><th class="l">Sector</th>'
-            "<th>Maint $</th><th>Notional $</th><th>Margin %</th>"
-            "<th>Ann vol %</th><th>Marg/Vol</th><th>Days ATR</th>")
-    body = "".join(
-        f'<tr><td class="l">{esc(r["code"])} {esc(r["name"])}</td>'
-        f'<td class="l faint">{esc(r["sector"])}</td>'
-        + cell(r["maint"], 0) + cell(r["notional"], 0, "dim")
-        + cell(r["marginPct"], 2) + cell(r["annVol"], 1, "dim")
-        + cell(r["margVol"], 2) + cell(r["daysATR"], 1, "dim") + "</tr>"
-        for r in rows)
-    return (note("Overnight <b>maintenance</b> per contract from AMP (retail, "
-                 "roughly 10% above raw CME; BTC and ETH come from CME's own "
-                 "file). <b>Marg/Vol</b> is margin % ÷ 20-day annualised vol; "
-                 "<b>Days ATR</b> is margin ÷ daily dollar range. Lowest "
-                 "Marg/Vol first — thinnest cushion against risk, and the "
-                 "first candidates for a margin hike.")
-            + table(head, body))
+    head = ('<th class="l">Instrument</th><th>Maint $</th><th>Notional $</th>'
+            "<th>Marg %</th><th>Vol 20d</th><th>Vol 60d</th><th>%ile</th>"
+            "<th>Marg/Vol</th><th>Days ATR</th>")
+    body = ""
+    for r in rows:
+        p = r.get("volPct")
+        # Only the tails earn a wash. Everything between the 20th and 80th is
+        # an ordinary week for that contract and should read as background.
+        tint = ""
+        if p is not None and p >= 80:
+            tint = f'background:{t.get("neg")}1a'
+        elif p is not None and p <= 20:
+            tint = f'background:{t.get("teal")}14'
+        pc = ('<td class="faint">—</td>' if p is None else
+              f'<td class="{"neg" if p >= 80 else "pos" if p <= 20 else "dim"}">'
+              f'{p:.0f}</td>')
+        body += (f'<tr style="{tint}"><td class="l">{swatch(r["sector"])}'
+                 f'{esc(r["code"])} <span class="nm">{esc(r["name"])}</span></td>'
+                 + cell(r["maint"], 0) + cell(r["notional"], 0, "dim")
+                 + cell(r["marginPct"], 2) + cell(r["annVol"], 1)
+                 + cell(r["vol60"], 1, "dim") + pc
+                 + cell(r["margVol"], 2) + cell(r["daysATR"], 1, "dim")
+                 + "</tr>")
+    return table(head, body)
 
 
 # --------------------------------------------------------------- Calendar
