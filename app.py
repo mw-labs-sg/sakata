@@ -138,9 +138,11 @@ with hc[2]:
 
 # Tab order is reading order: what happened, what is being said about it, what
 # is scheduled, then the analytical tabs, with the standing reference last.
+# Uppercased here rather than in CSS: which element holds the label has moved
+# between Streamlit versions, so a selector is a thing that breaks on upgrade.
 TABS = ["Board", "News", "Events", "Margins", "Technical", "Spreads",
         "Curve", "Knowledge"]
-t = st.tabs(TABS)
+t = st.tabs([x.upper() for x in TABS])
 
 # ----------------------------------------------------------------- Board
 with t[0]:

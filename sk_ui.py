@@ -107,10 +107,10 @@ def _bridge(t: dict) -> str:
 .sk-stamp, code, pre, pre * {{ font-family: var(--mono) !important; }}
 .stTabs [data-baseweb="tab-list"] {{ gap: 0; border-bottom: 1px solid {t.get('line')}; background: transparent; }}
 .stTabs [data-baseweb="tab"] {{ padding: 10px 15px 9px; }}
-/* Broadest selector that still only hits tabs. The label is nested inside a
-   markdown container, and which element it lands in has changed between
-   Streamlit versions — so transform the button and everything under it. */
-[data-baseweb="tab-list"] button, [data-baseweb="tab-list"] button * {{ font-size: 11.5px !important; font-weight: 650 !important; letter-spacing: .1em !important; text-transform: uppercase !important; }}
+/* Caps come from Python now. This only handles size, weight and tracking,
+   and covers both the old BaseWeb markup and the current stTab testid so an
+   upgrade in either direction still lands. */
+.stTabs button, .stTabs button *, [data-baseweb="tab-list"] button, [data-baseweb="tab-list"] button *, [data-testid="stTab"], [data-testid="stTab"] * {{ font-size: 11.5px !important; font-weight: 650 !important; letter-spacing: .11em !important; }}
 [data-baseweb="tab-list"] button {{ color: {t.get('mute')} !important; }}
 [data-baseweb="tab-list"] button[aria-selected="true"], [data-baseweb="tab-list"] button[aria-selected="true"] * {{ color: {t.get('teal')} !important; }}
 .stTabs [data-baseweb="tab-highlight"] {{ background: {t.get('teal')}; }}
