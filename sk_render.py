@@ -507,24 +507,32 @@ def margins(d: dict, sort: str = "RV %ile") -> str:
                      + cell(r.get("notional"), 0, "dim") + "</tr>")
         return eyebrow(group) + table(_head(), body)
 
-    # Where every derived number comes from. Without this the table asks you
-    # to trust nine calculations you cannot see.
-    method = note(
-        "<b>Notional</b> = last close × contract multiplier from "
-        "<code>sk_universe.MULT</code> — ES 50, NQ 20, GC 100, ZC 50, "
-        "6J 12,500,000. Yahoo supplies the close. "
-        "<b>Marg %</b> = maintenance ÷ notional. "
-        "<b>Marg/Vol</b> = Marg % ÷ RV 20d, so it asks how many points of "
-        "margin the exchange holds per point of realised volatility — lower "
-        "is a thinner cushion. "
-        "<b>Days ATR</b> = maintenance ÷ (ATR 20d × multiplier): how many "
-        "average days of movement the margin covers. "
-        "<b>RV</b> is close-to-close standard deviation annualised on bars "
-        "measured off the index, so crypto uses ~365 and futures ~252. "
-        "<b>%ile</b> ranks today's reading against the trailing 252 daily "
-        "observations of the same measure. "
-        "<b>Maintenance</b> is AMP retail, roughly 10% above raw CME; BTC and "
-        "ETH come from CME's own margin file.")
+    # Where every derived number comes from. As prose it was a paragraph you
+    # would read once and never again; as a definition grid each term can be
+    # found in a second, which is the only way a methodology note earns its
+    # place under a table.
+    defs = [
+        ("Notional", "Last close × contract multiplier from sk_universe.MULT "
+                     "— ES 50, NQ 20, GC 100, ZC 50, 6J 12,500,000"),
+        ("Last", "Yahoo daily close, at each contract's own precision"),
+        ("Maint $", "AMP retail overnight maintenance, roughly 10% above raw "
+                    "CME. BTC and ETH from CME's own margin file"),
+        ("Marg %", "Maintenance ÷ notional"),
+        ("Marg/Vol", "Marg % ÷ RV 20d — points of margin held per point of "
+                     "realised vol. Lower is a thinner cushion"),
+        ("Days ATR", "Maintenance ÷ (ATR 20d × multiplier) — days of average "
+                     "movement the margin covers"),
+        ("RV", "Close-to-close σ, annualised on bars measured off the index: "
+               "~365 for crypto, ~252 for futures"),
+        ("ATR $", "Wilder true range averaged over the window, × multiplier"),
+        ("%ile", "Rank against the trailing 252 daily readings of the same "
+                 "measure. Red ≥80, teal ≤20"),
+        ("RSI 14d", "Wilder (1978) on daily closes. Direction, not risk — "
+                    "red ≥70, teal ≤30, opposite to the vol columns"),
+    ]
+    method = ('<div class="sk-defs">' + "".join(
+        f"<div><b>{esc(k)}</b><span>{esc(v)}</span></div>" for k, v in defs)
+        + "</div>")
 
     return flag + panel("Financials") + panel("Commodities") + method
 

@@ -146,6 +146,14 @@ def _bridge(t: dict) -> str:
 /* Per-tab source line: what this tab is reading, in the register of a
    footnote rather than a heading. */
 .sk-src {{ font-size: 10.5px; color: {t.get('mute')}; padding: 2px 0 0; }}
+/* Methodology as a definition grid rather than a paragraph. Two columns so it
+   fills the width under a wide table instead of running as a narrow column of
+   prose, and a fixed term column so the eye can scan down the left edge. */
+.sk-defs {{ display: grid; grid-template-columns: 1fr 1fr; gap: 0 34px; margin: 16px 0 0; }}
+.sk-defs > div {{ display: grid; grid-template-columns: 92px 1fr; gap: 12px; padding: 7px 0; border-top: 1px solid {t.get('hair', t.get('line'))}; align-items: baseline; }}
+.sk-defs b {{ font-family: var(--sans) !important; font-size: 10.5px; font-weight: 650; letter-spacing: .07em; text-transform: uppercase; color: {t.get('body')}; }}
+.sk-defs span {{ font-family: var(--sans) !important; font-size: 12.5px; line-height: 1.5; color: {t.get('mute')}; }}
+@media (max-width: 900px) {{ .sk-defs {{ grid-template-columns: 1fr; }} }}
 .stSelectbox div[data-baseweb="select"] > div {{ background: {t.get('surface')}; border-color: {t.get('line')}; font-size: 13px; }}
 .stRadio [role="radiogroup"] {{ gap: 4px; flex-wrap: wrap; }}
 /* Icon buttons: square, quiet, teal on hover — the header switches from
