@@ -143,18 +143,29 @@ if "dark" not in st.session_state:
 
 UI.apply(st.session_state.dark)
 
-# Header row: lockup left, the two switches hard right against the rule, the
-# same arrangement index.html uses.
-hc = st.columns([16, 1, 1], vertical_alignment="center")
+hc = st.columns([16, 1], vertical_alignment="center")
 with hc[0]:
     UI.header(dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M") + " UTC · live")
 with hc[1]:
-    if st.button("↻", help="Refetch every source now"):
-        st.cache_data.clear()
-        st.rerun()
-with hc[2]:
+    # Anchored so the CSS can lift it onto the tab strip. Theme is the only
+    # thing that belongs here now: refresh moved into the tabs, because the
+    # sources behind them have nothing to do with each other and refetching
+    # fifteen Trading Economics pages to update a margin file is waste.
+    UI.md('<div id="sk-theme-anchor"></div>')
     if st.button("☀" if st.session_state.dark else "☾", help="Switch theme"):
         st.session_state.dark = not st.session_state.dark
+        st.rerun()
+
+
+def source(label: str, *caches) -> None:
+    """Name the source and offer to refetch just that one."""
+    c = st.columns([9, 1], vertical_alignment="center")
+    c[0].markdown(f'<div class="sk-src">{label}</div>', unsafe_allow_html=True)
+    if not caches:
+        return
+    if c[1].button("↻", key=f"rf_{label[:24]}", help="Refetch this tab"):
+        for fn in caches:
+            fn.clear()
         st.rerun()
 
 # Tab order is reading order: what happened, what is being said about it, what
@@ -167,6 +178,7 @@ t = st.tabs([x.upper() for x in TABS])
 
 # ----------------------------------------------------------------- Board
 with t[0]:
+    source("Yahoo · daily closes", prices)
     hz = st.radio("Horizon", R.HZ, horizontal=True, key="board_hz",
                   label_visibility="collapsed")
     daily = prices("1d", "10y")
@@ -177,10 +189,12 @@ with t[0]:
 
 # ------------------------------------------------------------------ News
 with t[1]:
+    source("Trading Economics · per-contract commentary", news_data)
     UI.md(R.news(news_data()))
 
 # -------------------------------------------------------------- Calendar
 with t[2]:
+    source("Calendar rules and hand-maintained schedules · no fetch")
     cc = st.columns([3, 5])
     sym = cc[0].selectbox("Contract", CAL.symbols(), key="cal_sym",
                           label_visibility="collapsed")
@@ -192,12 +206,14 @@ with t[2]:
 
 # --------------------------------------------------------------- Margins
 with t[3]:
+    source("AMP margins + CME margin file · Yahoo OHLC for vol", margin_data)
     msort = st.radio("Sort", list(R.MARGIN_SORTS), horizontal=True,
                      key="mg_sort", label_visibility="collapsed")
     UI.md(R.margins(margin_data(), msort))
 
 # ------------------------------------------------------------- Technical
 with t[4]:
+    source("Yahoo · 1H, 4H, 1D, 1W", technical_grid, prices)
     grid = technical_grid()
     codes = [c for c in U.CODES if c in grid["grid"]]
     if not codes:
@@ -214,6 +230,7 @@ with t[4]:
 
 # --------------------------------------------------------------- Spreads
 with t[5]:
+    source("Yahoo · 15m, 1H, 4H, 1D", spread_field, prices)
     field = spread_field()
     if not field.get("periods"):
         st.error("No spread windows built — not enough price history.")
@@ -228,6 +245,7 @@ with t[5]:
 
 # ----------------------------------------------------------------- Curve
 with t[6]:
+    source("CME settlements", curve_data)
     cd = curve_data()
     codes = list(cd.get("curves", {}))
     if not codes:
@@ -240,6 +258,7 @@ with t[6]:
 
 # ------------------------------------------------------------- Knowledge
 with t[7]:
+    source("Hand-maintained in sk_knowledge.py · no fetch")
     grp = st.radio("Group", ["All", "Financials", "Commodities"],
                    horizontal=True, key="kn_group", label_visibility="collapsed")
     UI.md(R.knowledge(grp))

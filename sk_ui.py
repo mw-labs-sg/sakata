@@ -128,6 +128,16 @@ def _bridge(t: dict) -> str:
 /* Commodities blurbs run three times longer than Financials, so the two
    columns fall out of step within one screen. Cap and scroll instead. */
 .news .card {{ max-height: 76vh; overflow-y: auto; }}
+/* The theme switch belongs on the tab rule, not floating above the wordmark.
+   Streamlit renders it as its own element, so it is anchored with an empty
+   marker div and lifted into place. :has() picks the container holding the
+   marker, and the adjacent sibling is the button itself. */
+.block-container {{ position: relative; }}
+[data-testid="stElementContainer"]:has(#sk-theme-anchor) {{ height: 0; margin: 0; }}
+[data-testid="stElementContainer"]:has(#sk-theme-anchor) + [data-testid="stElementContainer"] {{ position: absolute; right: 0; top: 52px; z-index: 6; width: auto; }}
+/* Per-tab source line: what this tab is reading, in the register of a
+   footnote rather than a heading. */
+.sk-src {{ font-size: 11px; color: {t.get('faint')}; letter-spacing: .01em; padding: 2px 0 0; }}
 .stSelectbox div[data-baseweb="select"] > div {{ background: {t.get('surface')}; border-color: {t.get('line')}; font-size: 13px; }}
 .stRadio [role="radiogroup"] {{ gap: 4px; flex-wrap: wrap; }}
 /* Icon buttons: square, quiet, teal on hover — the header switches from
