@@ -411,6 +411,10 @@ def margins(d: dict, sort: str = "margVol") -> str:
             "<th>Marg/Vol</th><th>Days ATR</th>")
     body = ""
     for r in rows:
+        # .get throughout, not indexing. The fallback in app.py can serve
+        # margins.json from an older build whose rows predate these columns,
+        # and a missing column should render as a dash rather than take the
+        # whole tab down.
         p = r.get("volPct")
         # Only the tails earn a wash. Everything between the 20th and 80th is
         # an ordinary week for that contract and should read as background.
@@ -422,13 +426,15 @@ def margins(d: dict, sort: str = "margVol") -> str:
         pc = ('<td class="faint">—</td>' if p is None else
               f'<td class="{"neg" if p >= 80 else "pos" if p <= 20 else "dim"}">'
               f'{p:.0f}</td>')
-        body += (f'<tr style="{tint}"><td class="l">{swatch(r["sector"])}'
-                 f'{esc(r["code"])} <span class="nm">{esc(r["name"])}</span></td>'
-                 + cell(r["maint"], 0) + cell(r["notional"], 0, "dim")
-                 + cell(r["marginPct"], 2) + cell(r["annVol"], 1)
-                 + cell(r["vol60"], 1, "dim") + pc
-                 + cell(r["margVol"], 2) + cell(r["daysATR"], 1, "dim")
-                 + "</tr>")
+        body += (f'<tr style="{tint}"><td class="l">'
+                 f'{swatch(r.get("sector", ""))}'
+                 f'{esc(r.get("code"))} '
+                 f'<span class="nm">{esc(r.get("name"))}</span></td>'
+                 + cell(r.get("maint"), 0) + cell(r.get("notional"), 0, "dim")
+                 + cell(r.get("marginPct"), 2) + cell(r.get("annVol"), 1)
+                 + cell(r.get("vol60"), 1, "dim") + pc
+                 + cell(r.get("margVol"), 2)
+                 + cell(r.get("daysATR"), 1, "dim") + "</tr>")
     return table(head, body)
 
 

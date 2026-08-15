@@ -90,12 +90,21 @@ def curve_data() -> dict:
 
 @st.cache_data(ttl=TTL_SLOW, show_spinner="pulling margins…")
 def margin_data() -> dict:
+    """AMP is the fragile half; the vol columns are not.
+
+    If the scrape fails we still recompute everything derived from prices and
+    graft the last known maintenance figures onto it, rather than serving a
+    whole stale row. Vol and its percentile are then current even on a day the
+    scraper is refused, which is the half of the tab that changes daily.
+    """
     try:
         raw = S.fetch_margins()
     except Exception:
         raw = {}
     if not raw:
-        return _fallback("margins") or {"rows": []}
+        old = _fallback("margins") or {"rows": []}
+        raw = {r["code"]: {"maint": r.get("maint"), "day": r.get("day")}
+               for r in old.get("rows", []) if r.get("maint")}
     return MARGIN.build_margins(raw, prices("1d", "10y"))
 
 
