@@ -458,20 +458,42 @@ def calendar(rows, horizon_days: int, warn=None) -> str:
 
     def row(r):
         col = TYPE_COL.get(r["type"], t.get("mute"))
-        # Two things earn colour: a policy decision, because it reprices the
-        # whole board rather than one contract, and anything inside a week,
-        # because that is the horizon you can still position for.
-        policy = r["type"] == "Policy"
-        soon = r["days"] <= 7
-        d_style = (f'color:{t.get("teal")};font-weight:600'
-                   if soon else "")
-        e_style = (f'color:{t.get("teal")};font-weight:600' if policy else "")
-        if r["time_sg"]:
-            time = (f'{r["time_sg"]} <span class="faint">SGT</span>'
-                    f'<span class="faint" style="margin-left:9px;'
-                    f'opacity:.7">{r["time_et"]} ET</span>')
-        else:
-            time = '<span class="faint">all day</span>'
+        # Three things earn colour. A policy decision, because it reprices the
+        # whole board. Anything inside a week, because that is the horizon you
+        # can still position for. And a holiday, because it is the one row
+        # that changes what you are ABLE to do rather than what you should.
+        holiday = r["type"] == "Holiday"
+        region = r.get("region", "")
+        if holiday:
+            # A wash across the row, not bold text. The row still reads as
+            # part of the table; it just sits on a different ground, which is
+            # what a closed market actually is — a change of context rather
+            # than a louder event. Three grounds for three calendars.
+            hc = {"US": t.get("amber"),
+                  "US-B": t.get("sec-bonds", t.get("mute")),
+                  "SG": t.get("sec-currencies", t.get("mute"))}.get(
+                      region, t.get("mute"))
+            return (
+                f'<tr style="background:{hc}1f">'
+                f'<td class="l">{esc(r["date"].strftime("%a %d %b"))}</td>'
+                f'<td class="l" style="color:{hc};letter-spacing:.06em">'
+                f'{region}</td>'
+                f'<td class="l faint">all day</td>'
+                f'<td class="l">{esc(r["event"])}</td>'
+                f'<td class="l dim">{r["when"]}</td>'
+                f'<td class="l"><i class="sw" style="background:{hc}"></i>'
+                f'Holiday</td></tr>')
+
+        # Colour marks importance, not proximity. Highlighting everything
+        # inside a week lit the whole first block, and a highlight that
+        # applies to every row is decoration. Countdown and the week rules
+        # already say how far away a thing is.
+        d_style = ""
+        e_style = (f'color:{t.get("teal")};font-weight:600'
+                   if r.get("high") else "")
+        time = (f'{r["time_sg"]} <span class="faint">SGT</span>'
+                f'<span class="faint" style="margin-left:9px;opacity:.7">'
+                f'{r["time_et"]} ET</span>')
         return (
             f'<tr><td class="l" style="{d_style}">'
             f'{"" if r["exact"] else "≈ "}'

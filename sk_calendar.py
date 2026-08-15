@@ -117,6 +117,18 @@ CPI = ["2026-09-11", "2026-10-13", "2026-11-12", "2026-12-10",
 ECB = ["2026-09-10", "2026-10-29", "2026-12-17", "2027-02-04"]
 BOJ = ["2026-09-18", "2026-10-30", "2026-12-18", "2027-01-22"]
 
+# The releases that move the whole board rather than one contract. Colour is
+# reserved for these: highlighting everything inside a week lit up the entire
+# first block, which is the same as highlighting nothing. Proximity is already
+# carried twice over, by the Countdown column and by the week rules.
+#
+# Deliberately excludes the weekly inventory and claims numbers. They matter
+# to their contract, but they arrive every Wednesday and Thursday without fail,
+# so marking them lights a quarter of the table and the eye stops seeing it.
+# What earns colour is the irregular, scheduled, board-wide event.
+HIGH = {"FOMC Rate Decision", "ECB Rate Decision", "BOJ Rate Decision",
+        "CPI Inflation", "PCE Inflation", "Nonfarm Payrolls", "USDA WASDE"}
+
 # name, type, ET time, symbols, rule, exact?
 EVENTS = [
     ("FOMC Rate Decision", "Policy", "14:00",
@@ -144,9 +156,13 @@ EVENTS = [
 ]
 
 # ---------------------------------------------------------------- holidays
-# CME/NYSE closures and Singapore public holidays. Lunar and Islamic dates
-# are gazetted a year ahead and shift, so verify these against MOM and the
-# exchange calendar each December rather than trusting them indefinitely.
+# Three calendars, not one. A full exchange closure, a SIFMA bond-market
+# recommendation where CME futures keep trading but the cash Treasury market
+# does not, and Singapore's own gazette. The bond dates matter because ZB and
+# ZN trade through them on thin liquidity with no cash market underneath.
+#
+# Lunar and Islamic dates are gazetted about a year ahead and shift, so verify
+# the Singapore list against MOM each December rather than trusting it on.
 US_HOLIDAYS = {
     "2026-09-07": "Labor Day", "2026-11-26": "Thanksgiving",
     "2026-11-27": "Day after Thanksgiving (early close)",
@@ -155,15 +171,25 @@ US_HOLIDAYS = {
     "2027-02-15": "Presidents' Day", "2027-03-26": "Good Friday",
     "2027-05-31": "Memorial Day", "2027-06-18": "Juneteenth (observed)",
     "2027-07-05": "Independence Day (observed)", "2027-09-06": "Labor Day",
-    "2027-11-25": "Thanksgiving", "2027-12-24": "Christmas (observed)",
+    "2027-11-25": "Thanksgiving", "2027-11-26": "Day after Thanksgiving (early close)",
+    "2027-12-24": "Christmas (observed)",
+}
+# SIFMA recommended closes: cash Treasuries shut, CME futures open.
+US_BOND_HOLIDAYS = {
+    "2026-10-12": "Columbus Day", "2026-11-11": "Veterans Day",
+    "2027-10-11": "Columbus Day", "2027-11-11": "Veterans Day",
 }
 SG_HOLIDAYS = {
-    "2026-11-09": "Deepavali (observed)", "2026-12-25": "Christmas Day",
-    "2027-01-01": "New Year's Day", "2027-02-06": "Chinese New Year",
+    "2026-11-08": "Deepavali", "2026-11-09": "Deepavali (observed)",
+    "2026-12-25": "Christmas Day",
+    "2027-01-01": "New Year's Day",
+    "2027-02-06": "Chinese New Year", "2027-02-07": "Chinese New Year",
     "2027-02-08": "Chinese New Year (observed)",
+    "2027-03-11": "Hari Raya Puasa",
     "2027-03-26": "Good Friday", "2027-05-01": "Labour Day",
-    "2027-05-20": "Vesak Day", "2027-08-09": "National Day",
-    "2027-12-25": "Christmas Day",
+    "2027-05-18": "Hari Raya Haji", "2027-05-20": "Vesak Day",
+    "2027-08-09": "National Day",
+    "2027-11-05": "Deepavali", "2027-12-25": "Christmas Day",
 }
 
 
@@ -207,17 +233,20 @@ def build(days: int = 28, symbol: str = "All", today=None) -> list:
             et, sg = _times(d, hhmm)
             rows.append({"date": d, "symbols": syms, "time_et": et,
                          "time_sg": sg, "event": name, "type": kind,
-                         "exact": exact})
+                         "high": name in HIGH, "exact": exact})
 
     if symbol == "All":
-        for src, label in ((US_HOLIDAYS, "US market closed"),
-                           (SG_HOLIDAYS, "Singapore holiday")):
+        for src, region, label in (
+                (US_HOLIDAYS, "US", "US market closed"),
+                (US_BOND_HOLIDAYS, "US-B", "US bond market closed, futures open"),
+                (SG_HOLIDAYS, "SG", "Singapore public holiday")):
             for iso, nm in src.items():
                 d = dt.date.fromisoformat(iso)
                 if today <= d <= end:
                     rows.append({"date": d, "symbols": [], "time_et": "",
                                  "time_sg": "", "event": f"{nm} — {label}",
-                                 "type": "Holiday", "exact": True})
+                                 "type": "Holiday", "region": region,
+                                 "high": False, "exact": True})
 
     rows.sort(key=lambda r: (r["date"], r["time_et"] or "00:00"))
     for r in rows:
