@@ -117,8 +117,47 @@ def parse_amp(html: str) -> dict:
     return out
 
 
+CME_CSV = "https://www.cmegroup.com/CmeWS/mvc/Margins/OUTRIGHT.csv"
+# AMP's table stops short of crypto, so these two come from the exchange
+# directly. Their clearing codes happen to match the Globex tickers, which is
+# not true of most CME products — corn clears as C, not ZC — so this shortcut
+# works here and would not generalise.
+CME_ONLY = {"BTC": "BTC", "ETH": "ETH"}
+
+
+def fetch_cme_crypto(session) -> dict:
+    """{code: {maint, day}} for the contracts AMP does not carry.
+
+    The file is tiered by contract period, several rows per product. Taking
+    the first row would pick whichever tier happens to sort first, so this
+    takes the modal maintenance instead — the level that applies across most
+    of the curve rather than to an expiring or balance-of-month tier.
+    """
+    out = {}
+    try:
+        txt = session.get(CME_CSV, timeout=25).text
+        df = pd.read_csv(io.StringIO(txt))
+    except Exception:
+        return out
+    codes = df["Product Code"].astype(str).str.strip().str.upper()
+    for ours, theirs in CME_ONLY.items():
+        hit = df[codes == theirs]
+        if hit.empty:
+            continue
+        maint = pd.to_numeric(hit["Maintenance"], errors="coerce").dropna()
+        if maint.empty:
+            continue
+        out[ours] = {"maint": float(maint.mode().iloc[0]), "day": None,
+                     "name": str(hit.iloc[0]["Product Name"])[:40]}
+    return out
+
+
 def fetch_amp(session) -> dict:
     """One request, one parse, errors visible. `session` is sk_sources.session."""
     r = session.get(AMP_URL, timeout=25)
     r.raise_for_status()
-    return parse_amp(r.text)
+    out = parse_amp(r.text)
+    # Crypto last, and only for what AMP did not already provide.
+    for code, rec in fetch_cme_crypto(session).items():
+        out.setdefault(code, rec)
+    return out
