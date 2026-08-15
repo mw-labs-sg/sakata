@@ -38,7 +38,7 @@ TTL_FAST, TTL_SLOW = 900, 3600
 # editing an imported module leaves every cache here convinced nothing changed
 # — which twice looked like a broken feature and was a stale entry. Passing the
 # string in as an argument makes the cache key depend on it.
-CACHE_V = "2026-08-15c"
+CACHE_V = "2026-08-15d"
 DOCS = Path(__file__).parent / "docs" / "data"
 
 
@@ -165,12 +165,17 @@ with hc[1]:
 
 
 def source(label: str, *caches) -> None:
-    """Name the source and offer to refetch just that one."""
-    c = st.columns([9, 1], vertical_alignment="center")
-    c[0].markdown(f'<div class="sk-src">{label}</div>', unsafe_allow_html=True)
+    """A refresh button, hard left, above whatever controls the tab has.
+
+    The source line that used to sit here is gone. It named where the data
+    came from — worth knowing once and clutter every day after — and on the
+    tabs that fetch nothing it was a line announcing that there was nothing
+    to announce.
+    """
     if not caches:
         return
-    if c[1].button("Refresh", key=f"rf_{label[:24]}", help="Refetch this tab"):
+    c = st.columns([1, 9])
+    if c[0].button("Refresh", key=f"rf_{label[:24]}", help="Refetch this tab"):
         for fn in caches:
             fn.clear()
         st.rerun()

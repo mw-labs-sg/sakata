@@ -521,39 +521,7 @@ def margins(d: dict, sort: str = "RV %ile") -> str:
                      + cell(r.get("notional"), 0, "dim") + "</tr>")
         return eyebrow(group) + table(_head(), body)
 
-    # Where every derived number comes from. As prose it was a paragraph you
-    # would read once and never again; as a definition grid each term can be
-    # found in a second, which is the only way a methodology note earns its
-    # place under a table.
-    defs = [
-        ("Notional", "Last close × contract multiplier from sk_universe.MULT "
-                     "— ES 50, NQ 20, GC 100, ZC 50, 6J 12,500,000"),
-        ("Last", "Yahoo daily close, at each contract's own precision"),
-        ("Maint $", "AMP retail overnight maintenance, roughly 10% above raw "
-                    "CME. BTC and ETH from CME's own margin file"),
-        ("Marg %", "Maintenance ÷ notional"),
-        ("Marg/Vol", "Marg % ÷ RV 20d — points of margin held per point of "
-                     "realised vol. Lower is a thinner cushion"),
-        ("Days ATR", "Maintenance ÷ (ATR 20d × multiplier) — days of average "
-                     "movement the margin covers"),
-        ("RV", "Close-to-close σ, annualised on bars measured off the index: "
-               "~365 for crypto, ~252 for futures"),
-        ("ATR $", "Wilder true range averaged over the window, × multiplier"),
-        ("%ile", "Rank against the trailing 252 daily readings of the same "
-                 "measure. Red ≥80, teal ≤20"),
-        ("z", "Sigmas from its own mean, taken on LOG vol — vol is bounded at "
-              "zero with a long right tail, so a raw z over-reports extremes. "
-              "Red ≥+2, teal ≤−2"),
-        ("%ile vs z", "%ile saturates: two contracts both reading 100 might "
-                      "be +1.8σ and +4σ. The z says how far past the edge"),
-        ("RSI 14d", "Wilder (1978) on daily closes. Direction, not risk — "
-                    "red ≥70, teal ≤30, opposite to the vol columns"),
-    ]
-    method = ('<div class="sk-defs">' + "".join(
-        f"<div><b>{esc(k)}</b><span>{esc(v)}</span></div>" for k, v in defs)
-        + "</div>")
-
-    return flag + panel("Financials") + panel("Commodities") + method
+    return flag + panel("Financials") + panel("Commodities")
 
 
 # --------------------------------------------------------------- Calendar
