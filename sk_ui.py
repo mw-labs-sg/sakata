@@ -119,10 +119,10 @@ def _bridge(t: dict) -> str:
    well clear of the date so the two do not read as one string. */
 .news .mkt a {{ color: {t.get('teal')} !important; text-decoration: none; margin-left: 16px; font-size: 11px; letter-spacing: .01em; }}
 .news .mkt a:hover {{ text-decoration: underline; }}
-/* Justified text at this column width opens rivers of whitespace — the ES
-   blurb was stretching six words across a full line. Ragged right reads
-   better and the eye keeps its place. */
-.news .mkt p {{ text-align: left !important; hyphens: none !important; font-size: 13.5px; line-height: 1.62; }}
+/* Justified, with hyphenation doing the work. Justification alone opens
+   rivers at this column width; auto hyphens let the browser break long words
+   and close the gaps, which is what keeps the right edge clean. */
+.news .mkt p {{ text-align: justify !important; hyphens: auto !important; -webkit-hyphens: auto !important; font-size: 13.5px; line-height: 1.62; }}
 .news .mkt {{ padding: 14px 16px; }}
 .news .mkt h6 {{ letter-spacing: .09em; }}
 /* Commodities blurbs run three times longer than Financials, so the two

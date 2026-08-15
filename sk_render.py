@@ -585,7 +585,7 @@ def news(markets: dict) -> str:
                     f'font-size:11px">source ↗</a>' if src else "")
             items += (
                 f'<div class="mkt"><h6>{esc(code)}  {esc(U.NAME[code])}</h6>'
-                f'<p style="text-align:left;hyphens:none">{esc(m["blurb"])}</p>'
+                f'<p>{esc(m["blurb"])}</p>'
                 f'<div style="display:flex;justify-content:space-between;'
                 f'align-items:baseline;margin-top:10px;padding-top:8px;'
                 f'border-top:1px solid {t["line"]}">'
