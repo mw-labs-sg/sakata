@@ -567,16 +567,17 @@ def news(markets: dict) -> str:
             m = markets.get(code)
             if not m:
                 continue
+            # The source goes on the row it belongs to, not in a paragraph at
+            # the top of the tab. One click from the blurb to the full page.
+            src = U.TE_PAGE.get(code, "")
+            link = (f'<a href="{esc(src)}" target="_blank" rel="noopener" '
+                    f'class="when">source ↗</a>' if src else "")
             when = (f'<span class="when">{esc(m.get("date"))}</span>'
                     if m.get("date") else "")
             items += (f'<div class="mkt"><h6>{esc(code)}  '
                       f'{esc(U.NAME[code])}</h6><p>{esc(m["blurb"])}</p>'
-                      f"{when}</div>")
+                      f'{when} {link}</div>')
         if items:
             cols += (f'<div>{eyebrow(group)}<div class="card">{items}</div>'
                      f"</div>")
-    return (note("Lead commentary per contract from Trading Economics. Crypto "
-                 "is deliberately absent — their pages go weeks without "
-                 "changing, and stale commentary that looks current is worse "
-                 "than none.")
-            + f'<div class="grid2 news">{cols}</div>')
+    return f'<div class="grid2 news">{cols}</div>'

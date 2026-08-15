@@ -106,14 +106,21 @@ def _bridge(t: dict) -> str:
 .stApp, .stApp * {{ font-family: var(--sans) !important; }}
 .sk-stamp, code, pre, pre * {{ font-family: var(--mono) !important; }}
 .stTabs [data-baseweb="tab-list"] {{ gap: 0; border-bottom: 1px solid {t.get('line')}; background: transparent; }}
-.stTabs [data-baseweb="tab"] {{ padding: 10px 14px 9px; font-size: 12px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: {t.get('mute')}; }}
-.stTabs [aria-selected="true"] {{ color: {t.get('teal')}; }}
+.stTabs [data-baseweb="tab"] {{ padding: 10px 15px 9px; }}
+/* The label is a nested <p>, and Streamlit sets text-transform on it. A rule
+   on the button alone is inherited and then overridden, so target the p. */
+.stTabs [data-baseweb="tab"] p, .stTabs [data-baseweb="tab"] {{ font-size: 11.5px !important; font-weight: 650 !important; letter-spacing: .1em !important; text-transform: uppercase !important; color: {t.get('mute')}; }}
+.stTabs [aria-selected="true"] p, .stTabs [aria-selected="true"] {{ color: {t.get('teal')} !important; }}
 .stTabs [data-baseweb="tab-highlight"] {{ background: {t.get('teal')}; }}
 .stTabs [data-baseweb="tab-border"] {{ display: none; }}
 .stSelectbox div[data-baseweb="select"] > div {{ background: {t.get('surface')}; border-color: {t.get('line')}; font-size: 13px; }}
 .stRadio [role="radiogroup"] {{ gap: 4px; flex-wrap: wrap; }}
-.stButton button {{ font-size: 12px; font-weight: 500; border-radius: 3px; border: 1px solid {t.get('line')}; background: {t.get('surface')}; color: {t.get('mute')}; padding: 3px 12px; }}
-.stButton button:hover {{ border-color: {t.get('teal')}; color: {t.get('teal')}; }}
+/* Icon buttons: square, quiet, teal on hover — the header switches from
+   index.html, minus the SVG. */
+.stButton button {{ width: 32px; height: 30px; min-height: 30px; padding: 0; font-size: 14px; line-height: 1; border-radius: 4px; border: 1px solid {t.get('line')}; background: {t.get('surface')}; color: {t.get('mute')}; transition: color .15s, border-color .15s; }}
+.stButton button p {{ font-size: 14px !important; margin: 0 !important; }}
+.stButton button:hover, .stButton button:focus {{ border-color: {t.get('teal')}; color: {t.get('teal')} !important; box-shadow: none; }}
+.stButton button:hover p {{ color: {t.get('teal')} !important; }}
 .sk-head {{ display: flex; align-items: center; gap: 10px; margin: 0 0 4px; }}
 .sk-mark {{ flex: none; color: {t.get('teal')}; margin-bottom: 2px; }}
 .sk-word {{ font-family: var(--display); font-size: 23px; font-weight: 800; letter-spacing: -.035em; color: {t.get('ink')}; margin: 0; line-height: 1; }}
@@ -142,8 +149,8 @@ def md(s: str) -> None:
                 unsafe_allow_html=True)
 
 
-def apply(dark: bool = True, stamp: str = "") -> None:
-    """Inject fonts, sakata.css, the Streamlit bridge, and the header."""
+def apply(dark: bool = True) -> None:
+    """Inject fonts, sakata.css and the Streamlit bridge."""
     _palette(dark)
     t = tokens(dark)
     css = _load_css()
@@ -154,9 +161,26 @@ def apply(dark: bool = True, stamp: str = "") -> None:
         css += "\n:root{" + "".join(f"--{k}:{v};" for k, v in
                                     _block(css, ':root[data-theme="dark"]').items()) + "}"
     md(_FONTS + "<style>" + css + _bridge(t) + "</style>")
-    md(f'<div class="sk-head">{MARK}<h1 class="sk-word">Sakata</h1>'
-       f'<span class="sk-rule"></span>'
-       f'<span class="sk-stamp">{esc(stamp)}</span></div>')
+
+
+def header(stamp: str = "") -> None:
+    """The lockup: mark, wordmark, hairline, stamp — all on one line.
+
+    Everything here is an inline style on a span. Streamlit's own rules for
+    <h1> and for its markdown container are specific enough to win against a
+    class, which is what pushed the mark onto its own line and stripped the
+    teal off it.
+    """
+    t = tokens(st.session_state.get("dark", True))
+    md(f'<div style="display:flex;align-items:center;gap:11px;margin:0 0 2px">'
+       f'<span style="flex:none;line-height:0;color:{t.get("teal")}">{MARK}</span>'
+       f'<span style="font-family:var(--display),Inter,sans-serif;font-size:27px;'
+       f'font-weight:800;letter-spacing:-.035em;color:{t.get("ink")};'
+       f'line-height:1">Sakata</span>'
+       f'<span style="flex:1;height:1px;background:{t.get("line")};'
+       f'margin-top:3px"></span>'
+       f'<span style="font-size:11px;color:{t.get("faint")};white-space:nowrap;'
+       f'letter-spacing:-.02em">{esc(stamp)}</span></div>')
 
 
 # ------------------------------------------------------------ tiny helpers

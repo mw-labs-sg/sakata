@@ -120,16 +120,21 @@ def news_data() -> dict:
 if "dark" not in st.session_state:
     st.session_state.dark = True
 
-UI.apply(st.session_state.dark,
-         stamp=dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M") + " UTC · live")
+UI.apply(st.session_state.dark)
 
-bar = st.columns([1, 1, 8])
-if bar[0].button("Refresh"):
-    st.cache_data.clear()
-    st.rerun()
-if bar[1].button("Light" if st.session_state.dark else "Dark"):
-    st.session_state.dark = not st.session_state.dark
-    st.rerun()
+# Header row: lockup left, the two switches hard right against the rule, the
+# same arrangement index.html uses.
+hc = st.columns([16, 1, 1], vertical_alignment="center")
+with hc[0]:
+    UI.header(dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M") + " UTC · live")
+with hc[1]:
+    if st.button("↻", help="Refetch every source now"):
+        st.cache_data.clear()
+        st.rerun()
+with hc[2]:
+    if st.button("☀" if st.session_state.dark else "☾", help="Switch theme"):
+        st.session_state.dark = not st.session_state.dark
+        st.rerun()
 
 # Tab order is reading order: what happened, what is being said about it, what
 # is scheduled, then the analytical tabs, with the standing reference last.
