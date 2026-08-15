@@ -164,10 +164,10 @@ with t[2]:
     cc = st.columns([3, 5])
     sym = cc[0].selectbox("Contract", CAL.symbols(), key="cal_sym",
                           label_visibility="collapsed")
-    span = cc[1].radio("Horizon", ["2 weeks", "4 weeks", "8 weeks"],
-                       horizontal=True, index=1, key="cal_span",
+    span = cc[1].radio("Horizon", ["2 weeks", "4 weeks", "8 weeks", "Quarter"],
+                       horizontal=True, index=2, key="cal_span",
                        label_visibility="collapsed")
-    days = {"2 weeks": 14, "4 weeks": 28, "8 weeks": 56}[span]
+    days = {"2 weeks": 14, "4 weeks": 28, "8 weeks": 56, "Quarter": 92}[span]
     UI.md(R.calendar(CAL.build(days, sym), days, CAL.exhausted()))
 
 # --------------------------------------------------------------- Margins

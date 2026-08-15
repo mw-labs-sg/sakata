@@ -429,80 +429,77 @@ TYPE_COL = {"Policy": "#a596d6", "Macro": "#6f9fd8", "Inventory": "#c08360",
 
 def _syms(codes, limit=6) -> str:
     if not codes:
-        return '<span class="cash">—</span>'
+        return '<span class="faint">—</span>'
+    if len(codes) >= len(U.CODES):
+        return '<span class="lg">ALL</span>'
     shown = " ".join(codes[:limit])
-    more = f' <span class="faint">+{len(codes) - limit}</span>' if len(codes) > limit else ""
+    more = (f' <span class="faint">+{len(codes) - limit}</span>'
+            if len(codes) > limit else "")
     return shown + more
 
 
 def calendar(rows, horizon_days: int, warn=None) -> str:
-    """Today first, then the roll-down. Today is a separate block rather than
-    a highlighted row because it is the only part you act on this morning —
-    everything below it is planning."""
+    """One table. Today is the first section rather than a separate card, so
+    the eye runs straight from what happens in the next few hours into the
+    weeks behind it without changing format halfway down."""
     t = _tok()
-    today = [r for r in rows if r["days"] == 0]
-    rest = [r for r in rows if r["days"] > 0]
+    today_d = dt.date.today()
 
-    # ------------------------------------------------------------- today
-    stamp = dt.date.today().strftime("%A %d %B")
-    if today:
-        cards = ""
-        for r in today:
-            col = TYPE_COL.get(r["type"], t.get("mute"))
-            time = (f'<span style="font-family:var(--mono);font-size:12px;'
-                    f'color:{t.get("ink")}">{r["time_sg"]}</span>'
-                    f'<span style="font-size:10.5px;color:{t.get("faint")};'
-                    f'margin-left:5px">SGT</span>' if r["time_sg"] else "")
-            cards += (
-                f'<div style="display:flex;align-items:baseline;gap:14px;'
-                f'padding:9px 0;border-top:1px solid {t.get("hair", t.get("line"))}">'
-                f'<span style="flex:none;width:74px">{time}</span>'
-                f'<span style="flex:none;width:7px;height:7px;border-radius:50%;'
-                f'background:{col}"></span>'
-                f'<span style="flex:1;font-size:13.5px;color:{t.get("ink")}">'
-                f'{esc(r["event"])}</span>'
-                f'<span style="flex:none;font-size:11.5px;color:{t.get("mute")}">'
-                f'{_syms(r["symbols"], 8)}</span></div>')
-        today_block = (f'<div class="card" style="padding:14px 18px 16px">'
-                       f'<div style="font-size:11px;font-weight:650;'
-                       f'letter-spacing:.11em;text-transform:uppercase;'
-                       f'color:{t.get("teal")};margin-bottom:2px">Today · '
-                       f'{esc(stamp)}</div>{cards}</div>')
-    else:
-        today_block = (f'<div class="card" style="padding:16px 18px">'
-                       f'<div style="font-size:11px;font-weight:650;'
-                       f'letter-spacing:.11em;text-transform:uppercase;'
-                       f'color:{t.get("teal")}">Today · {esc(stamp)}</div>'
-                       f'<div style="font-size:13px;color:{t.get("mute")};'
-                       f'margin-top:6px">Nothing scheduled.</div></div>')
-
-    # ----------------------------------------------------------- horizon
     head = ('<th class="l">Date</th><th class="l">Symbol</th>'
             '<th class="l">Time</th><th class="l">Event</th>'
             '<th class="l">Countdown</th><th class="l">Type</th>')
-    body, last_week = "", None
-    for r in rest:
-        # A rule opens each new week so a month of rows stays navigable.
-        wk = r["date"].isocalendar()[1]
-        if wk != last_week:
-            last_week = wk
-            body += (f'<tr class="sec"><td class="l">Week of '
-                     f'{r["date"].strftime("%d %b")}</td>'
-                     f'<td colspan="5"></td></tr>')
+
+    def section(label, accent=False):
+        col = t.get("teal") if accent else t.get("faint")
+        return (f'<tr class="sec"><td class="l" style="color:{col};'
+                f'font-weight:650;letter-spacing:.09em;'
+                f'text-transform:uppercase;font-size:10.5px">{esc(label)}</td>'
+                f'<td colspan="5"></td></tr>')
+
+    def row(r):
         col = TYPE_COL.get(r["type"], t.get("mute"))
+        # Two things earn colour: a policy decision, because it reprices the
+        # whole board rather than one contract, and anything inside a week,
+        # because that is the horizon you can still position for.
+        policy = r["type"] == "Policy"
         soon = r["days"] <= 7
-        time = (f'{r["time_sg"]} <span class="faint">SGT</span>'
-                if r["time_sg"] else '<span class="faint">—</span>')
-        body += (
-            f'<tr><td class="l{" on" if soon else ""}">'
-            f'{"" if r["exact"] else "≈ "}{esc(r["date"].strftime("%a %d %b"))}</td>'
+        d_style = (f'color:{t.get("teal")};font-weight:600'
+                   if soon else "")
+        e_style = (f'color:{t.get("teal")};font-weight:600' if policy else "")
+        if r["time_sg"]:
+            time = (f'{r["time_sg"]} <span class="faint">SGT</span>'
+                    f'<span class="faint" style="margin-left:9px;'
+                    f'opacity:.7">{r["time_et"]} ET</span>')
+        else:
+            time = '<span class="faint">all day</span>'
+        return (
+            f'<tr><td class="l" style="{d_style}">'
+            f'{"" if r["exact"] else "≈ "}'
+            f'{esc(r["date"].strftime("%a %d %b"))}</td>'
             f'<td class="l faint">{_syms(r["symbols"])}</td>'
-            f'<td class="l dim">{time}<span class="faint" '
-            f'style="margin-left:7px">{r["time_et"]} ET</span></td>'
-            f'<td class="l">{esc(r["event"])}</td>'
+            f'<td class="l dim">{time}</td>'
+            f'<td class="l" style="{e_style}">{esc(r["event"])}</td>'
             f'<td class="l dim">{r["when"]}</td>'
             f'<td class="l"><i class="sw" style="background:{col}"></i>'
             f'{esc(r["type"])}</td></tr>')
+
+    body = section(f'Today · {today_d.strftime("%A %d %B")}', accent=True)
+    today_rows = [r for r in rows if r["days"] == 0]
+    if today_rows:
+        body += "".join(row(r) for r in today_rows)
+    else:
+        body += (f'<tr><td class="l faint" colspan="6" '
+                 f'style="padding:10px 12px">Nothing scheduled.</td></tr>')
+
+    last_week = None
+    for r in rows:
+        if r["days"] == 0:
+            continue
+        wk = r["date"].isocalendar()[1]
+        if wk != last_week:
+            last_week = wk
+            body += section(f'Week of {r["date"].strftime("%d %b")}')
+        body += row(r)
 
     flag = ""
     if warn:
@@ -510,10 +507,7 @@ def calendar(rows, horizon_days: int, warn=None) -> str:
                 f'{", ".join(warn)} — those rows will stop appearing until '
                 f'the dates are extended in sk_calendar.py.</div>')
 
-    return (today_block + flag
-            + eyebrow(f"Next {horizon_days} days")
-            + (table(head, body) if rest else
-               '<div class="skel">Nothing scheduled in this window.</div>'))
+    return flag + table(head, body)
 
 
 # -------------------------------------------------------------- Knowledge
