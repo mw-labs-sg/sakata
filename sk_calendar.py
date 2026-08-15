@@ -112,6 +112,19 @@ def seasonal(gen, months):
 # quietly dropping the row — see exhausted() below.
 FOMC = ["2026-09-16", "2026-10-28", "2026-12-09",
         "2027-01-27", "2027-03-17", "2027-04-28", "2027-06-16"]
+# Minutes land three weeks after each decision and have moved the front end
+# on their own more than once.
+FOMC_MINUTES = ["2026-10-07", "2026-11-18", "2026-12-30",
+                "2027-02-17", "2027-04-07", "2027-05-19"]
+# Jackson Hole. The Kansas City Fed symposium runs late August and the Chair
+# speaks Friday morning; the exact dates are announced only weeks ahead, so
+# these are flagged as estimates. Added because the News tab was citing it as
+# a scheduled catalyst while this tab did not know it existed — the single
+# highest-impact event in the window, and it was invisible.
+JACKSON_HOLE = ["2026-08-21", "2027-08-27"]
+# Semiannual monetary policy testimony, formerly Humphrey-Hawkins. Two days,
+# House and Senate; the first is the one that moves.
+FED_TESTIMONY = ["2027-02-24", "2027-07-21"]
 CPI = ["2026-09-11", "2026-10-13", "2026-11-12", "2026-12-10",
        "2027-01-13", "2027-02-11", "2027-03-11"]
 ECB = ["2026-09-10", "2026-10-29", "2026-12-17", "2027-02-04"]
@@ -127,13 +140,21 @@ BOJ = ["2026-09-18", "2026-10-30", "2026-12-18", "2027-01-22"]
 # so marking them lights a quarter of the table and the eye stops seeing it.
 # What earns colour is the irregular, scheduled, board-wide event.
 HIGH = {"FOMC Rate Decision", "ECB Rate Decision", "BOJ Rate Decision",
-        "CPI Inflation", "PCE Inflation", "Nonfarm Payrolls", "USDA WASDE"}
+        "CPI Inflation", "PCE Inflation", "Nonfarm Payrolls", "USDA WASDE",
+        "Jackson Hole — Fed Chair speech", "Fed Chair testimony"}
 
 # name, type, ET time, symbols, rule, exact?
 EVENTS = [
     ("FOMC Rate Decision", "Policy", "14:00",
      ["ES", "NQ", "GC", "SI", "HG", "6E", "6J", "ZB", "ZN", "BTC"],
      listed(FOMC), True),
+    ("Jackson Hole — Fed Chair speech", "Policy", "10:00",
+     ["ES", "NQ", "GC", "SI", "ZB", "ZN", "6E", "6J", "BTC"],
+     listed(JACKSON_HOLE), False),
+    ("FOMC Minutes", "Policy", "14:00", ["ES", "NQ", "ZB", "ZN", "GC"],
+     listed(FOMC_MINUTES), True),
+    ("Fed Chair testimony", "Policy", "10:00",
+     ["ES", "NQ", "ZB", "ZN", "GC", "6E"], listed(FED_TESTIMONY), False),
     ("ECB Rate Decision", "Policy", "08:15", ["6E", "ES"], listed(ECB), True),
     ("BOJ Rate Decision", "Policy", "23:00", ["6J", "NKD"], listed(BOJ), True),
     ("CPI Inflation", "Macro", "08:30",
@@ -198,7 +219,10 @@ def exhausted(today=None):
     appearing is worse than a warning that it has."""
     today = today or dt.date.today()
     out = []
-    for label, lst in (("FOMC", FOMC), ("CPI", CPI), ("ECB", ECB), ("BOJ", BOJ)):
+    for label, lst in (("FOMC", FOMC), ("CPI", CPI), ("ECB", ECB),
+                       ("BOJ", BOJ), ("FOMC minutes", FOMC_MINUTES),
+                       ("Jackson Hole", JACKSON_HOLE),
+                       ("Fed testimony", FED_TESTIMONY)):
         if not any(dt.date.fromisoformat(s) >= today for s in lst):
             out.append(label)
     return out

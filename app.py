@@ -38,7 +38,7 @@ TTL_FAST, TTL_SLOW = 900, 3600
 # editing an imported module leaves every cache here convinced nothing changed
 # — which twice looked like a broken feature and was a stale entry. Passing the
 # string in as an argument makes the cache key depend on it.
-CACHE_V = "2026-08-15d"
+CACHE_V = "2026-08-15e"
 DOCS = Path(__file__).parent / "docs" / "data"
 
 
@@ -206,15 +206,16 @@ with t[1]:
 
 # -------------------------------------------------------------- Calendar
 with t[2]:
-    source("Calendar rules and hand-maintained schedules · no fetch")
-    cc = st.columns([3, 5])
-    sym = cc[0].selectbox("Contract", CAL.symbols(), key="cal_sym",
-                          label_visibility="collapsed")
-    span = cc[1].radio("Horizon", ["2 weeks", "4 weeks", "8 weeks", "Quarter"],
-                       horizontal=True, index=2, key="cal_span",
-                       label_visibility="collapsed")
+    # No refresh button: nothing here is fetched. Every row is either a
+    # calendar rule evaluated at render time or a hand-maintained date, so
+    # the tab is already as current as it can be. No symbol filter either —
+    # the Symbol column is scannable and a dropdown to hide rows on a
+    # two-week view removed more than it added.
+    span = st.radio("Horizon", ["2 weeks", "4 weeks", "8 weeks", "Quarter"],
+                    horizontal=True, index=0, key="cal_span",
+                    label_visibility="collapsed")
     days = {"2 weeks": 14, "4 weeks": 28, "8 weeks": 56, "Quarter": 92}[span]
-    UI.md(R.calendar(CAL.build(days, sym), days, CAL.exhausted()))
+    UI.md(R.calendar(CAL.build(days), days, CAL.exhausted()))
 
 # --------------------------------------------------------------- Margins
 with t[3]:
