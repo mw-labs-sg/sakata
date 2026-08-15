@@ -421,11 +421,21 @@ _H = [("", "Instrument", "l"), ("", "Last", ""),
 
 
 def _head() -> str:
+    """Two lines per header cell.
+
+    The qualifier was set at 9px on 0.65 opacity and read as damage rather
+    than as hierarchy — at that size the eye cannot resolve whether RV/20d is
+    two words or one smudged one. Lifted to 10px at full weight in the muted
+    ink, with the measure below it in the normal header colour, so the two
+    lines read as a pair.
+    """
+    t = _tok()
     out = ""
     for top, bot, cls in _H:
         c = f' class="{cls}"' if cls else ""
-        lead = (f'<span style="display:block;font-size:9px;opacity:.65">'
-                f'{top}</span>' if top else "")
+        lead = (f'<span style="display:block;font-size:10px;font-weight:600;'
+                f'color:{t.get("mute")};letter-spacing:.07em;'
+                f'margin-bottom:1px">{top}</span>' if top else "")
         out += f"<th{c}>{lead}{bot}</th>"
     return out
 

@@ -128,16 +128,24 @@ def _bridge(t: dict) -> str:
 /* Commodities blurbs run three times longer than Financials, so the two
    columns fall out of step within one screen. Cap and scroll instead. */
 .news .card {{ max-height: 76vh; overflow-y: auto; }}
-/* The theme switch belongs on the tab rule, not floating above the wordmark.
-   Streamlit renders it as its own element, so it is anchored with an empty
-   marker div and lifted into place. :has() picks the container holding the
-   marker, and the adjacent sibling is the button itself. */
+/* Every control label in the same register as the tabs: Inter, caps, tracked.
+   Table contents are untouched — this is chrome only. */
+.stButton button, .stRadio label, .sk-src {{ text-transform: uppercase !important; letter-spacing: .09em !important; }}
+.stButton button {{ width: auto; min-width: 32px; height: 30px; min-height: 30px; padding: 0 13px; font-size: 10.5px; font-weight: 650; line-height: 1; border-radius: 4px; border: 1px solid {t.get('line')}; background: {t.get('surface')}; color: {t.get('mute')}; transition: color .15s, border-color .15s; }}
+.stButton button p {{ font-size: 10.5px !important; font-weight: 650 !important; margin: 0 !important; }}
+.stButton button:hover, .stButton button:focus {{ border-color: {t.get('teal')}; color: {t.get('teal')} !important; box-shadow: none; }}
+.stButton button:hover p {{ color: {t.get('teal')} !important; }}
+.stRadio label p {{ font-size: 10.5px !important; font-weight: 650 !important; letter-spacing: .09em !important; text-transform: uppercase !important; }}
+/* The theme switch sits at the right end of the tab rule. Streamlit renders
+   it as its own element, so it is anchored with an empty marker div and
+   lifted into place; :has() picks the container holding the marker and the
+   adjacent sibling is the button. Nudge `top` if it lands off the line. */
 .block-container {{ position: relative; }}
 [data-testid="stElementContainer"]:has(#sk-theme-anchor) {{ height: 0; margin: 0; }}
-[data-testid="stElementContainer"]:has(#sk-theme-anchor) + [data-testid="stElementContainer"] {{ position: absolute; right: 0; top: 52px; z-index: 6; width: auto; }}
+[data-testid="stElementContainer"]:has(#sk-theme-anchor) + [data-testid="stElementContainer"] {{ position: absolute; right: 0; top: 74px; z-index: 6; width: auto; }}
 /* Per-tab source line: what this tab is reading, in the register of a
    footnote rather than a heading. */
-.sk-src {{ font-size: 11px; color: {t.get('faint')}; letter-spacing: .01em; padding: 2px 0 0; }}
+.sk-src {{ font-size: 10.5px; color: {t.get('mute')}; padding: 2px 0 0; }}
 .stSelectbox div[data-baseweb="select"] > div {{ background: {t.get('surface')}; border-color: {t.get('line')}; font-size: 13px; }}
 .stRadio [role="radiogroup"] {{ gap: 4px; flex-wrap: wrap; }}
 /* Icon buttons: square, quiet, teal on hover — the header switches from
@@ -189,7 +197,9 @@ def apply(dark: bool = True) -> None:
 
 
 def header(stamp: str = "") -> None:
-    """The lockup: mark, wordmark, hairline, stamp — all on one line.
+    """The lockup: mark, wordmark, stamp. No rule — the tab strip already
+    draws a line two rows down, and two horizontal rules that close together
+    read as a mistake rather than as structure.
 
     Everything here is an inline style on a span. Streamlit's own rules for
     <h1> and for its markdown container are specific enough to win against a
@@ -197,15 +207,15 @@ def header(stamp: str = "") -> None:
     teal off it.
     """
     t = tokens(st.session_state.get("dark", True))
-    md(f'<div style="display:flex;align-items:center;gap:11px;margin:0 0 2px">'
-       f'<span style="flex:none;line-height:0;color:{t.get("teal")}">{MARK}</span>'
+    md(f'<div style="display:flex;align-items:baseline;gap:11px;margin:0 0 2px">'
+       f'<span style="flex:none;line-height:0;color:{t.get("teal")};'
+       f'align-self:center">{MARK}</span>'
        f'<span style="font-family:var(--display),Inter,sans-serif;font-size:27px;'
        f'font-weight:800;letter-spacing:-.035em;color:{t.get("ink")};'
        f'line-height:1">Sakata</span>'
-       f'<span style="flex:1;height:1px;background:{t.get("line")};'
-       f'margin-top:3px"></span>'
+       f'<span style="flex:1"></span>'
        f'<span style="font-size:11px;color:{t.get("faint")};white-space:nowrap;'
-       f'letter-spacing:-.02em">{esc(stamp)}</span></div>')
+       f'letter-spacing:.01em">{esc(stamp)}</span></div>')
 
 
 # ------------------------------------------------------------ tiny helpers

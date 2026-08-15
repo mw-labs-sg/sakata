@@ -170,7 +170,7 @@ def source(label: str, *caches) -> None:
     c[0].markdown(f'<div class="sk-src">{label}</div>', unsafe_allow_html=True)
     if not caches:
         return
-    if c[1].button("↻", key=f"rf_{label[:24]}", help="Refetch this tab"):
+    if c[1].button("Refresh", key=f"rf_{label[:24]}", help="Refetch this tab"):
         for fn in caches:
             fn.clear()
         st.rerun()
