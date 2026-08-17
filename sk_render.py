@@ -234,7 +234,11 @@ def spreads(d: dict, per: str, sort: str = "ER") -> str:
     # ---------------------------------------------------- 1 · by window
     sum_head = ('<th class="l">Window</th><th class="l">Best spread</th>'
                 '<th>ER</th><th>ER (Adj)</th><th>Tot%</th><th>Bars</th>')
-    rows_sum = sorted(d.get("summary", []),
+    # Display windows only. The rolling four still compute — they feed the
+    # "also top 10 in" column — but they are not in the selector, so listing
+    # them here would offer a row you cannot open.
+    shown = set(d.get("periods", []))
+    rows_sum = sorted([r for r in d.get("summary", []) if r["window"] in shown],
                       key=lambda r: -(r.get("erAdj") or -9e9))
     sum_body = ""
     for r in rows_sum:

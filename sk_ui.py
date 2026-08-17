@@ -239,7 +239,11 @@ pre, pre *, code {{ color: {t.get('ink')} !important; }}
    one too short to read the shape that justifies the row. */
 .cgrid {{ grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 26px 22px !important; }}
 .cgrid .plot {{ padding: 14px 14px 10px; margin: 0; }}
-.cgrid .ctitle {{ margin-bottom: 2px; }}
+/* space-between alone left the label and the ER readout touching at this card
+   width — they exactly fill it — so the pair read as one string. */
+.cgrid .ctitle {{ margin-bottom: 2px; gap: 14px; align-items: baseline; }}
+.cgrid .ctitle b {{ flex: none; }}
+.cgrid .ctitle span {{ text-align: right; }}
 .cgrid .clegend {{ display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; margin-bottom: 6px; }}
 @media (max-width: 900px) {{ .cgrid {{ grid-template-columns: 1fr !important; }} }}
 /* Icon button: square, quiet, teal on hover — the header switch from
