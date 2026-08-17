@@ -346,19 +346,36 @@ def curve(d: dict, code: str) -> str:
         return ('<div class="skel">No settlement data in the last build — CME '
                 "may have refused the runner. It usually returns on the next "
                 "run.</div>")
-    scan = sorted(curves.values(), key=lambda r: -(r.get("carryAnn") or -99))
+    # `or -99` turned a carry of exactly 0.0 into -99 and sank a flat curve to
+    # the bottom with the missing data. None is the only thing that belongs
+    # there, so sort on an explicit None test.
+    scan = sorted(curves.values(),
+                  key=lambda r: (r.get("carryAnn") is None,
+                                 -(r["carryAnn"] if r.get("carryAnn")
+                                   is not None else 0.0)))
     head = ('<th class="l">Symbol</th><th class="l">Sector</th><th>Front</th>'
-            '<th>Back</th><th class="l">Shape</th><th>Roll %</th>'
-            "<th>Carry ann %</th>")
+            '<th>Back</th><th class="l">Span</th><th class="l">Shape</th>'
+            '<th>Roll %</th><th>Carry ann %</th>')
+
+    def shape_cls(s):
+        # Flat is not bearish. Colouring anything-not-Backwardation red painted
+        # a flat curve the same as a contangoed one.
+        return {"Backwardation": "pos", "Contango": "neg"}.get(s, "dim")
+
     body = "".join(
         f'<tr><td class="l">{esc(r["code"])}</td>'
         f'<td class="l faint">{esc(r["sector"])}</td>'
-        + cell(r["front"], 2, "dim") + cell(r["back"], 2, "dim")
-        + f'<td class="l {"pos" if r["shape"] == "Backwardation" else "neg"}">'
-        f'{esc(r["shape"])}</td>' + pct(r["rollPct"], 2)
-        + pct(r["carryAnn"], 1) + "</tr>" for r in scan)
+        # Per-instrument decimals: a hardcoded 2 rendered every 6J settlement
+        # as "0.01".
+        + cell(r["front"], U.DEC.get(r["code"], 2), "dim")
+        + cell(r["back"], U.DEC.get(r["code"], 2), "dim")
+        + f'<td class="l faint">{r.get("spanMonths", "—")}m</td>'
+        + f'<td class="l {shape_cls(r["shape"])}">{esc(r["shape"])}</td>'
+        + pct(r["rollPct"], 2) + pct(r["carryAnn"], 1) + "</tr>"
+        for r in scan)
 
     c = curves[code]
+    dec = U.DEC.get(code, 2)
     months = [r["month"] for r in c["rows"]]
     settle = [r["settle"] for r in c["rows"]]
     oi = []
@@ -370,29 +387,32 @@ def curve(d: dict, code: str) -> str:
     arrow = ("↘" if c["shape"] == "Backwardation"
              else "↗" if c["shape"] == "Contango" else "→")
     detail = "".join(
-        f'<tr><td class="l">{esc(r["month"])}</td>' + cell(r["settle"], 2)
+        f'<tr><td class="l">{esc(r["month"])}</td>' + cell(r["settle"], dec)
         + f'<td class="dim">{esc(r.get("chg") or "—")}</td>'
         f'<td class="dim">{esc(r.get("vol") or "—")}</td>'
         f'<td class="dim">{esc(r.get("oi") or "—")}</td></tr>'
         for r in c["rows"])
 
-    return (note("Term structure from CME settlements"
-                 + (f' · trade date {esc(d.get("tradeDate"))}'
-                    if d.get("tradeDate") else "")
-                 + ". Positive carry is backwardation — a roll tailwind for "
-                   "longs; negative is contango, a roll drag.")
+    return (note("CME settlements"
+                 + (f' · {esc(d.get("tradeDate"))}' if d.get("tradeDate")
+                    else "")
+                 + ". Back month is the furthest with real open interest; "
+                   "positive carry is backwardation.")
             + eyebrow("Carry scanner — most backwardated first")
             + table(head, body)
             + note(f'<b>{esc(c["code"])}</b> · {esc(c["frontMonth"])} '
-                   f'<b>{num(c["front"], 2)}</b> → {esc(c["backMonth"])} '
-                   f'<b>{num(c["back"], 2)}</b> · {esc(c["shape"])} {arrow} · '
-                   f'current roll {"+" if c["rollPct"] >= 0 else ""}'
+                   f'<b>{num(c["front"], dec)}</b> → {esc(c["backMonth"])} '
+                   f'<b>{num(c["back"], dec)}</b> over '
+                   f'{c.get("spanMonths", "?")}m (OI '
+                   f'{num(c.get("backOI"), 0) or "—"}) · {esc(c["shape"])} '
+                   f'{arrow} · roll {"+" if (c["rollPct"] or 0) >= 0 else ""}'
                    f'{num(c["rollPct"], 2)}% · carry ann '
-                   f'{"+" if c["carryAnn"] >= 0 else ""}{num(c["carryAnn"], 1)}%')
+                   f'{"+" if (c["carryAnn"] or 0) >= 0 else ""}'
+                   f'{num(c["carryAnn"], 1)}%')
             + '<div class="plot">'
             + CH.line_chart(months,
                             [{"k": "Settle", "v": settle, "c": C["teal"],
-                              "w": 2.4}], oi, 1100, 280, 2) + "</div>"
+                              "w": 2.4}], oi, 1100, 280, dec) + "</div>"
             + eyebrow("Settlements")
             + table('<th class="l">Month</th><th>Settle</th><th>Change</th>'
                     "<th>Volume</th><th>OI</th>", detail))
