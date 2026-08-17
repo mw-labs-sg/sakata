@@ -288,21 +288,55 @@ def fetch_margins() -> dict:
 
 
 # ------------------------------------------------------------------- news
-def fetch_te(url: str) -> dict:
-    """Lead commentary blurb from a Trading Economics market page."""
+# What a story about THIS instrument would mention. Used to choose among the
+# news anchors on a market page rather than taking whichever one the page leads
+# with — the US stock-market page led with a Dow story, so the ES card carried
+# several paragraphs about the Dow under an "ES  S&P 500" heading.
+TE_SUBJECT = {
+    "ES": ("s&p", "sp500", "s&p 500"),
+    "NKD": ("nikkei", "japan"),
+    "ZB": ("treasury", "bond", "yield"),
+    "6E": ("euro", "eur"),
+    "6J": ("yen", "jpy", "japanese"),
+    "CL": ("crude", "oil", "wti", "brent"),
+    "NG": ("natural gas", "gas"),
+    "GC": ("gold", "bullion"),
+    "SI": ("silver",),
+    "HG": ("copper",),
+    "ZC": ("corn",),
+    "ZW": ("wheat",),
+    "ZS": ("soybean", "soy"),
+    "SB": ("sugar",),
+    "KC": ("coffee", "arabica"),
+}
+
+
+def fetch_te(url: str, code: str = "") -> dict:
+    """Lead commentary blurb from a Trading Economics market page.
+
+    Prefers a story whose headline actually names the instrument. The old rule
+    took the first /news/ anchor on the page, which is whatever TE is leading
+    with — measured live, that put a Dow Jones write-up under ES. Falls back to
+    the first anchor when nothing matches, and reports which happened via
+    `onTopic` so a mismatch is visible rather than silent.
+    """
     try:
         html = session().get(url, timeout=25).text
         from bs4 import BeautifulSoup
     except Exception as e:
-        return {"blurb": "", "err": str(e)[:60]}
+        return {"blurb": "", "err": f"{type(e).__name__}: {str(e)[:50]}"}
     soup = BeautifulSoup(html, "html.parser")
-    anchor = None
-    for a in soup.select("a[href*='/news/']"):
-        if re.search(r"/news/\d+", a.get("href", "")) and a.get_text(strip=True):
-            anchor = a
+    cands = [a for a in soup.select("a[href*='/news/']")
+             if re.search(r"/news/\d+", a.get("href", ""))
+             and a.get_text(strip=True)]
+    if not cands:
+        return {"blurb": "", "err": "no news anchors on the page"}
+    words = TE_SUBJECT.get(code, ())
+    anchor, on_topic = cands[0], not words
+    for a in cands:
+        if any(w in a.get_text(strip=True).lower() for w in words):
+            anchor, on_topic = a, True
             break
-    if anchor is None:
-        return {"blurb": ""}
     headline = anchor.get_text(strip=True)
     blurb, date, node = "", "", anchor
     for _ in range(5):
@@ -316,7 +350,8 @@ def fetch_te(url: str) -> dict:
         if m and m.start() > 40:
             blurb, date = after[:m.start()].strip(), m.group(1)
             break
-    return {"headline": headline, "blurb": blurb, "date": date}
+    return {"headline": headline, "blurb": blurb, "date": date,
+            "onTopic": on_topic}
 
 
 def fetch_news() -> dict:
@@ -329,7 +364,7 @@ def fetch_news() -> dict:
                             for c in list(U.TE_PAGE)[:6]}}
     markets = {}
     for code, url in U.TE_PAGE.items():
-        d = fetch_te(url)
+        d = fetch_te(url, code)
         if d.get("blurb"):
             markets[code] = {"blurb": d["blurb"], "date": d.get("date", "")}
         else:

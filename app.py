@@ -96,13 +96,29 @@ def technical_grid(v: str = CACHE_V) -> dict:
 
 @st.cache_data(ttl=TTL_SLOW, show_spinner="pulling CME settlements…")
 def curve_data(v: str = CACHE_V) -> dict:
+    """The reason for a failure travels with the data, as it does for margins.
+
+    A bare `except: d = None` said nothing about why, and a PARTIAL scrape said
+    nothing at all: live, eleven of sixteen products came back and the tab
+    reported that as success, with ZB, ZN, ZC, ZW and ZS simply absent.
+    """
+    warn = ""
     try:
         d = CURVE.build_curve(S.fetch_curves())
-    except Exception:
-        d = None
+    except Exception as e:
+        d, warn = None, f"{type(e).__name__}: {str(e)[:110]}"
     # An empty result is a failed scrape wearing a success costume. Never let
     # it replace a good one.
-    return d if (d and d.get("curves")) else (_fallback("curve") or {"curves": {}})
+    if d and d.get("curves"):
+        missing = [c for c in U.CME_PRODUCT if c not in d["curves"]]
+        if missing:
+            warn = (f"{len(d['curves'])}/{len(U.CME_PRODUCT)} products returned "
+                    f"— no curve for {', '.join(missing)}")
+    else:
+        d = _fallback("curve") or {"curves": {}}
+        warn = (warn or "CME returned nothing") + " — showing the last build"
+    d["warn"] = warn
+    return d
 
 
 @st.cache_data(ttl=TTL_SLOW, show_spinner="pulling margins…")
@@ -139,18 +155,26 @@ def margin_data(v: str = CACHE_V) -> dict:
 def news_data(v: str = CACHE_V) -> dict:
     """Trading Economics, fetched in parallel. Sequential would be fifteen
     pages at up to 25 seconds each; five at a time keeps it under ten."""
-    out = {}
+    out, failed = {}, []
     with ThreadPoolExecutor(max_workers=5) as ex:
-        futures = {code: ex.submit(S.fetch_te, url)
+        futures = {code: ex.submit(S.fetch_te, url, code)
                    for code, url in U.TE_PAGE.items()}
         for code, f in futures.items():
             try:
                 d = f.result(timeout=40)
-            except Exception:
+            except Exception as e:
+                failed.append(f"{code} ({type(e).__name__})")
                 continue
             if d.get("blurb"):
-                out[code] = {"blurb": d["blurb"], "date": d.get("date", "")}
-    return out
+                out[code] = {"blurb": d["blurb"], "date": d.get("date", ""),
+                             "headline": d.get("headline", ""),
+                             "onTopic": d.get("onTopic", True)}
+            else:
+                failed.append(code + (f" ({d['err']})" if d.get("err") else ""))
+    # Which pages came back empty, rather than a silently shorter tab.
+    return {"markets": out,
+            "warn": (f"no commentary parsed for {', '.join(failed)}"
+                     if failed else "")}
 
 
 # ------------------------------------------------------------------ shell
@@ -211,7 +235,8 @@ with t[0]:
 # ------------------------------------------------------------------ News
 with t[1]:
     source("Trading Economics · per-contract commentary", news_data)
-    UI.md(R.news(news_data()))
+    nd = news_data()
+    UI.md(R.news(nd.get("markets", {}), nd.get("warn", "")))
 
 # -------------------------------------------------------------- Calendar
 with t[2]:
@@ -235,7 +260,12 @@ with t[3]:
 
 # ------------------------------------------------------------- Technical
 with t[4]:
-    source("Yahoo · 1H, 4H, 1D, 1W", technical_grid, prices)
+    # by_bar belongs in this list. Without it, clearing technical_grid and
+    # prices left by_bar's 15-minute entry intact, so the grid was rebuilt from
+    # byte-identical bars and Refresh fetched nothing — while Board's Refresh
+    # DID clear prices, so the two tabs could then read different fetches of the
+    # same daily series.
+    source("Yahoo · 1H, 4H, 1D, 1W", technical_grid, by_bar, prices)
     grid = technical_grid()
     codes = [c for c in U.CODES if c in grid["grid"]]
     if not codes:
@@ -252,7 +282,7 @@ with t[4]:
 
 # --------------------------------------------------------------- Spreads
 with t[5]:
-    source("Yahoo · 15m, 1H, 4H, 1D", spread_field, prices)
+    source("Yahoo · 15m, 1H, 4H, 1D", spread_field, by_bar, prices)
     field = spread_field()
     if not field.get("periods"):
         st.error("No spread windows built — not enough price history.")

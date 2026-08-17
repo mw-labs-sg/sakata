@@ -342,10 +342,11 @@ def spread_charts(p: dict) -> str:
 # ------------------------------------------------------------------ Curve
 def curve(d: dict, code: str) -> str:
     curves = d.get("curves", {})
+    flag = (f'<div class="flag">{esc(d["warn"])}</div>'
+            if d.get("warn") else "")
     if not curves:
-        return ('<div class="skel">No settlement data in the last build — CME '
-                "may have refused the runner. It usually returns on the next "
-                "run.</div>")
+        return (flag + '<div class="skel">No settlement data — CME may have '
+                "refused this host. Try Refresh.</div>")
     # `or -99` turned a carry of exactly 0.0 into -99 and sank a flat curve to
     # the bottom with the missing data. None is the only thing that belongs
     # there, so sort on an explicit None test.
@@ -393,7 +394,8 @@ def curve(d: dict, code: str) -> str:
         f'<td class="dim">{esc(r.get("oi") or "—")}</td></tr>'
         for r in c["rows"])
 
-    return (note("CME settlements"
+    return (flag
+            + note("CME settlements"
                  + (f' · {esc(d.get("tradeDate"))}' if d.get("tradeDate")
                     else "")
                  + ". Back month is the furthest with real open interest; "
@@ -680,13 +682,14 @@ def knowledge(group: str = "All") -> str:
 
 
 # ------------------------------------------------------------------- News
-def news(markets: dict) -> str:
+def news(markets: dict, warn: str = "") -> str:
     """Fetched server-side now rather than through a CORS proxy in the browser.
     That removes the one tab that depended on a third party neither we nor the
     exchange controls."""
+    flag = f'<div class="flag">{esc(warn)}</div>' if warn else ""
     if not markets:
-        return ('<div class="skel">No commentary came back — Trading Economics '
-                "may be refusing this host. Try Refresh.</div>")
+        return (flag + '<div class="skel">No commentary came back — Trading '
+                "Economics may be refusing this host. Try Refresh.</div>")
     t = _tok()
     cols = ""
     for group, secs in U.GROUPS.items():
@@ -705,9 +708,21 @@ def news(markets: dict) -> str:
             link = (f'<a href="{esc(src)}" target="_blank" rel="noopener" '
                     f'style="color:{t["teal"]};text-decoration:none;'
                     f'font-size:11px">source ↗</a>' if src else "")
+            # The headline is shown because the blurb is whatever paragraph sits
+            # under it, and TE's market pages lead with a related-but-different
+            # story often enough that the reader needs to see what they are
+            # reading about. Off-topic is marked rather than hidden.
+            hl = esc(m.get("headline") or "")
+            off = ("" if m.get("onTopic", True) else
+                   f'<span style="color:{t.get("amber", "#96701c")};'
+                   f'font-size:10.5px;'
+                   f'letter-spacing:.06em"> · not {esc(code)}-specific</span>')
             items += (
                 f'<div class="mkt"><h6>{esc(code)}  {esc(U.NAME[code])}</h6>'
-                f'<p>{esc(m["blurb"])}</p>'
+                + (f'<div style="font-size:11.5px;color:{t.get("body", "#3a464e")};'
+                   f'font-weight:600;margin:-4px 0 6px">{hl}{off}</div>'
+                   if hl else "")
+                + f'<p>{esc(m["blurb"])}</p>'
                 f'<div style="display:flex;justify-content:space-between;'
                 f'align-items:baseline;margin-top:10px;padding-top:8px;'
                 f'border-top:1px solid {t["line"]}">'
@@ -716,4 +731,4 @@ def news(markets: dict) -> str:
         if items:
             cols += (f'<div>{eyebrow(group)}<div class="card">{items}</div>'
                      f"</div>")
-    return f'<div class="grid2 news">{cols}</div>'
+    return flag + f'<div class="grid2 news">{cols}</div>'
