@@ -19,11 +19,12 @@ CSS_PATH = Path(__file__).parent / "site" / "sakata.css"
 W = 1100          # nominal SVG width; viewBox scales it to the container
 
 # Offset of the theme switch from the top of .block-container, so it centres on
-# the tab rule. Measured against the live DOM, not guessed: the strip sits at
-# 36px inside a container whose padding-top is 20px, and the button is 30px
-# tall on a 40px strip. The old 74px was tuned while the bridge was being
-# dropped by the token-parser bug, against Streamlit's default 96px padding.
-SWITCH_TOP = 41
+# the tab rule. Measured against the live DOM rather than guessed: the tab strip
+# spans 72-113px inside the container, so its midline is 92.5, and the button is
+# 30px tall — 92.5 - 15 = 78. The old 74px was tuned while the token-parser bug
+# was dropping this whole stylesheet, against Streamlit's unstyled 96px padding,
+# and left the switch 56px clear of the strip.
+SWITCH_TOP = 78
 
 
 # ------------------------------------------------------------------ tokens
@@ -213,7 +214,10 @@ pre, pre *, code {{ color: {t.get('ink')} !important; }}
    adjacent sibling is the button. Nudge `top` if it lands off the line. */
 .block-container {{ position: relative; }}
 [data-testid="stElementContainer"]:has(#sk-theme-anchor) {{ height: 0; margin: 0; }}
-{sw} {{ position: absolute; right: 0; top: {SWITCH_TOP}px; z-index: 6; width: auto; }}
+/* right matches .block-container's own padding-right: an absolutely positioned
+   child resolves `right` against the padding box, so `right: 0` hung the switch
+   24px past the end of the tab rule it is meant to sit on. */
+{sw} {{ position: absolute; right: 24px; top: {SWITCH_TOP}px; z-index: 6; width: auto; }}
 /* Per-tab source line: what this tab is reading, in the register of a
    footnote rather than a heading. */
 .sk-src {{ font-size: 10.5px; color: {t.get('mute')}; padding: 2px 0 0; }}
@@ -225,7 +229,11 @@ pre, pre *, code {{ color: {t.get('ink')} !important; }}
 .sk-defs b {{ font-family: var(--sans) !important; font-size: 10.5px; font-weight: 650; letter-spacing: .07em; text-transform: uppercase; color: {t.get('body')}; }}
 .sk-defs span {{ font-family: var(--sans) !important; font-size: 12.5px; line-height: 1.5; color: {t.get('mute')}; }}
 @media (max-width: 900px) {{ .sk-defs {{ grid-template-columns: 1fr; }} }}
-.stSelectbox div[data-baseweb="select"] > div {{ background: {t.get('surface')}; border-color: {t.get('line')}; font-size: 13px; }}
+/* 1.59 renders the selectbox as a react-aria ComboBox, so the old
+   div[data-baseweb="select"] never matched and the control kept config.toml's
+   dark secondaryBackgroundColor — which in light mode put the ink at 1.1:1 on
+   its own box. Addressed through the stable testid plus the inner role=group. */
+[data-testid="stSelectbox"] div[role="group"] {{ background: {t.get('surface')} !important; border-color: {t.get('line')} !important; font-size: 13px; }}
 .stRadio [role="radiogroup"] {{ gap: 4px; flex-wrap: wrap; }}
 /* Icon button: square, quiet, teal on hover — the header switch from
    index.html, minus the SVG. Scoped to the theme toggle. Unscoped, this block
