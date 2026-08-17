@@ -200,6 +200,10 @@ def _window_field(name, by_bar):
     # Every instrument's outright ER, so a pair can be scored against the
     # simpler thing you could have done instead.
     out_er = {ss.name_of(c["sym"]): _num(c["ER"], 3) for c in outs}
+    # Which way round each outright is. compute_outrights orients on Sharpe, so
+    # a "long GC" in one window can be a "short GC" in another, and an ER matrix
+    # that hides that is telling you the size of a move without its sign.
+    out_dir = {ss.name_of(c["sym"]): c["dir"] for c in outs}
 
     def adj(er):
         """ER * sqrt(bars). Raw ER decays as 1/sqrt(n) — a coarser bar traces a
@@ -273,7 +277,7 @@ def _window_field(name, by_bar):
         "window": name, "bar": spec["bar"], "note": spec["note"],
         "bars": n_bars, "instruments": len(data.columns),
         "thin": n_bars < MIN_DISPLAY_BARS,
-        "outER": out_er,
+        "outER": out_er, "outDir": out_dir,
         "span": span, "ann": round(ann),
         "se": _num(ss.sharpe_se(span)), "noise": _num(ss.sharpe_se(span) * 2.8, 1),
         "start": data.index[0].strftime("%d %b %H:%M"),
