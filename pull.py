@@ -17,14 +17,25 @@ import json
 import sys
 from pathlib import Path
 
+import sk_amp as AMP
 import sk_curve as CURVE
 import sk_margins as MARGIN
 import sk_sources as S
 
 DATA = Path(__file__).parent / "docs" / "data"
 
+
+def _margins():
+    """sk_amp, not S.fetch_margins — the latter's positional rule stopped
+    matching when AMP moved to one table with headers repeated as data."""
+    raw, warn = AMP.fetch_amp(S.session())
+    if warn:
+        print(f"  amp: {warn}")
+    return MARGIN.build_margins(raw, _daily())
+
+
 JOBS = {
-    "margins": lambda: MARGIN.build_margins(S.fetch_margins(), _daily()),
+    "margins": _margins,
     "curve":   lambda: CURVE.build_curve(S.fetch_curves()),
 }
 _cache = {}

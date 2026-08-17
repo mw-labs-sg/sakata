@@ -22,6 +22,7 @@ if sys.version_info < (3, 12):
         "Sakata needs Python 3.12+ (sk_render.py uses PEP 701 f-strings); "
         f"this interpreter is {sys.version.split()[0]}.")
 
+import sk_amp as AMP
 import sk_board as BOARD
 import sk_curve as CURVE
 import sk_knowledge as KN
@@ -89,7 +90,16 @@ def main() -> int:
 
     if "margins" not in skip:
         print("margins")
-        write("margins.json", MARGIN.build_margins(S.fetch_margins(), daily))
+        # sk_amp, not S.fetch_margins. AMP now serves one table with section
+        # titles and repeated headers as data, so the old positional rule
+        # (first two dollar figures in any row containing one of our codes) is
+        # guessing; sk_amp tracks the header row and reads by column. This path
+        # was still on the old scraper, so a static rebuild published margins
+        # from a parser the app itself had already replaced.
+        raw, warn = AMP.fetch_amp(S.session())
+        if warn:
+            print(f"    amp: {warn}")
+        write("margins.json", MARGIN.build_margins(raw, daily))
 
     if "curve" not in skip:
         print("curve")
