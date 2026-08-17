@@ -15,15 +15,44 @@ MA1, MA2 = 100, 200
 DETAIL_BARS = 100       # bars of level history shipped per instrument/horizon
 
 
+MIN_SEG_FRACTION = 0.4   # a segment must carry this share of the median bar
+                         # count to count as a prior segment
+
+
+def _prior(agg: pd.Series, sizes: pd.Series) -> pd.Series:
+    """Previous SUBSTANTIVE segment's value, per segment.
+
+    Calendar grouping does not know about weekends. On the Day rung the bars are
+    hourly, so Sunday is its own period carrying the two hours of Sunday-evening
+    globex — measured: 2 bars and a 4.75-point ES range against 33-74 on a
+    weekday. A plain .shift(1) made that sliver Monday's "prior day", which put
+    position at -263% of the prior range, suppressed reward:risk for want of a
+    sane denominator, and dragged the Day bias vote to -1 while every other rung
+    on the ladder read +1 to +3.
+
+    So thin segments are dropped before the shift and their neighbours reach
+    past them. Threshold is relative to the median rather than absolute because
+    the same function serves five rungs whose segments hold wildly different bar
+    counts, from ~23 hourly bars in a day to ~13 weekly bars in a quarter.
+    """
+    keep = sizes >= max(sizes.median() * MIN_SEG_FRACTION, 2)
+    if not keep.any():
+        return agg.shift(1)
+    # Shift over surviving segments only, then carry each value forward across
+    # the dropped ones so a thin segment still reports the last real range.
+    return agg.where(keep).shift(1).ffill()
+
+
 def levels(df: pd.DataFrame, seg: str) -> pd.DataFrame:
     """Range Levels: prior segment high/low, mid, and the RB/RS retrace bands."""
     o = df.copy()
     o["seg"] = o.index.to_period(seg)
     g = o.groupby("seg", sort=True)
+    sizes = g.size()
     o["cur_high"] = g["high"].cummax()
     o["cur_low"] = g["low"].cummin()
-    o["prev_high"] = o["seg"].map(g["high"].max().shift(1))
-    o["prev_low"] = o["seg"].map(g["low"].min().shift(1))
+    o["prev_high"] = o["seg"].map(_prior(g["high"].max(), sizes))
+    o["prev_low"] = o["seg"].map(_prior(g["low"].min(), sizes))
     o["mid"] = (o.prev_high + o.prev_low) / 2
     o["rb"] = (o.cur_high + o.prev_low) / 2
     o["rs"] = (o.cur_low + o.prev_high) / 2
@@ -59,9 +88,19 @@ def read_bias(r) -> dict:
     score = s_rng + s_ret + s_ma
     bias = {3: "Strong Long", 2: "Long", 1: "Long tilt", 0: "Neutral",
             -1: "Short tilt", -2: "Short", -3: "Strong Short"}[score]
+    # ma100Side/ma200Side, NOT ma100/ma200: build_technical ships the numeric
+    # levels under those names and spreads this dict over them, so naming the
+    # side the same thing silently replaced two prices with the words "above"
+    # and "below" — which the Levels table then rendered as an em dash.
+    #
+    # None stays None rather than collapsing to "below". A moving average that
+    # has not enough history to exist is not the same statement as price being
+    # under it, and reporting the second for the first is just wrong.
+    def side(v):
+        return None if v is None else ("above" if v else "below")
+
     return {"regime": regime, "retrace": retrace, "trend": trend,
-            "ma100": "above" if a100 else "below",
-            "ma200": "above" if a200 else "below",
+            "ma100Side": side(a100), "ma200Side": side(a200),
             "score": score, "bias": bias}
 
 
