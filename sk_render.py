@@ -177,20 +177,22 @@ def digest(p: dict, generated: str = "") -> str:
          f"   <- like-for-like",
          f'noise floor  expected best-of-{p["nField"]} Sharpe from pure noise '
          f'~{round(p["noise"])}. Treat anything below that as unproven.', "",
-         "composite = equal-weight rank on Sharpe, ER and Win%.",
-         "ER = Kaufman efficiency: |net move| / path length.", "",
+         "ranked on ER = Kaufman efficiency: |net move| / path length.",
+         "ER (Adj) = ER * sqrt(bars), for comparing ACROSS windows only.",
+         "vs leg   = spread ER against the better leg held alone, per cent.", "",
          _pad("#", 3) + " " + _pad("LONG", 6) + _pad("SHORT", 6) +
-         _pad("SECTOR", 9) + _rpad("SCORE", 7) + _rpad("SHRP", 7) +
-         _rpad("ER", 7) + _rpad("WIN%", 6) + _rpad("TOT%", 8) +
-         _rpad("VOL%", 7) + _rpad("MDD%", 7) + _rpad("CORR", 6)]
+         _pad("SECTOR", 9) + _rpad("ER", 7) + _rpad("ERADJ", 7) +
+         _rpad("SHRP", 7) + _rpad("WIN%", 6) + _rpad("TOT%", 8) +
+         _rpad("VOL%", 7) + _rpad("MDD%", 7) + _rpad("VSLEG", 7)]
     for r in p["rows"]:
         L.append(_rpad(r["n"], 3) + " " + _pad(r["long"] or "cash", 6) +
                  _pad(r["short"] or "cash", 6) +
                  _pad(str(r["sector"])[:8], 9) +
-                 _rpad(_fx(r["score"], 1), 7) + _rpad(_fx(r["sharpe"], 2), 7) +
-                 _rpad(_fx(r["er"], 3), 7) + _rpad(_fx(r["win"], 0), 6) +
+                 _rpad(_fx(r["er"], 3), 7) + _rpad(_fx(r.get("erAdj"), 2), 7) +
+                 _rpad(_fx(r["sharpe"], 2), 7) + _rpad(_fx(r["win"], 0), 6) +
                  _rpad(_sfx(r["tot"], 2), 8) + _rpad(_fx(r["vol"], 1), 7) +
-                 _rpad(_fx(r["mdd"], 2), 7) + _rpad(_fx(r["corr"], 2), 6))
+                 _rpad(_fx(r["mdd"], 2), 7) +
+                 _rpad(_sfx(r.get("legDelta"), 0), 7))
     L += ["", "leg concentration in the top 20 — one ticker dominating the "
               "short", "column means the field is one macro bet replicated",
           "  short: " + "  ".join(f"{a}x{b}" for a, b in p["legShort"]),
@@ -200,144 +202,169 @@ def digest(p: dict, generated: str = "") -> str:
     return "\n".join(L)
 
 
-def spreads(d: dict, per: str) -> str:
+SORTS = {"ER": "er", "Win%": "win", "Tot%": "tot", "Sharpe": "sharpe"}
+
+
+def _heat(v, lo, hi, t) -> str:
+    """Background wash for the outright ER matrix.
+
+    Two hues, not a rainbow: teal for a clean trend, red for a clean downtrend,
+    alpha carrying magnitude. ER is signed and centred on zero, so a diverging
+    scale is the honest shape and a sequential one would hide the sign.
+    """
+    if v is None:
+        return ""
+    ref = max(abs(lo), abs(hi)) or 1
+    a = min(abs(v) / ref, 1.0)
+    col = t.get("teal", "#0d8f83") if v >= 0 else t.get("neg", "#c2453b")
+    return f'background:{col}{int(a * 60 + 8):02x}'
+
+
+def _thin_note(p: dict, minbars: int) -> str:
+    return ('<div class="skel">Insufficient data — '
+            f'{p["bars"]} bars, under the {minbars} needed to rank a field. '
+            "Nothing here would be a measurement.</div>")
+
+
+def spreads(d: dict, per: str, sort: str = "ER") -> str:
     p = d["data"][per]
+    t = _tok()
+    minbars = d.get("minBars", 20)
 
-    # One window's winner is an artefact until the neighbours agree, and where
-    # the best OUTRIGHT landed says whether spreading earned its complexity.
-    sum_head = ('<th class="l">Window</th><th class="l">Top candidate</th>'
-                '<th class="l">Kind</th><th>Sharpe</th><th>± SE</th><th>ER</th>'
-                '<th>Tot%</th><th>Bars</th><th class="l">Best outright</th>'
-                "<th>at #</th>")
+    # ---------------------------------------------------- 1 · by window
+    sum_head = ('<th class="l">Window</th><th class="l">Best spread</th>'
+                '<th>ER</th><th>ER (Adj)</th><th>Tot%</th><th>Bars</th>')
+    rows_sum = sorted(d.get("summary", []),
+                      key=lambda r: -(r.get("erAdj") or -9e9))
     sum_body = ""
-    for r in d.get("summary", []):
-        on = "out" if r["window"] == per else ""
+    for r in rows_sum:
+        on = f'background:{t.get("teal", "#0d8f83")}1a' if r["window"] == per else ""
+        thin = r.get("thin")
         sum_body += (
-            f'<tr class="{on}"><td class="l">{esc(r["window"])}</td>'
-            f'<td class="l">{esc(r.get("label") or "—")}</td>'
-            f'<td class="l {"sh" if r.get("kind") == "outright" else "lg"}">'
-            f'{esc(r.get("kind") or "—")}</td>'
-            + cell(r.get("sharpe"), 2, "last") + cell(r.get("se"), 2, "faint")
-            + cell(r.get("er"), 3, "dim") + pct(r.get("tot"), 1)
-            + cell(r.get("bars"), 0, "faint")
-            + f'<td class="l dim">{esc(r.get("bestOut") or "—")}</td>'
-            + cell(r.get("outRank"), 0,
-                   "sh" if (r.get("outRank") or 99) <= 5 else "faint")
+            f'<tr style="{on}"><td class="l">{esc(r["window"])}</td>'
+            + (f'<td class="l faint" colspan="5">insufficient data '
+               f'({r["bars"]} bars)</td>' if thin else
+               f'<td class="l">{esc(r.get("label") or "—")}</td>'
+               + cell(r.get("er"), 3, "last") + cell(r.get("erAdj"), 2, "dim")
+               + pct(r.get("tot"), 1) + cell(r.get("bars"), 0, "faint"))
             + "</tr>")
+    out = (eyebrow("Optimal by window")
+           + note("Ranked on ER (Adj) — raw ER decays as 1/√n, so comparing it "
+                  "across windows flatters the shortest.")
+           + table(sum_head, sum_body))
 
-    pers = (d.get("persist") or [])[:8]
-    pers_head = ('<th class="l">Position</th><th class="l">Kind</th>'
-                 '<th>Windows</th><th>Best #</th><th>Avg #</th>'
-                 '<th>Med Sharpe</th><th>Med ER</th><th class="l">Appears in</th>')
-    nw = d.get("nWindows", 9)
-    pers_body = ""
-    for r in pers:
-        strong = "out" if r["count"] >= -(-nw // 2) else ""
-        pers_body += (
-            f'<tr class="{strong}"><td class="l">{esc(r["label"])}</td>'
-            f'<td class="l {"sh" if r["kind"] == "outright" else "lg"}">'
-            f'{esc(r["kind"])}</td>'
-            f'<td class="last">{r["count"]}/{nw}</td>'
-            + cell(r["best"], 0, "dim") + cell(r["avgRank"], 1, "dim")
-            + cell(r["medSharpe"], 2, "dim") + cell(r["medER"], 3, "dim")
-            + f'<td class="l faint">{esc(" ".join(r["windows"]))}</td></tr>')
+    if p.get("thin"):
+        return out + _thin_note(p, minbars)
 
-    verdict = []
-    if p.get("bestPair"):
-        verdict.append(f'best pair <b>{esc(p["bestPair"])}</b>')
-    if p.get("bestOut"):
-        verdict.append(f'best outright <b>{esc(p["bestOut"])}</b> at rank '
-                       f'{p["outRank"]}')
-    verdict.append(f'median Sharpe — pairs <b>{p["medPair"]}</b>, outrights '
-                   f'<b>{p["medOut"]}</b>')
-    if p["medOut"] >= p["medPair"]:
-        verdict.append("<b>outrights win the like-for-like — spreading is not "
-                       "paying on this horizon</b>")
+    # ------------------------------------------------------ 2 · outrights
+    wins = [r["window"] for r in d.get("summary", [])
+            if r["window"] in d.get("periods", []) and not r.get("thin")]
+    mats = {w: d["data"][w].get("outER", {}) for w in wins}
+    codes = [c for c in U.CODES if any(c in mats[w] for w in wins)]
+    if codes and wins:
+        vals = [v for w in wins for v in mats[w].values() if v is not None]
+        lo, hi = (min(vals), max(vals)) if vals else (0, 0)
+        o_head = ('<th class="l">Instrument</th>'
+                  + "".join(f"<th>{esc(w)}</th>" for w in wins))
+        o_body = ""
+        for c in codes:
+            cells = ""
+            for w in wins:
+                v = mats[w].get(c)
+                shown = "—" if v is None else f"{v:.3f}"
+                cells += f'<td style="{_heat(v, lo, hi, t)}">{shown}</td>'
+            o_body += (f'<tr><td class="l">{swatch(U.SECTOR[c])}{esc(c)} '
+                       f'<span class="nm">{esc(U.NAME[c])}</span></td>'
+                       f'{cells}</tr>')
+        out += (eyebrow("Outrights — ER by window")
+                + note("Each instrument held alone, sign-oriented. A pair that "
+                       "cannot beat its own legs here is not worth the second "
+                       "ticket.")
+                + table(o_head, o_body))
 
-    # On a short span the Sharpe column is not evidence, and that fact needs to
-    # be ON the screen — but as a flag, not a paragraph.
-    warn = ""
-    weak = p["se"] > 2.5
-    if weak:
-        warn = (f'<div class="flag">Sharpe unsupportable at {p["span"]} days — '
-                f'noise alone tops out near {round(p["noise"])} over '
-                f'{p["nField"]} candidates. Rank on ER.</div>')
-
+    # ---------------------------------------------------------- 3 · field
+    key = SORTS.get(sort, "er")
+    rows = sorted(p["rows"], key=lambda r: -(r.get(key) if r.get(key)
+                                             is not None else -9e9))
     head = ('<th class="l">#</th><th class="l">Long</th><th class="l">Short</th>'
-            '<th class="l">Sector</th><th>Score</th>'
-            f'<th{" class=\"dim\"" if weak else ""}>Sharpe</th>'
-            f'<th{" class=\"on\"" if weak else ""}>ER</th>'
-            "<th>Win%</th><th>Tot%</th><th>Vol%</th><th>MDD%</th>"
-            "<th>Corr</th><th>Ratio</th>")
+            '<th>ER</th><th>ER (Adj)</th><th>Tot%</th><th>Win%</th>'
+            '<th>Vol%</th><th>MDD%</th><th>vs leg</th>'
+            '<th class="l">Also top 10 in</th>')
     body = ""
-    for r in p["rows"]:
+    for i, r in enumerate(rows, 1):
         lg = (f'<span class="lg">{esc(r["long"])}</span>' if r["long"]
               else '<span class="cash">cash</span>')
         sh = (f'<span class="sh">{esc(r["short"])}</span>' if r["short"]
               else '<span class="cash">cash</span>')
-        er_cls = ("pos" if (r["er"] or 0) >= 0.30
-                  else "dim" if (r["er"] or 0) >= 0.12 else "faint")
-        sharpe_cls = ("faint" if weak
-                      else ("pos" if (r["sharpe"] or 0) >= 0 else "neg"))
+        dv = r.get("legDelta")
+        if dv is None:
+            legcell = '<td class="faint">—</td>'
+        else:
+            # The whole point of the column: red when the spread lost to simply
+            # holding its better leg.
+            cls = "pos" if dv >= 0 else "neg"
+            legcell = f'<td class="{cls}">{"+" if dv >= 0 else ""}{dv:.0f}%</td>'
+        also = r.get("alsoTop") or []
         body += (f'<tr class="{"out" if r["kind"] == "outright" else ""}">'
-                 f'<td class="l faint">{r["n"]}</td><td class="l">{lg}</td>'
+                 f'<td class="l faint">{i}</td><td class="l">{lg}</td>'
                  f'<td class="l">{sh}</td>'
-                 f'<td class="l faint">{esc(r["sector"])}</td>'
-                 + cell(r["score"], 1, "dim") + cell(r["sharpe"], 2, sharpe_cls)
-                 + cell(r["er"], 3, er_cls) + cell(r["win"], 0, "dim")
-                 + pct(r["tot"], 1) + cell(r["vol"], 1, "dim")
-                 + cell(r["mdd"], 1, "neg") + cell(r["corr"], 2, "dim")
-                 + cell(r["ratio"], 2, "dim") + "</tr>")
+                 + cell(r["er"], 3, "last") + cell(r.get("erAdj"), 2, "dim")
+                 + pct(r["tot"], 1) + cell(r["win"], 0, "dim")
+                 + cell(r["vol"], 1, "dim") + cell(r["mdd"], 1, "neg")
+                 + legcell
+                 + f'<td class="l faint">{esc(" ".join(also)) or "—"}</td>'
+                 + "</tr>")
 
-    return (eyebrow("Optimal by window")
-            + note("Top-ranked candidate in each window on the same weighting. "
-                   "A position that holds across neighbouring windows is a "
-                   "different object from one that only wins the shortest.")
-            + table(sum_head, sum_body)
-            + (eyebrow("Holds across windows")
-               + note("How often each position appears in the top 10 of a "
-                      "window, ranked by count then by average rank — appearing "
-                      "8th in six windows is worth more than 1st in one. This is "
-                      "the closest thing here to evidence that a relationship is "
-                      "structural rather than lucky.")
-               + table(pers_head, pers_body) if pers else "")
-            + chips([p["note"],
-                     f'{p["bars"]} bars · {p["instruments"]} instruments',
-                     f'Sharpe SE ±{p["se"]}', f'{p["start"]} → {p["end"]}',
+    return (out
+            + chips([p["note"], f'{p["bars"]} bars · {p["instruments"]} '
+                     f'instruments', f'{p["start"]} → {p["end"]}',
                      "vol-adjusted legs", f'cap {d["cap"]}:1'])
-            + note(" · ".join(verdict)) + warn
-            + spread_charts(p) + table(head, body))
+            + spread_charts(p)
+            + eyebrow(f"Field — {esc(per)}, sorted by {esc(sort)}")
+            + note("ER against the better of the two legs held alone; negative "
+                   "means the spread did not pay for itself.")
+            + table(head, body))
 
 
 def spread_charts(p: dict) -> str:
-    """Both legs rebased to 100, with the vol-adjusted spread over them. The
-    table cannot separate a spread that worked because both legs trended from
-    one that worked because a leg collapsed. This can, at a glance."""
+    """Both legs rebased to 100, with the vol-adjusted spread over them."""
     if not p.get("charts"):
         return ""
     cards = ""
     for c in p["charts"]:
         series = []
+        # Legs muted, spread in the reading ink: the spread is the subject and
+        # the legs are the context it is read against.
         if c.get("lg"):
-            series.append({"k": c["lgName"], "v": c["lg"], "c": C["pos"],
-                           "w": 1.2, "o": 0.85})
+            series.append({"k": c["lgName"], "v": c["lg"], "c": C["faint"],
+                           "w": 1.1, "o": 0.75})
         if c.get("sh"):
-            series.append({"k": c["shName"], "v": c["sh"], "c": C["neg"],
-                           "w": 1.2, "o": 0.85})
-        series.append({"k": "spread", "v": c["sp"], "c": C["deep"], "w": 2.2})
+            series.append({"k": c["shName"], "v": c["sh"], "c": C["mute"],
+                           "w": 1.1, "o": 0.75, "dash": "3 3"})
+        series.append({"k": "spread", "v": c["sp"], "c": C["ink"], "w": 2.4})
         legend = "".join(f'<span class="key"><i class="sw" '
                          f'style="background:{s["c"]}"></i>{esc(s["k"])}</span>'
                          for s in series)
+        dv, best = c.get("legDelta"), c.get("bestLegEr")
+        if dv is None:
+            verdict = ""
+        elif dv < 0:
+            verdict = (f'<span style="color:{C["neg"]};font-weight:650">'
+                       f'worse than {esc(c["lgName"] or c["shName"] or "leg")} '
+                       f'alone · {dv:.0f}%</span>')
+        else:
+            verdict = (f'<span style="color:{C["pos"]};font-weight:650">'
+                       f'+{dv:.0f}% vs best leg</span>')
+        leginfo = ("" if best is None else
+                   f'<span class="faint"> · best leg ER {best:.3f}</span>')
         cards += (f'<div class="plot"><div class="ctitle"><b>{c["n"]}. '
-                  f'{esc(c["label"])}</b><span>Sharpe {c["sharpe"]} · ER '
-                  f'{c["er"]} · {"+" if c["tot"] >= 0 else ""}{c["tot"]}%'
-                  f'</span></div><div class="clegend">{legend}</div>'
-                  + CH.line_chart(c["t"], series, None, 560, 170, 1) + "</div>")
+                  f'{esc(c["label"])}</b><span>ER {c["er"]}{leginfo}</span>'
+                  f'</div><div class="clegend">{legend}{verdict}</div>'
+                  + CH.line_chart(c["t"], series, None, 560, 230, 1) + "</div>")
     return (eyebrow("Why they ranked")
-            + note("Both legs rebased to 100 at the window open, with the "
-                   "vol-adjusted spread over them.")
+            + note("Legs rebased to 100; spread over them. Capped at two "
+                   "charts per instrument.")
             + f'<div class="cgrid">{cards}</div>')
-
 
 # ------------------------------------------------------------------ Curve
 def curve(d: dict, code: str) -> str:

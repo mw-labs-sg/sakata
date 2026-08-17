@@ -287,9 +287,12 @@ with t[5]:
     if not field.get("periods"):
         st.error("No spread windows built — not enough price history.")
     else:
-        per = st.radio("Window", field["periods"], horizontal=True,
-                       key="sp_window", label_visibility="collapsed")
-        UI.md(R.spreads(field, per))
+        sc = st.columns([5, 4])
+        per = sc[0].radio("Window", field["periods"], horizontal=True,
+                          key="sp_window", label_visibility="collapsed")
+        spsort = sc[1].radio("Sort", list(R.SORTS), horizontal=True,
+                             key="sp_sort", label_visibility="collapsed")
+        UI.md(R.spreads(field, per, spsort))
         with st.expander("Digest — copy this into an LLM"):
             st.code(R.digest(field["data"][per],
                              dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M")),

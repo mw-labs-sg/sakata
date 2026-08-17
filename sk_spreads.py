@@ -24,8 +24,16 @@ import sk_universe as U
 MODE = "vol"            # vol-adjusted legs; equal notional lets the loud leg win
 RATIO_CAP = 5.0         # above this the sizing is not executable
 TOP_N = 30              # rows in the table
-CHART_N = 6             # candidates that ship a chart series
+CHART_N = 12            # candidates that ship a chart series
 CHART_PTS = 160         # points per line after decimation
+MAX_LEG_CHARTS = 2      # times one instrument may appear across those charts
+MIN_DISPLAY_BARS = 20   # below this a window is not a ranked table, it is noise
+
+# Windows offered in the selector. The rolling ones keep computing because the
+# "also top-10 in" column is only worth reading if it spans more than the five
+# calendar windows — but nine radio buttons over one table was the tab's worst
+# habit, so they no longer appear in the picker.
+DISPLAY_PERIODS = ["Intraday", "WTD", "MTD", "QTD", "YTD"]
 
 # Point sakata_stats at the live universe so anything added later flows through
 # without editing two files.
@@ -37,7 +45,12 @@ ss.SYMBOL_SECTOR = {U.TICKER[c]: U.SECTOR[c] for c in U.CODES}
 # and every statistic is noise; too many and an hourly series over a year is a
 # daily series with six times the payload and none of the extra information.
 WINDOWS = OrderedDict([
-    ("Intraday", dict(bar="15m", kind="days",  n=3,   note="15-minute bars, last 3 sessions")),
+    # NOT "last 3 sessions". The slice is 3 calendar days, and align_frames
+    # then inner-joins 19 markets, so what survives is only the hours when all
+    # of them trade at once — measured, 61 bars over 3 days, about 5 hours a
+    # day rather than 3 full sessions. The join is deliberate (see
+    # align_frames) so the label is what changes.
+    ("Intraday", dict(bar="15m", kind="days",  n=3,   note="15-minute bars, last 3 days, hours all 19 markets trade")),
     ("WTD",      dict(bar="1h",  kind="cal",   unit="week",    note="hourly bars since Monday")),
     ("MTD",      dict(bar="4h",  kind="cal",   unit="month",   note="4-hour bars since the 1st")),
     ("QTD",      dict(bar="1d",  kind="cal",   unit="quarter", note="daily bars since quarter start")),
@@ -173,41 +186,94 @@ def _window_field(name, by_bar):
     if not field:
         return None
     ss.rank_field(field)
-    field.sort(key=lambda c: c["_score"])
+    # ER descending, everywhere. ER is scale-free and descriptive, so it stays
+    # meaningful on the short windows where Sharpe — an estimate of a forward
+    # parameter — does not.
+    field.sort(key=lambda c: -(c["ER"] if np.isfinite(c["ER"]) else -9))
 
+    n_bars = len(data)
     span = max((data.index[-1] - data.index[0]).days, 1)
     best_out = next((c for c in field if c["kind"] == "outright"), None)
     best_pair = next((c for c in field if c["kind"] == "pair"), None)
     lg, sh = ss.leg_frequency(field, 20)
 
+    # Every instrument's outright ER, so a pair can be scored against the
+    # simpler thing you could have done instead.
+    out_er = {ss.name_of(c["sym"]): _num(c["ER"], 3) for c in outs}
+
+    def adj(er):
+        """ER * sqrt(bars). Raw ER decays as 1/sqrt(n) — a coarser bar traces a
+        shorter path over the same net move — so ranking raw ER ACROSS windows
+        always flatters the shortest one. Within a window it changes nothing."""
+        return None if er is None else _num(er * (n_bars ** 0.5), 2)
+
+    def leg_delta(c):
+        """Pair ER against the better of its two legs, as a percentage.
+
+        Negative means the spread did worse than simply holding the better leg,
+        which is the number that decides whether the complexity paid.
+        """
+        if c["kind"] != "pair":
+            return None, None
+        legs = [out_er.get(ss.name_of(s)) for s in (c["long"], c["short"])]
+        legs = [v for v in legs if v is not None]
+        if not legs:
+            return None, None
+        best = max(legs)
+        er = _num(c["ER"], 3)
+        if er is None or best == 0:
+            return _num(best, 3), None
+        return _num(best, 3), _num((er - best) / abs(best) * 100, 0)
+
     rows = []
     for i, c in enumerate(field[:TOP_N], 1):
+        best_leg, delta = leg_delta(c)
+        er = _num(c["ER"], 3)
         rows.append({
             "n": i, "kind": c["kind"],
             "long": ss.name_of(c["long"]) if c["long"] else None,
             "short": ss.name_of(c["short"]) if c["short"] else None,
             "sector": str(c["Sector"]),
-            "score": _num(c["_score"], 1), "sharpe": _num(c["Sharpe"]),
-            "er": _num(c["ER"], 3), "win": _num(c["Win%"], 0),
+            "sharpe": _num(c["Sharpe"]),
+            # Kept in the JSON for site/js/spreads.js, which still reads it.
+            # Removed from the Streamlit UI, not from the data contract.
+            "score": _num(c["_score"], 1),
+            "er": er, "erAdj": adj(er), "win": _num(c["Win%"], 0),
             "tot": _num(c["Tot%"], 1), "vol": _num(c["Vol%"], 1),
             "mdd": _num(c["MDD%"], 1), "corr": _num(c["Corr"]),
             "ratio": _num(c["Ratio"]),
+            "bestLegEr": best_leg, "legDelta": delta,
         })
 
-    charts = []
-    for i, c in enumerate(field[:CHART_N], 1):
+    # Charts follow the table's order, capped so one instrument cannot occupy
+    # the grid. Twelve charts of the same short leg is one macro bet drawn
+    # twelve times, which leg_frequency already says in a single line.
+    charts, seen = [], {}
+    for c in field:
+        if len(charts) >= CHART_N:
+            break
+        legs = [s for s in (c["long"], c["short"]) if s]
+        if any(seen.get(s, 0) >= MAX_LEG_CHARTS for s in legs):
+            continue
         try:
             cv = _curves(c, data, MODE)
         except Exception:
             continue
-        cv.update({"n": i, "label": ss.pos_label(c), "kind": c["kind"],
-                   "sharpe": _num(c["Sharpe"]), "er": _num(c["ER"], 3),
-                   "tot": _num(c["Tot%"], 1)})
+        for s in legs:
+            seen[s] = seen.get(s, 0) + 1
+        best_leg, delta = leg_delta(c)
+        er = _num(c["ER"], 3)
+        cv.update({"n": len(charts) + 1, "label": ss.pos_label(c),
+                   "kind": c["kind"], "sharpe": _num(c["Sharpe"]),
+                   "er": er, "erAdj": adj(er), "tot": _num(c["Tot%"], 1),
+                   "bestLegEr": best_leg, "legDelta": delta})
         charts.append(cv)
 
     return {
         "window": name, "bar": spec["bar"], "note": spec["note"],
-        "bars": len(data), "instruments": len(data.columns),
+        "bars": n_bars, "instruments": len(data.columns),
+        "thin": n_bars < MIN_DISPLAY_BARS,
+        "outER": out_er,
         "span": span, "ann": round(ann),
         "se": _num(ss.sharpe_se(span)), "noise": _num(ss.sharpe_se(span) * 2.8, 1),
         "start": data.index[0].strftime("%d %b %H:%M"),
@@ -224,6 +290,27 @@ def _window_field(name, by_bar):
         "legLong": [[ss.name_of(k), v] for k, v in lg.most_common(6)],
         "rows": rows, "charts": charts,
     }
+
+
+def _top10_windows(out: dict, top=10) -> dict:
+    """{(long, short): [windows where it ranks top-10]}, across ALL nine.
+
+    This replaces the standalone persistence table. The information was right —
+    a position holding across neighbouring windows is a different object from
+    one that wins the shortest — but as its own section it made you hold two
+    tables in your head and cross-reference them by name. As a column it sits on
+    the row it describes.
+
+    Spans all nine windows, including the four not in the selector: agreement
+    across five calendar windows that share endpoints says much less than
+    agreement that also survives the rolling ones.
+    """
+    seen = {}
+    for name, r in out.items():
+        for row in r["rows"][:top]:
+            key = (row["long"], row["short"])
+            seen.setdefault(key, []).append(name)
+    return seen
 
 
 def _persistence(out: dict, top=10):
@@ -279,20 +366,32 @@ def build_spreads(by_bar: dict) -> dict:
         top = r["rows"][0] if r["rows"] else None
         summary.append({
             "window": name, "bars": r["bars"], "se": r["se"],
-            "label": (r["charts"][0]["label"] if r["charts"] else None),
+            "thin": r["thin"],
+            "label": (ss.pos_label({"long": top["long"], "short": top["short"]})
+                      if top else None),
             "kind": top["kind"] if top else None,
-            "sharpe": top["sharpe"] if top else None,
             "er": top["er"] if top else None,
+            "erAdj": top["erAdj"] if top else None,
             "tot": top["tot"] if top else None,
+            # Static-site keys, unused by the Streamlit render.
+            "sharpe": top["sharpe"] if top else None,
             "outRank": r["outRank"], "bestOut": r["bestOut"],
         })
         print(f"    spreads {name}: {r['bars']} bars, {r['instruments']} "
               f"instruments, SE +/-{r['se']}")
-    persist = _persistence(out)
-    if persist:
-        top = persist[0]
-        print(f"    spreads: most persistent {top['label']} in "
-              f"{top['count']}/{len(out)} windows (avg rank {top['avgRank']})")
-    return {"periods": [p for p in PERIODS if p in out], "mode": MODE,
-            "cap": RATIO_CAP, "topN": TOP_N, "summary": summary,
-            "persist": persist, "nWindows": len(out), "data": out}
+
+    # Attach "also top-10 in" to every row, then drop the window it is already
+    # sitting in — a row does not need telling it is in its own table.
+    tw = _top10_windows(out)
+    for name, r in out.items():
+        for row in r["rows"]:
+            row["alsoTop"] = [w for w in tw.get((row["long"], row["short"]), [])
+                              if w != name]
+
+    return {"periods": [p for p in DISPLAY_PERIODS if p in out],
+            "allPeriods": [p for p in PERIODS if p in out],
+            "mode": MODE, "cap": RATIO_CAP, "topN": TOP_N, "summary": summary,
+            "minBars": MIN_DISPLAY_BARS, "nWindows": len(out), "data": out,
+            # Static-site key. The Streamlit tab carries this as the "also top
+            # 10 in" column instead of a section of its own.
+            "persist": _persistence(out)}

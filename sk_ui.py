@@ -235,6 +235,13 @@ pre, pre *, code {{ color: {t.get('ink')} !important; }}
    its own box. Addressed through the stable testid plus the inner role=group. */
 [data-testid="stSelectbox"] div[role="group"] {{ background: {t.get('surface')} !important; border-color: {t.get('line')} !important; font-size: 13px; }}
 .stRadio [role="radiogroup"] {{ gap: 4px; flex-wrap: wrap; }}
+/* Spread charts: two per row rather than three. Twelve cards three-up made each
+   one too short to read the shape that justifies the row. */
+.cgrid {{ grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 26px 22px !important; }}
+.cgrid .plot {{ padding: 14px 14px 10px; margin: 0; }}
+.cgrid .ctitle {{ margin-bottom: 2px; }}
+.cgrid .clegend {{ display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; margin-bottom: 6px; }}
+@media (max-width: 900px) {{ .cgrid {{ grid-template-columns: 1fr !important; }} }}
 /* Icon button: square, quiet, teal on hover — the header switch from
    index.html, minus the SVG. Scoped to the theme toggle. Unscoped, this block
    sat after the text-button rule and won, so `width: 32px; padding: 0` also
