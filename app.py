@@ -11,8 +11,17 @@ because their sources move once a day and refuse frequent callers.
 """
 import datetime as dt
 import json
+import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+
+# Before the sk_* imports, not after: sk_render uses PEP 701 f-strings, so on
+# 3.11 it fails at COMPILE time and the traceback points at a quote rather than
+# at the version. Checking here turns that into a sentence.
+if sys.version_info < (3, 12):
+    raise SystemExit(
+        "Sakata needs Python 3.12+ (sk_render.py uses PEP 701 f-strings); "
+        f"this interpreter is {sys.version.split()[0]}.")
 
 import streamlit as st
 

@@ -14,6 +14,14 @@ import shutil
 import sys
 from pathlib import Path
 
+# The project floor, declared in pyproject.toml and enforced here. This path
+# does not import sk_render, but the floor is the whole repo's, and failing with
+# a sentence beats failing four modules deep.
+if sys.version_info < (3, 12):
+    raise SystemExit(
+        "Sakata needs Python 3.12+ (sk_render.py uses PEP 701 f-strings); "
+        f"this interpreter is {sys.version.split()[0]}.")
+
 import sk_board as BOARD
 import sk_curve as CURVE
 import sk_knowledge as KN

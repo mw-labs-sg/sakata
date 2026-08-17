@@ -18,14 +18,62 @@ import streamlit as st
 CSS_PATH = Path(__file__).parent / "site" / "sakata.css"
 W = 1100          # nominal SVG width; viewBox scales it to the container
 
+# Offset of the theme switch from the top of .block-container, so it centres on
+# the tab rule. Measured against the live DOM, not guessed: the strip sits at
+# 36px inside a container whose padding-top is 20px, and the button is 30px
+# tall on a 40px strip. The old 74px was tuned while the bridge was being
+# dropped by the token-parser bug, against Streamlit's default 96px padding.
+SWITCH_TOP = 41
+
 
 # ------------------------------------------------------------------ tokens
+def _declarations(body: str) -> dict:
+    """{custom-property: value} for one CSS block, honouring quotes and parens.
+
+    This cannot be a regex. `--caret` is a data: URL whose value contains a
+    semicolon — url("data:image/svg+xml;charset=utf-8,…") — and the old
+    `([^;]+);` value pattern stopped dead at it, keeping
+    `url("data:image/svg+xml` with an unbalanced quote. apply() re-emits every
+    token verbatim, so that one truncated value opened a string literal that
+    ran to the end of the stylesheet and took the entire Streamlit bridge with
+    it: dark mode parsed 124 rules where light mode got 168, and every bridge
+    rule was silently dropped.
+
+    A semicolon inside quotes or parens is content, not a terminator. Quotes
+    also nest — the caret value carries fourteen single quotes inside its
+    double-quoted URL — so only the matching delimiter closes a string.
+    """
+    body = re.sub(r"/\*.*?\*/", "", body, flags=re.S)
+    out, buf, quote, depth = {}, "", "", 0
+
+    def keep(decl: str) -> None:
+        k, sep, v = decl.partition(":")
+        k = k.strip()
+        if sep and k.startswith("--"):
+            out[k[2:]] = v.strip()
+
+    for ch in body:
+        if quote:
+            if ch == quote:
+                quote = ""
+        elif ch in "\"'":
+            quote = ch
+        elif ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth = max(depth - 1, 0)
+        elif ch == ";" and depth == 0:
+            keep(buf)
+            buf = ""
+            continue
+        buf += ch
+    keep(buf)           # a trailing declaration needs no closing semicolon
+    return out
+
+
 def _block(css: str, selector: str) -> dict:
     m = re.search(re.escape(selector) + r"\s*\{(.*?)\n\}", css, re.S)
-    if not m:
-        return {}
-    return {k: v.strip() for k, v in
-            re.findall(r"--([\w-]+)\s*:\s*([^;]+);", m.group(1))}
+    return _declarations(m.group(1)) if m else {}
 
 
 @st.cache_data
@@ -99,22 +147,38 @@ _FONTS = ('<link rel="preconnect" href="https://fonts.googleapis.com">'
 
 def _bridge(t: dict) -> str:
     """Streamlit's own chrome, dressed in the same tokens."""
+    # The theme switch, addressed through the marker div app.py emits. Named
+    # once because both the geometry and the position rule need it.
+    sw = ('[data-testid="stElementContainer"]:has(#sk-theme-anchor) '
+          '+ [data-testid="stElementContainer"]')
     return f"""
 .stApp {{ background: {t.get('bg')}; }}
+/* Streamlit bakes config.toml's textColor into its emotion classes and exposes
+   no CSS variable to retarget it — there is not one custom property on :root,
+   body, .stApp or stAppViewContainer — so the per-theme ink has to be set here
+   or the light theme renders #e9eff2 on #f4f6f7 at 1.04:1 and the tab strip
+   disappears. Buttons and the expander summary inherit from this rule; tabs,
+   radios, the selectbox input and the code block each set colour explicitly
+   and are handled next to their own rules below. */
+body, .stApp {{ color: {t.get('body')} !important; }}
 .block-container {{ max-width: 1160px; padding: 20px 24px 56px; }}
 #MainMenu, footer, header[data-testid="stHeader"] {{ display: none; }}
 .stApp, .stApp * {{ font-family: var(--sans) !important; }}
 .sk-stamp, code, pre, pre * {{ font-family: var(--mono) !important; }}
-.stTabs [data-baseweb="tab-list"] {{ gap: 0; border-bottom: 1px solid {t.get('line')}; background: transparent; }}
-.stTabs [data-baseweb="tab"] {{ padding: 10px 15px 9px; }}
-/* Caps come from Python now. This only handles size, weight and tracking,
-   and covers both the old BaseWeb markup and the current stTab testid so an
-   upgrade in either direction still lands. */
-.stTabs button, .stTabs button *, [data-baseweb="tab-list"] button, [data-baseweb="tab-list"] button *, [data-testid="stTab"], [data-testid="stTab"] * {{ font-size: 11.5px !important; font-weight: 650 !important; letter-spacing: .11em !important; }}
-[data-baseweb="tab-list"] button {{ color: {t.get('mute')} !important; }}
-[data-baseweb="tab-list"] button[aria-selected="true"], [data-baseweb="tab-list"] button[aria-selected="true"] * {{ color: {t.get('teal')} !important; }}
-.stTabs [data-baseweb="tab-highlight"] {{ background: {t.get('teal')}; }}
-.stTabs [data-baseweb="tab-border"] {{ display: none; }}
+/* Streamlit 1.59 draws the strip as [role="tablist"] with no testid, and each
+   tab as [data-testid="stTab"]. The old [data-baseweb="tab-list"] selectors
+   matched nothing: the strip kept its default 16px gap and drew no rule line.
+   tab-highlight and tab-border are gone from the DOM entirely, so the rules
+   for them are dropped rather than ported — the teal on the active tab comes
+   from the aria-selected rule below. */
+[role="tablist"] {{ gap: 0; border-bottom: 1px solid {t.get('line')}; background: transparent; }}
+[data-testid="stTab"] {{ padding: 10px 15px 9px; }}
+/* Caps come from Python now. This only handles size, weight and tracking, and
+   is scoped to the strip: .stTabs button also caught every button inside a tab
+   PANEL, which fought the 10.5px rule on Refresh. */
+[role="tablist"] button, [role="tablist"] button *, [data-testid="stTab"], [data-testid="stTab"] * {{ font-size: 11.5px !important; font-weight: 650 !important; letter-spacing: .11em !important; }}
+[data-testid="stTab"][aria-selected="false"], [data-testid="stTab"][aria-selected="false"] * {{ color: {t.get('mute')} !important; }}
+[data-testid="stTab"][aria-selected="true"], [data-testid="stTab"][aria-selected="true"] * {{ color: {t.get('teal')} !important; }}
 /* The source link is a footnote, not a call to action — teal, quiet, and set
    well clear of the date so the two do not read as one string. */
 .news .mkt a {{ color: {t.get('teal')} !important; text-decoration: none; margin-left: 16px; font-size: 11px; letter-spacing: .01em; }}
@@ -136,13 +200,20 @@ def _bridge(t: dict) -> str:
 .stButton button:hover, .stButton button:focus {{ border-color: {t.get('teal')}; color: {t.get('teal')} !important; box-shadow: none; }}
 .stButton button:hover p {{ color: {t.get('teal')} !important; }}
 .stRadio label p {{ font-size: 10.5px !important; font-weight: 650 !important; letter-spacing: .09em !important; text-transform: uppercase !important; }}
+/* Radio labels, the selectbox value and the digest block all set colour on
+   themselves, so inheriting from body does not reach them. */
+.stRadio label, .stRadio label p {{ color: {t.get('mute')} !important; }}
+.stRadio [role="radio"][aria-checked="true"] + div, .stRadio [role="radio"][aria-checked="true"] + div p {{ color: {t.get('teal')} !important; }}
+[data-testid="stSelectbox"] input {{ color: {t.get('ink')} !important; }}
+pre, pre *, code {{ color: {t.get('ink')} !important; }}
+[data-testid="stCode"], [data-testid="stCode"] pre {{ background: {t.get('surface')} !important; }}
 /* The theme switch sits at the right end of the tab rule. Streamlit renders
    it as its own element, so it is anchored with an empty marker div and
    lifted into place; :has() picks the container holding the marker and the
    adjacent sibling is the button. Nudge `top` if it lands off the line. */
 .block-container {{ position: relative; }}
 [data-testid="stElementContainer"]:has(#sk-theme-anchor) {{ height: 0; margin: 0; }}
-[data-testid="stElementContainer"]:has(#sk-theme-anchor) + [data-testid="stElementContainer"] {{ position: absolute; right: 0; top: 74px; z-index: 6; width: auto; }}
+{sw} {{ position: absolute; right: 0; top: {SWITCH_TOP}px; z-index: 6; width: auto; }}
 /* Per-tab source line: what this tab is reading, in the register of a
    footnote rather than a heading. */
 .sk-src {{ font-size: 10.5px; color: {t.get('mute')}; padding: 2px 0 0; }}
@@ -156,12 +227,12 @@ def _bridge(t: dict) -> str:
 @media (max-width: 900px) {{ .sk-defs {{ grid-template-columns: 1fr; }} }}
 .stSelectbox div[data-baseweb="select"] > div {{ background: {t.get('surface')}; border-color: {t.get('line')}; font-size: 13px; }}
 .stRadio [role="radiogroup"] {{ gap: 4px; flex-wrap: wrap; }}
-/* Icon buttons: square, quiet, teal on hover — the header switches from
-   index.html, minus the SVG. */
-.stButton button {{ width: 32px; height: 30px; min-height: 30px; padding: 0; font-size: 14px; line-height: 1; border-radius: 4px; border: 1px solid {t.get('line')}; background: {t.get('surface')}; color: {t.get('mute')}; transition: color .15s, border-color .15s; }}
-.stButton button p {{ font-size: 14px !important; margin: 0 !important; }}
-.stButton button:hover, .stButton button:focus {{ border-color: {t.get('teal')}; color: {t.get('teal')} !important; box-shadow: none; }}
-.stButton button:hover p {{ color: {t.get('teal')} !important; }}
+/* Icon button: square, quiet, teal on hover — the header switch from
+   index.html, minus the SVG. Scoped to the theme toggle. Unscoped, this block
+   sat after the text-button rule and won, so `width: 32px; padding: 0` also
+   hit Refresh and broke the word onto two lines. */
+{sw} .stButton button {{ width: 32px; padding: 0; font-size: 14px; }}
+{sw} .stButton button p {{ font-size: 14px !important; }}
 .sk-head {{ display: flex; align-items: center; gap: 10px; margin: 0 0 4px; }}
 .sk-mark {{ flex: none; color: {t.get('teal')}; margin-bottom: 2px; }}
 .sk-word {{ font-family: var(--display); font-size: 23px; font-weight: 800; letter-spacing: -.035em; color: {t.get('ink')}; margin: 0; line-height: 1; }}

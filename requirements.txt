@@ -7,3 +7,9 @@ lxml>=5.0
 beautifulsoup4>=4.12
 streamlit>=1.35
 plotly>=5.20
+# zoneinfo has no tz database of its own. Windows ships none at all, and a slim
+# Linux image can be missing /usr/share/zoneinfo, so sk_calendar's
+# ZoneInfo("America/New_York") raises ZoneInfoNotFoundError at import and takes
+# the whole app down. Unconditional rather than platform-marked: the package is
+# inert when a system database exists.
+tzdata>=2024.1

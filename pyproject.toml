@@ -1,0 +1,16 @@
+# Sakata is run, not installed — requirements.txt stays the source of truth for
+# dependencies. This file exists for one declaration: the Python floor.
+#
+# sk_render.py uses PEP 701 f-strings (backslashes and same-quote nesting inside
+# the expression part, e.g. lines 69-70 and 268-269), which are a SyntaxError on
+# 3.11 and earlier. That floor was undeclared anywhere in the repo.
+#
+# Note `pip install -r requirements.txt` does NOT read requires-python, so this
+# documents the floor for tooling rather than enforcing it for the usual install
+# path. app.py and build.py carry a runtime guard for that.
+
+[project]
+name = "sakata"
+version = "0"
+description = "A futures terminal: static build plus a Streamlit front end."
+requires-python = ">=3.12"
