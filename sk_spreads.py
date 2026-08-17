@@ -270,6 +270,11 @@ def _window_field(name, by_bar):
         cv.update({"n": len(charts) + 1, "label": ss.pos_label(c),
                    "kind": c["kind"], "sharpe": _num(c["Sharpe"]),
                    "er": er, "erAdj": adj(er), "tot": _num(c["Tot%"], 1),
+                   # The card carries the same risk columns as the table, so a
+                   # shape you like can be sanity-checked without scrolling
+                   # back up to find its row.
+                   "win": _num(c["Win%"], 0), "vol": _num(c["Vol%"], 1),
+                   "mdd": _num(c["MDD%"], 1),
                    "bestLegEr": best_leg, "legDelta": delta})
         charts.append(cv)
 
@@ -393,6 +398,10 @@ def build_spreads(by_bar: dict) -> dict:
                               if w != name]
 
     return {"periods": [p for p in DISPLAY_PERIODS if p in out],
+            # The canonical five, present or not. The by-window table renders a
+            # fixed set of rows so the layout does not reflow when a window
+            # fails to build or falls under the bar floor.
+            "displayPeriods": list(DISPLAY_PERIODS),
             "allPeriods": [p for p in PERIODS if p in out],
             "mode": MODE, "cap": RATIO_CAP, "topN": TOP_N, "summary": summary,
             "minBars": MIN_DISPLAY_BARS, "nWindows": len(out), "data": out,

@@ -202,29 +202,21 @@ def digest(p: dict, generated: str = "") -> str:
     return "\n".join(L)
 
 
-SORTS = {"ER": "er", "Win%": "win", "Tot%": "tot", "Sharpe": "sharpe"}
+# Default is the normalised measure. Within one window ER and ER (Adj) order
+# rows identically — bars is constant, so sqrt(bars) is a positive scale factor
+# — but the adjusted one is what the by-window tables compare, and offering two
+# keys that behave the same inside a table only invites the question.
+SORTS = {"ER (Adj)": "erAdj", "Win%": "win", "Tot%": "tot", "Sharpe": "sharpe"}
 
 
-# One colour language across the whole tab: turquoise is the long side, orange
-# is the short side, and the spread itself is drawn in the reading ink. It holds
-# in the outrights matrix, in the field table and in every chart, so a colour
-# means the same thing wherever you meet it.
-def _dircol(direction, t):
-    return (t.get("amber", "#96701c") if direction == "short"
-            else t.get("teal", "#0d8f83"))
-
-
-def _heat(v, ref, direction, t) -> str:
-    """Cell wash for the outrights matrix: hue by SIDE, alpha by magnitude.
-
-    A negative ER stays red whichever way the position faces — the orientation
-    picked a side and it still went nowhere, and that is worth seeing before
-    the direction is.
-    """
+def _heat(v, ref, t) -> str:
+    """Cell wash for the outrights matrix: teal above zero, red below, alpha
+    carrying magnitude. ER is signed and centred on zero, so a diverging scale
+    is the honest shape and a sequential one would hide the sign."""
     if v is None:
         return ""
     a = min(abs(v) / (ref or 1), 1.0)
-    col = t.get("neg", "#c2453b") if v < 0 else _dircol(direction, t)
+    col = t.get("neg", "#c2453b") if v < 0 else t.get("teal", "#0d8f83")
     return f'background:{col}{int(a * 58 + 10):02x}'
 
 
@@ -234,27 +226,71 @@ def _thin_note(p: dict, minbars: int) -> str:
             "Nothing here would be a measurement.</div>")
 
 
-def _outrights(d: dict, t: dict) -> str:
-    """ER for every instrument held alone, by window, with its side.
+def _optimal(d: dict, per: str, t: dict) -> str:
+    """Best spread in each window, in a FIXED row order.
 
-    The side matters as much as the number. compute_outrights orients each
-    instrument on Sharpe, so GC can be a long in one window and a short in the
-    next; a matrix of bare ER reports the size of a move and hides which way it
-    went.
+    Not sorted: the five windows always appear as Intraday, WTD, MTD, QTD, YTD
+    whether or not each one built, so the block keeps its shape between reloads
+    and the eye can go straight to the row it wants. Sorting this one by ER
+    (Adj) made the rows move under you as the data changed.
     """
-    wins = [r["window"] for r in d.get("summary", [])
-            if r["window"] in d.get("periods", []) and not r.get("thin")]
-    mats = {w: d["data"][w].get("outER", {}) for w in wins}
-    dirs = {w: d["data"][w].get("outDir", {}) for w in wins}
-    codes = [c for c in U.CODES if any(c in mats[w] for w in wins)]
-    if not (codes and wins):
+    head = ('<th class="l">Window</th><th class="l">Best spread</th>'
+            '<th>ER</th><th>ER (Adj)</th><th>Tot%</th><th>Bars</th>')
+    by_win = {r["window"]: r for r in d.get("summary", [])}
+    body = ""
+    for w in d.get("displayPeriods", d.get("periods", [])):
+        r = by_win.get(w)
+        on = (f'background:{t.get("teal", "#0d8f83")}1a' if w == per else "")
+        if r is None:
+            cellhtml = ('<td class="l faint" colspan="5">not built — no window '
+                        "of this length in the data</td>")
+        elif r.get("thin"):
+            cellhtml = (f'<td class="l faint" colspan="5">insufficient data '
+                        f'({r["bars"]} bars)</td>')
+        else:
+            cellhtml = (f'<td class="l">{esc(r.get("label") or "—")}</td>'
+                        + cell(r.get("er"), 3, "dim")
+                        + cell(r.get("erAdj"), 2, "last")
+                        + pct(r.get("tot"), 1) + cell(r.get("bars"), 0, "faint"))
+        body += f'<tr style="{on}"><td class="l">{esc(w)}</td>{cellhtml}</tr>'
+    return (eyebrow("Optimal spread by time window")
+            + note("ER (Adj) = ER &#215; &#8730;bars. Raw ER decays as "
+                   "1/&#8730;n, so the adjusted figure is the one that "
+                   "compares across windows — 1.0 is the noise floor.")
+            + table(head, body))
+
+
+def _outrights(d: dict, per: str, t: dict) -> str:
+    """ER for every instrument held alone, every window a column.
+
+    Rows sort on the SELECTED window, so the picker at the top of the tab
+    reorders this table too — pick YTD and the year's cleanest trends rise to
+    the top. Thin windows keep their column: the field ranking needs 20 bars
+    before it means anything, but a single instrument's efficiency ratio is
+    still a fact about the window, and leaving the column out just looked like
+    a bug.
+    """
+    wins = [w for w in d.get("displayPeriods", [])
+            if w in d.get("data", {}) and d["data"][w].get("outER")]
+    if not wins:
         return ""
+    mats = {w: d["data"][w]["outER"] for w in wins}
+    codes = [c for c in U.CODES if any(c in mats[w] for w in wins)]
+    if not codes:
+        return ""
+
+    skey = per if per in mats else wins[0]
+    codes.sort(key=lambda c: (mats[skey].get(c) is None,
+                              -(mats[skey].get(c) or 0)))
+
     vals = [abs(v) for w in wins for v in mats[w].values() if v is not None]
     ref = max(vals) if vals else 1
+    ink = t.get("ink", "#0d1418")
+    teal = t.get("teal", "#0d8f83")
 
     head = ('<th class="l">Instrument</th>'
-            + "".join(f'<th>{esc(w)}</th>' for w in wins))
-    ink = t.get("ink", "#0d1418")
+            + "".join(f'<th{" class=\"on\"" if w == skey else ""}>{esc(w)}'
+                      f'</th>' for w in wins))
     body = ""
     for c in codes:
         cells = ""
@@ -263,75 +299,37 @@ def _outrights(d: dict, t: dict) -> str:
             if v is None:
                 cells += '<td class="faint">—</td>'
                 continue
-            dr = dirs[w].get(c, "long")
-            dc = _dircol(dr, t)
-            side = "S" if dr == "short" else "L"
-            cells += (
-                f'<td style="{_heat(v, ref, dr, t)}">'
-                f'<span style="color:{dc};font-size:9.5px;font-weight:700;'
-                f'letter-spacing:.08em;margin-right:5px">{side}</span>'
-                # Explicit ink and weight: the numbers were inheriting a dimmer
-                # value than the table they are the point of.
-                f'<span style="color:{ink};font-weight:600">{v:.3f}</span>'
-                f'</td>')
+            # Explicit ink and weight: these numbers are the table.
+            cells += (f'<td style="{_heat(v, ref, t)}">'
+                      f'<span style="color:{ink};font-weight:600">'
+                      f'{v:.3f}</span></td>')
         body += (f'<tr><td class="l">{swatch(U.SECTOR[c])}{esc(c)} '
                  f'<span class="nm">{esc(U.NAME[c])}</span></td>{cells}</tr>')
-
-    key = (f'<span style="color:{t.get("teal", "#0d8f83")};font-weight:700">'
-           f'L long</span> · <span style="color:{t.get("amber", "#96701c")};'
-           f'font-weight:700">S short</span>')
-    return (eyebrow("Outrights — by time window")
-            + note(f"Each instrument held alone, oriented on Sharpe. {key}. "
-                   "A pair that cannot beat its own legs is not worth the "
-                   "second ticket.")
+    return (eyebrow(f"Outrights — efficiency ratio, ranked on {esc(skey)}")
             + table(head, body))
 
 
-def _optimal(d: dict, per: str, t: dict) -> str:
-    head = ('<th class="l">Window</th><th class="l">Best spread</th>'
-            '<th>ER</th><th>ER (Adj)</th><th>Tot%</th><th>Bars</th>')
-    shown = set(d.get("periods", []))
-    rows = sorted([r for r in d.get("summary", []) if r["window"] in shown],
-                  key=lambda r: -(r.get("erAdj") or -9e9))
-    body = ""
-    for r in rows:
-        on = (f'background:{t.get("teal", "#0d8f83")}1a'
-              if r["window"] == per else "")
-        body += (
-            f'<tr style="{on}"><td class="l">{esc(r["window"])}</td>'
-            + (f'<td class="l faint" colspan="5">insufficient data '
-               f'({r["bars"]} bars)</td>' if r.get("thin") else
-               f'<td class="l">{esc(r.get("label") or "—")}</td>'
-               + cell(r.get("er"), 3, "last") + cell(r.get("erAdj"), 2, "dim")
-               + pct(r.get("tot"), 1) + cell(r.get("bars"), 0, "faint"))
-            + "</tr>")
-    return (eyebrow("Optimal spread by time window")
-            + note("Ranked on ER (Adj) — raw ER decays as 1/&#8730;n, so "
-                   "comparing it across windows flatters the shortest.")
-            + table(head, body))
-
-
-def spreads(d: dict, per: str, sort: str = "ER") -> str:
+def spreads(d: dict, per: str, sort: str = "ER (Adj)") -> str:
     p = d["data"][per]
     t = _tok()
 
-    # Reading order: what each instrument did alone, then the best spread in
-    # each window, then the full field for the window you picked, then the
-    # pictures that justify it.
-    out = _outrights(d, t) + _optimal(d, per, t)
+    # Reading order: best spread per window, then how the single instruments
+    # did, then the full field for the window you picked, then the pictures.
+    out = _optimal(d, per, t) + _outrights(d, per, t)
 
     if p.get("thin"):
         return out + _thin_note(p, d.get("minBars", 20))
 
     teal = t.get("teal", "#0d8f83")
     amber = t.get("amber", "#96701c")
-    key = SORTS.get(sort, "er")
+    key = SORTS.get(sort, "erAdj")
     rows = sorted(p["rows"], key=lambda r: -(r.get(key) if r.get(key)
                                              is not None else -9e9))
+    # Tot% and MDD% adjacent: they are the same question asked twice, what you
+    # made and what you gave back on the way.
     head = ('<th class="l">#</th><th class="l">Long</th><th class="l">Short</th>'
-            '<th>ER</th><th>ER (Adj)</th><th>Tot%</th><th>Win%</th>'
-            '<th>Vol%</th><th>MDD%</th><th>vs leg</th>'
-            '<th class="l">Also top 10 in</th>')
+            '<th>ER</th><th>ER (Adj)</th><th>Win%</th><th>Vol%</th>'
+            '<th>Tot%</th><th>MDD%</th><th>vs leg</th><th>Top 10</th>')
     body = ""
     for i, r in enumerate(rows, 1):
         lg = (f'<span style="color:{teal};font-weight:600">{esc(r["long"])}'
@@ -344,22 +342,26 @@ def spreads(d: dict, per: str, sort: str = "ER") -> str:
         else:
             cls = "pos" if dv >= 0 else "neg"
             legcell = f'<td class="{cls}">{"+" if dv >= 0 else ""}{dv:.0f}%</td>'
+        # A count, not a list of names. The names are still there on hover for
+        # the one row in twenty where you want to know which.
         also = r.get("alsoTop") or []
+        alsocell = ('<td class="faint">—</td>' if not also else
+                    f'<td class="dim" title="{esc(" ".join(also))}">'
+                    f'{len(also)}</td>')
         body += (f'<tr class="{"out" if r["kind"] == "outright" else ""}">'
                  f'<td class="l faint">{i}</td><td class="l">{lg}</td>'
                  f'<td class="l">{sh}</td>'
-                 + cell(r["er"], 3, "last") + cell(r.get("erAdj"), 2, "dim")
-                 + pct(r["tot"], 1) + cell(r["win"], 0, "dim")
-                 + cell(r["vol"], 1, "dim") + cell(r["mdd"], 1, "neg")
-                 + legcell
-                 + f'<td class="l faint">{esc(" ".join(also)) or "—"}</td>'
-                 + "</tr>")
+                 + cell(r["er"], 3, "dim") + cell(r.get("erAdj"), 2, "last")
+                 + cell(r["win"], 0, "dim") + cell(r["vol"], 1, "dim")
+                 + pct(r["tot"], 1) + cell(r["mdd"], 1, "neg")
+                 + legcell + alsocell + "</tr>")
 
     return (out
-            + eyebrow(f"Spreads by time frame — {esc(per)}, sorted by "
+            + eyebrow(f"Spreads by time window — {esc(per)}, ranked on "
                       f"{esc(sort)}")
-            + note("ER against the better of the two legs held alone; negative "
-                   "means the spread did not pay for itself.")
+            + note("vs leg is the spread's ER against the better of its two "
+                   "legs held alone; negative means it did not pay for itself. "
+                   "Top 10 counts the other windows it also ranks in.")
             + table(head, body)
             + chips([p["note"], f'{p["bars"]} bars · {p["instruments"]} '
                      f'instruments', f'{p["start"]} → {p["end"]}',
@@ -375,7 +377,7 @@ def spread_charts(p: dict, t: dict = None) -> str:
     ink = t.get("ink", "#0d1418")
     teal, amber = t.get("teal", "#0d8f83"), t.get("amber", "#96701c")
     neg, pos = t.get("neg", "#c2453b"), t.get("pos", "#0a7c66")
-    mute = t.get("mute", "#66727b")
+    mute, faint = t.get("mute", "#66727b"), t.get("faint", "#97a2ab")
     cards = ""
     for c in p["charts"]:
         series = []
@@ -409,15 +411,36 @@ def spread_charts(p: dict, t: dict = None) -> str:
                 f'{"BEATS" if beats else "LOSES TO"} BEST LEG '
                 f'{"+" if beats else ""}{dv:.0f}%</span>')
 
+        # The same risk columns the table carries, so a shape you like can be
+        # checked here rather than by hunting for its row.
+        def stat(label, val, suffix="", col=None):
+            if val is None:
+                return ""
+            return (f'<span style="white-space:nowrap"><span style="color:'
+                    f'{faint};font-size:9.5px;letter-spacing:.07em;'
+                    f'text-transform:uppercase">{label}</span> '
+                    f'<span style="color:{col or ink};font-weight:600">'
+                    f'{val}{suffix}</span></span>')
+
+        stats = "".join([
+            stat("Sharpe", c.get("sharpe")),
+            stat("Win", c.get("win"), "%"),
+            stat("Vol", c.get("vol"), "%"),
+            stat("MDD", c.get("mdd"), "%", neg),
+            stat("Tot", (f'{"+" if (c.get("tot") or 0) >= 0 else ""}'
+                         f'{c.get("tot")}') if c.get("tot") is not None
+                 else None, "%", pos if (c.get("tot") or 0) >= 0 else neg),
+        ])
         legpart = ("" if best is None else
                    f'<span style="color:{mute}"> · leg {best:.3f}</span>')
         cards += (f'<div class="plot"><div class="ctitle">'
                   f'<b>{c["n"]}. {esc(c["label"])}</b>'
-                  # ER is the ranking key, so it is the one number set in ink.
+                  # ER (Adj) is the ranking key, so it is the number in ink.
                   f'<span><span style="color:{ink};font-weight:700">ER '
                   f'{c["er"]}</span>{legpart}</span></div>'
                   f'<div class="clegend">{legend}{verdict}</div>'
-                  + CH.line_chart(c["t"], series, None, 560, 230, 1) + "</div>")
+                  f'<div class="cstats">{stats}</div>'
+                  + CH.line_chart(c["t"], series, None, 560, 220, 1) + "</div>")
     return (eyebrow("Why they ranked")
             + note("Legs rebased to 100 — turquoise long, orange short — with "
                    "the spread over them. Two charts per instrument at most.")
