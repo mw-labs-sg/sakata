@@ -2,3 +2,7 @@ __pycache__/
 *.pyc
 .venv/
 .DS_Store
+
+# Local audit and review notes. Deliberately outside docs/, which is the
+# GitHub Pages root and would serve them publicly.
+audits/
