@@ -304,29 +304,30 @@ def _outrights(d: dict, per: str, t: dict) -> str:
     # column would always tower over a 229-bar YTD one for no reason but its
     # length. Multiplying by sqrt(bars) removes exactly that, and puts 1.0 at
     # the noise floor in every column.
-    # Two maps: what is shown, and what the rows are ranked by.
-    #
-    # Shown is SIGNED ER — sign carries direction, so a clean downtrend reads
-    # negative instead of being silently flipped to a positive "short". Ranked
-    # is the Sharpe-oriented figure the field already uses, left alone so the
-    # row order does not move.
-    mats, rank = {}, {}
+    # SIGNED ER, adjusted: sign carries direction, so a clean downtrend reads
+    # negative rather than being silently flipped into a positive "short".
+    # This is both what is displayed and what the rows sort on.
+    mats = {}
     for w in live:
         root = max(d["data"][w].get("bars", 0), 1) ** 0.5
         src = d["data"][w].get("outSigned") or d["data"][w]["outER"]
         mats[w] = {k: (None if v is None else round(v * root, 2))
                    for k, v in src.items()}
-        rank[w] = {k: (None if v is None else v * root)
-                   for k, v in d["data"][w]["outER"].items()}
     codes = [c for c in U.CODES if any(c in mats.get(w, {}) for w in live)]
     if not codes:
         return ""
 
     if not live:
         return ""
+    # Sort on the number the column actually shows. Ranking on the hidden
+    # Sharpe-oriented figure kept the row order stable when the display went
+    # signed, but the visible effect was a column that looked unsorted: copper
+    # at +0.48 sat below wheat at +0.04, because the key behind it read -0.52.
+    # Longs descend from the top, shorts ascend from the bottom, and the
+    # strongest conviction on either side is at one end or the other.
     skey = per if per in mats else live[0]
-    codes.sort(key=lambda c: (rank[skey].get(c) is None,
-                              -(rank[skey].get(c) or 0)))
+    codes.sort(key=lambda c: (mats[skey].get(c) is None,
+                              -(mats[skey].get(c) or 0)))
 
     vals = [abs(v) for w in live for v in mats[w].values() if v is not None]
     ref = max(vals) if vals else 1
