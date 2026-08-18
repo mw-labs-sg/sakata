@@ -208,6 +208,12 @@ def digest(p: dict, generated: str = "") -> str:
 # keys that behave the same inside a table only invites the question.
 SORTS = {"ER (Adj)": "erAdj", "Win%": "win", "Tot%": "tot", "Sharpe": "sharpe"}
 
+# How the Size column sizes the two legs. Vol matches dollar RISK and is what
+# the field is ranked on; notional matches dollar EXPOSURE and ignores how
+# twitchy each leg is.
+SIZINGS = {"Vol": ("sizeVol", "sizeVolExact"),
+           "Notional": ("sizeNot", "sizeNotExact")}
+
 
 def _wincols(n_windows: int) -> str:
     """One column grid shared by the two by-window blocks, so their windows sit
@@ -361,7 +367,8 @@ def _outrights(d: dict, per: str, t: dict) -> str:
             + table(head, body, _wincols(len(wins))))
 
 
-def spreads(d: dict, per: str, sort: str = "ER (Adj)") -> str:
+def spreads(d: dict, per: str, sort: str = "ER (Adj)",
+            sizing: str = "Vol") -> str:
     p = d["data"][per]
     t = _tok()
 
@@ -378,7 +385,8 @@ def spreads(d: dict, per: str, sort: str = "ER (Adj)") -> str:
     # made and what you gave back on the way.
     head = ('<th class="l">#</th><th class="l">Long</th><th class="l">Short</th>'
             '<th>ER</th><th>ER (Adj)</th><th>Win%</th><th>Vol%</th>'
-            '<th>Tot%</th><th>MDD%</th><th class="l">Size</th>'
+            '<th>Tot%</th><th>MDD%</th>'
+            f'<th class="l">Size ({esc(sizing.lower())})</th>'
             '<th>vs leg</th><th>Top 10</th>')
     body = ""
     for i, r in enumerate(rows, 1):
@@ -401,8 +409,9 @@ def spreads(d: dict, per: str, sort: str = "ER (Adj)") -> str:
         # Contracts per leg for equal dollar risk, long : short. Not the sigma
         # ratio — a 6J contract carries $78k of notional against $24k for ZC,
         # so matching volatility is not matching size.
-        size = (f'<td class="l dim" title="exact {r["sizeExact"]}">'
-                f'{esc(r["size"])}</td>' if r.get("size")
+        skey, sxkey = SIZINGS.get(sizing, SIZINGS["Vol"])
+        size = (f'<td class="l dim" title="exact {r[sxkey]}">'
+                f'{esc(r[skey])}</td>' if r.get(skey)
                 else '<td class="l faint">—</td>')
         also = r.get("alsoTop") or []
         alsocell = ('<td class="faint">—</td>' if not also else
@@ -419,10 +428,13 @@ def spreads(d: dict, per: str, sort: str = "ER (Adj)") -> str:
     return (out
             + eyebrow(f"Spreads by Time Window — {esc(per)}, ranked on "
                       f"{esc(sort)}")
-            + note("Size is contracts per leg for equal dollar risk, long : "
-                   "short. vs leg is the spread's ER against the better of its "
-                   "two legs held alone; negative means it did not pay for "
-                   "itself. Top 10 counts the other windows it also ranks in.")
+            + note("Size is contracts per leg, long : short — "
+                   + ("matching dollar risk, n × notional × σ, the basis the "
+                      "field is ranked on." if sizing == "Vol" else
+                      "matching dollar exposure, n × notional, ignoring vol.")
+                   + " vs leg is the spread's ER against the better of its two "
+                     "legs held alone; negative means it did not pay for itself. "
+                     "Top 10 counts the other windows it also ranks in.")
             + table(head, body)
             + chips([p["note"], f'{p["bars"]} bars · {p["instruments"]} '
                      f'instruments', f'{p["start"]} → {p["end"]}',
@@ -505,8 +517,11 @@ def spread_charts(p: dict, t: dict = None) -> str:
                   f'<div class="cstats">{stats}</div>'
                   + CH.line_chart(c["t"], series, None, 560, 220, 1) + "</div>")
     return (eyebrow("Why they ranked")
-            + note("Legs rebased to 100 — turquoise long, orange short — with "
-                   "the spread over them. Two charts per instrument at most.")
+            + note("Legs rebased to 100 — turquoise long, orange short — so "
+                   "they sit at equal notional. The spread over them is "
+                   "<b>vol-adjusted</b>, the basis the field is ranked on, so "
+                   "it is not the gap between the two lines. Two charts per "
+                   "instrument at most.")
             + f'<div class="cgrid">{cards}</div>')
 
 # ------------------------------------------------------------------ Curve

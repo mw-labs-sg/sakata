@@ -234,36 +234,45 @@ def _window_field(name, by_bar):
         return None if er is None else _num(er * (n_bars ** 0.5), 2)
 
     def contracts(c):
-        """(n_long, n_short) sized for equal dollar risk, as small integers.
+        """Contracts per leg under both conventions.
 
-        NOT the Ratio column, which is sigma_1/sigma_2 in return space and says
-        nothing about how many tickets to write. A contract of 6J carries
-        $78k of notional against $24k for ZC, so equal vol does not mean equal
-        size. Rounded to a tradeable pair — futures come in whole numbers — and
-        the exact figure ships alongside so the rounding is visible.
+        VOL matches dollar RISK: n x notional x sigma equal on both sides, which
+        is the sizing the field is ranked on, since weighted_spread runs in vol
+        mode. NOTIONAL matches dollar EXPOSURE: n x notional equal, ignoring how
+        twitchy each leg is. They diverge exactly as far as the legs' vols do —
+        on BTC/6J, by a factor of nearly five.
+
+        Neither is the Ratio column, which is sigma_1/sigma_2 in return space
+        and carries no notional at all.
         """
+        out = {"sizeVol": None, "sizeVolExact": None,
+               "sizeNot": None, "sizeNotExact": None}
         if c["kind"] != "pair":
-            return None, None, None
+            return out
         lg, sh = c["long"], c["short"]
         cl, cs = ss.name_of(lg), ss.name_of(sh)
         ml, ms = U.MULT.get(cl), U.MULT.get(cs)
         if not (ml and ms) or lg not in raw_last or sh not in raw_last:
-            return None, None, None
-        risk_l = raw_last[lg] * ml * sigma.get(lg, 0)
-        risk_s = raw_last[sh] * ms * sigma.get(sh, 0)
-        if risk_l <= 0 or risk_s <= 0:
-            return None, None, None
-        exact = risk_s / risk_l          # contracts of long per contract short
-        if not (0 < exact < 1e6):
-            return None, None, None
-        # Normalised so the smaller side reads 1. Forcing whole numbers looked
-        # precise and was not — limit_denominator turned 5.78 into "52:9",
-        # which is nobody's ticket. Size to your own account from this.
-        if exact >= 1:
-            label = f"{exact:.1f} : 1"
-        else:
-            label = f"1 : {1 / exact:.1f}"
-        return label, _num(exact, 3), _num(risk_l * exact / risk_s, 3)
+            return out
+        notl_l, notl_s = raw_last[lg] * ml, raw_last[sh] * ms
+        if notl_l <= 0 or notl_s <= 0:
+            return out
+
+        def label(x):
+            # Smaller side reads 1. Whole contracts were false precision —
+            # limit_denominator turned 5.78 into "52:9", nobody's ticket.
+            if not (0 < x < 1e6):
+                return None
+            return f"{x:.1f} : 1" if x >= 1 else f"1 : {1 / x:.1f}"
+
+        out["sizeNotExact"] = _num(notl_s / notl_l, 3)
+        out["sizeNot"] = label(notl_s / notl_l)
+        sl, sh_ = sigma.get(lg, 0), sigma.get(sh, 0)
+        if sl > 0 and sh_ > 0:
+            v = (notl_s * sh_) / (notl_l * sl)
+            out["sizeVolExact"] = _num(v, 3)
+            out["sizeVol"] = label(v)
+        return out
 
     def leg_delta(c):
         """Pair ER against the better of its two legs, as a percentage.
@@ -286,7 +295,6 @@ def _window_field(name, by_bar):
     rows = []
     for i, c in enumerate(field[:TOP_N], 1):
         best_leg, delta = leg_delta(c)
-        nl, nsh, exact = contracts(c)
         er = _num(c["ER"], 3)
         rows.append({
             "n": i, "kind": c["kind"],
@@ -302,7 +310,7 @@ def _window_field(name, by_bar):
             "mdd": _num(c["MDD%"], 1), "corr": _num(c["Corr"]),
             "ratio": _num(c["Ratio"]),
             "bestLegEr": best_leg, "legDelta": delta,
-            "size": nl, "sizeExact": nsh, "sizeCheck": exact,
+            **contracts(c),
         })
 
     # Charts follow the table's order, capped so one instrument cannot occupy

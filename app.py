@@ -310,12 +310,16 @@ with t[5]:
     if not field.get("periods"):
         st.error("No spread windows built — not enough price history.")
     else:
-        sc = st.columns([5, 4])
+        sc = st.columns([5, 4, 2])
         per = sc[0].radio("Window", field["periods"], horizontal=True,
                           key="sp_window", label_visibility="collapsed")
         spsort = sc[1].radio("Sort", list(R.SORTS), horizontal=True,
                              key="sp_sort", label_visibility="collapsed")
-        UI.md(R.spreads(field, per, spsort))
+        # Which convention the Size column sizes the legs under. Ranking is
+        # unaffected — the field is always computed vol-adjusted.
+        spsize = sc[2].radio("Size", list(R.SIZINGS), horizontal=True,
+                             key="sp_size", label_visibility="collapsed")
+        UI.md(R.spreads(field, per, spsort, spsize))
         with st.expander("Digest — copy this into an LLM"):
             st.code(R.digest(field["data"][per],
                              dt.datetime.now(dt.timezone.utc)
