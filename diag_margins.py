@@ -1,9 +1,10 @@
 """diag_margins.py — why is the Margins tab empty?
 
 A failed scrape and a broken parser look identical from the outside: both end
-with no rows. sk_sources.fetch_margins swallows the exception and returns {},
-so "AMP failed" could be a 403, a timeout, a page restyle, or a missing lxml —
-four problems with four different fixes.
+with no rows — a 403, a timeout, a page restyle or a missing lxml are four
+problems with four different fixes. sk_amp.fetch_amp raises rather than
+swallowing, so the app now names the reason itself; this page is for when you
+want to see each stage separately.
 
 This reports each stage separately: did the request complete, what came back,
 did pandas find tables in it, and did any of them contain our symbols. Drop it
@@ -30,9 +31,11 @@ SOURCES = {
     "AMP margins": "https://www.ampfutures.com/trading-info/margins",
     "CME OUTRIGHT.csv":
         "https://www.cmegroup.com/CmeWS/mvc/Margins/OUTRIGHT.csv",
+    # Resolved rather than hardcoded: a frozen date makes a working endpoint
+    # look dead the moment it rolls past.
     "CME settlements probe":
         "https://www.cmegroup.com/CmeWS/mvc/Settlements/Futures/"
-        "Settlements/425/FUT?tradeDate=08/14/2026",
+        f"Settlements/425/FUT?tradeDate={S.resolve_tradedate() or ''}",
 }
 
 rows = []
@@ -92,8 +95,8 @@ else:
                                    for i, v in hits.items()))
             st.dataframe(sample, use_container_width=True)
             st.caption("If this works, AMP is not blocked and the failure is "
-                       "elsewhere — most likely the $-prefix rule in "
-                       "fetch_margins no longer matches their cell format.")
+                       "in the parser — check sk_amp._is_header and _columns "
+                       "against the header row shown above.")
         else:
             st.warning("Tables parsed, but not one contained our symbols. "
                        "That is a page restyle, not a block — the fix is the "

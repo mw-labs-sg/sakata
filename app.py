@@ -42,12 +42,30 @@ st.set_page_config(page_title="Sakata · futures terminal", layout="wide",
 S.DRY = False
 TTL_FAST, TTL_SLOW = 900, 3600
 
-# Bump this after changing anything in sk_margins, sk_spreads, sk_technical or
-# sk_sources. st.cache_data hashes only the DECORATED function's own source, so
-# editing an imported module leaves every cache here convinced nothing changed
-# — which twice looked like a broken feature and was a stale entry. Passing the
-# string in as an argument makes the cache key depend on it.
-CACHE_V = "2026-08-15f"
+# st.cache_data hashes only the DECORATED function's own source, so editing an
+# imported module leaves every cache here convinced nothing changed — which
+# twice looked like a broken feature and was a stale entry. Passing a version
+# string in as an argument makes the key depend on it.
+#
+# That string used to be bumped by hand, which is a rule you obey until the one
+# time you don't: it read 2026-08-15f while a dozen edits to the compute modules
+# had landed underneath it. Hashing their source instead means the caches
+# invalidate exactly when the code that fills them changes, and never otherwise.
+def _cache_key() -> str:
+    import hashlib
+    h = hashlib.sha256()
+    here = Path(__file__).parent
+    for name in ("sakata_stats", "sk_amp", "sk_board", "sk_calendar",
+                 "sk_curve", "sk_fmt", "sk_margins", "sk_sources",
+                 "sk_spreads", "sk_technical", "sk_universe"):
+        try:
+            h.update((here / f"{name}.py").read_bytes())
+        except OSError:      # a module gone missing is its own kind of change
+            h.update(name.encode())
+    return h.hexdigest()[:12]
+
+
+CACHE_V = _cache_key()
 DOCS = Path(__file__).parent / "docs" / "data"
 
 

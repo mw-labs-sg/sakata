@@ -792,10 +792,16 @@ def calendar(rows, horizon_days: int, warn=None) -> str:
     for r in rows:
         if r["days"] == 0:
             continue
-        wk = r["date"].isocalendar()[1]
+        # Key on (year, week) and label with that week's MONDAY. Keying on the
+        # week number alone would collide across a year boundary, and labelling
+        # from the first row printed "Week of 19 Aug" — a Wednesday — whenever
+        # the earlier days of the week had already gone into the today block.
+        iso = r["date"].isocalendar()
+        wk = (iso[0], iso[1])
         if wk != last_week:
             last_week = wk
-            body += section(f'Week of {r["date"].strftime("%d %b")}')
+            monday = r["date"] - dt.timedelta(days=r["date"].weekday())
+            body += section(f'Week of {monday.strftime("%d %b")}')
         body += row(r)
 
     flag = ""

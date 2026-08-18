@@ -1,23 +1,31 @@
 # Sakata
 
-A futures terminal that is entirely static. GitHub Actions fetches, computes and
-commits JSON; GitHub Pages serves an HTML/CSS/JS viewer over it. No server, no
-Streamlit, no cold start, and nothing that needs a laptop to be awake.
+A futures terminal with two front ends over one set of compute modules.
+
+**Streamlit app** — `streamlit run app.py`. Fetches live and computes on load.
+This is the one to run locally, and the one under active development.
+
+**Static site** — `python build.py` fetches, computes and writes `docs/`, which
+GitHub Pages serves as plain HTML/CSS/JS over committed JSON. No server, no cold
+start, and correct on a phone even when nothing is awake.
 
 **Live:** https://mw-labs-sg.github.io/sakata/
 
-## Why static
+## Why both
 
 Yahoo, CME, AMP and Trading Economics all serve residential and CI IPs while
-rate-limiting hosted-app ranges. A hosted Streamlit app therefore came back
-empty on exactly the tabs that mattered. Fetching on a runner and publishing the
-result removes the whole class of problem, and the page loads instantly on a
-phone.
+rate-limiting hosted-app ranges, so a *hosted* Streamlit app came back empty on
+exactly the tabs that mattered. Running it locally has no such problem, and
+building on a runner sidesteps it for the published site. The compute modules
+are shared, so a fix lands in both.
+
+Requires **Python 3.12+** — `sk_render.py` uses PEP 701 f-strings.
 
 ## Layout
 
-One file per tab, on both sides. A tab is a Python module that computes it
-and a JS file that draws it, and nothing else needs opening to change one.
+One file per tab, on every side. A tab is a Python module that computes it, a
+Python module that renders it for Streamlit, and a JS file that draws it for the
+static site — nothing else needs opening to change one.
 
 ```
 build.py            orchestrator: fetch -> compute -> docs/
@@ -33,6 +41,13 @@ sk_margins.py       Margins
 sk_knowledge.py     Knowledge — five drivers per contract, hand-maintained
 sakata_stats.py     the statistics themselves (Sharpe, ER, alignment, ranking)
 
+app.py              Streamlit orchestrator: caching, tabs, widgets
+sk_render.py        one function per tab -> HTML, for the Streamlit app
+sk_ui.py            palette, CSS bridge, table/number helpers
+sk_charts.py        hand-rolled SVG: bars, lines, candles
+sk_amp.py           AMP + CME margin scraping (supersedes the old sk_sources path)
+sk_calendar.py      Calendar — rules, holidays, ET->SGT conversion
+
 site/               the shell, edited by hand
   index.html        script order lives here
   sakata.css        every colour, as tokens, light and dark
@@ -46,14 +61,17 @@ docs/               PUBLISHED OUTPUT — built, committed, never edited by hand
 .github/workflows/  the build schedule
 ```
 
-Events and News have no Python module. Events is pure calendar arithmetic done
-in the browser, so it stays correct when the build is days old; News is fetched
-live from the page on every load.
+On the static side, Events is pure calendar arithmetic done in the browser, so
+it stays correct when the build is days old, and News is fetched live on load.
+The Streamlit app computes both server-side instead — `sk_calendar.py` and
+`sk_sources.fetch_te`.
 
 ## Run it
 
 ```bash
 pip install -r requirements.txt
+
+streamlit run app.py           # the app
 
 python build.py --dry          # synthetic prices, no network — tests the whole path
 python build.py                # live
