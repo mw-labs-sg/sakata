@@ -105,9 +105,15 @@ def spread_field(mode: str = "vol", v: str = CACHE_V) -> dict:
         return {U.TICKER[c]: df["close"].dropna()
                 for c, df in frames.items() if df is not None and len(df)}
 
-    return SP.build_spreads({"15m": closes(m15), "1h": closes(bb["1h"]),
-                             "4h": closes(bb["4h"]), "1d": closes(bb["1d"])},
-                            mode=mode)
+    out = SP.build_spreads({"15m": closes(m15), "1h": closes(bb["1h"]),
+                            "4h": closes(bb["4h"]), "1d": closes(bb["1d"])},
+                           mode=mode)
+    # Stamped INSIDE the cached function, so it records when the field was
+    # actually built rather than when the page happened to render. A browser
+    # reload reruns the script but returns this same entry untouched, which is
+    # why the numbers can look frozen: they are, until the TTL lapses.
+    out["computed"] = dt.datetime.now(dt.timezone.utc)
+    return out
 
 
 @st.cache_data(ttl=TTL_FAST, show_spinner="reading the ladder…")
@@ -219,6 +225,37 @@ with hc[1]:
         st.rerun()
 
 
+def freshness(stamp, ttl: int) -> str:
+    """How old this data is, and how long before it expires by itself."""
+    if not stamp:
+        return ""
+    age = int((dt.datetime.now(dt.timezone.utc) - stamp).total_seconds())
+    left = max(ttl - age, 0)
+    ago = "just now" if age < 60 else f"{age // 60}m ago"
+    return (f"computed {ago} · refreshes itself in {left // 60}m {left % 60}s"
+            if left else "computed " + ago + " · due to refresh")
+
+
+@st.fragment(run_every=20)
+def autorefresh(stamp, ttl: int) -> None:
+    """Pull the tab through when its data has actually expired.
+
+    A blind timer would rerun the app every N seconds and mostly redraw
+    identical numbers, because st.cache_data hands back the same entry until
+    the TTL lapses — which is exactly why a browser reload appears to do
+    nothing. This watches the clock instead and reruns only once the entry is
+    genuinely stale, so the refetch happens on the first tick after expiry
+    rather than on the next time someone remembers to press the button.
+
+    The fragment reruns itself cheaply; scope="app" is what pulls the whole
+    script through, and only then.
+    """
+    if not stamp:
+        return
+    if (dt.datetime.now(dt.timezone.utc) - stamp).total_seconds() >= ttl:
+        st.rerun(scope="app")
+
+
 def source(label: str, *caches, key: str = "") -> None:
     """A refresh button, hard left, above whatever controls the tab has.
 
@@ -328,7 +365,13 @@ with t[5]:
         # field the Basis above already built.
         spsize = sc[3].radio("Size", list(R.SIZINGS), horizontal=True,
                              key="sp_size", label_visibility="collapsed")
-        UI.md(R.spreads(field, per, spsort, spsize))
+        sc[3].checkbox("Auto", key="sp_auto",
+                       help="Refetch by itself once the 15-minute cache "
+                            "expires, instead of waiting for Refresh")
+        UI.md(R.spreads(field, per, spsort, spsize,
+                        freshness(field.get("computed"), TTL_FAST)))
+        if st.session_state.get("sp_auto"):
+            autorefresh(field.get("computed"), TTL_FAST)
         with st.expander("Digest — copy this into an LLM"):
             st.code(R.digest(field["data"][per],
                              dt.datetime.now(dt.timezone.utc)

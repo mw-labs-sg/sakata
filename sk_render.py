@@ -378,7 +378,7 @@ def _outrights(d: dict, per: str, t: dict) -> str:
 
 
 def spreads(d: dict, per: str, sort: str = "ER (Adj)",
-            sizing: str = "Match basis") -> str:
+            sizing: str = "Match basis", fresh: str = "") -> str:
     p = d["data"][per]
     t = _tok()
 
@@ -457,7 +457,8 @@ def spreads(d: dict, per: str, sort: str = "ER (Adj)",
                      f'instruments', f'{p["start"]} → {p["end"]}']
                     + (["vol-adjusted legs", f'cap {d["cap"]}:1']
                        if d.get("mode") == "vol" else
-                       ["equal-notional legs", "no leg cap"]))
+                       ["equal-notional legs", "no leg cap"])
+                    + ([fresh] if fresh else []))
             + spread_charts(p, t))
 
 
