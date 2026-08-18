@@ -210,33 +210,60 @@ SORTS = {"ER (Adj)": "erAdj", "Win%": "win", "Tot%": "tot", "Sharpe": "sharpe"}
 
 
 def _optimal(d: dict, per: str, t: dict) -> str:
-    """Best spread in each window, in a FIXED row order.
+    """Best spread in each window — windows across the top, metrics down the
+    left, matching the outrights matrix directly beneath it.
 
-    Not sorted: the five windows always appear as Intraday, WTD, MTD, QTD, YTD
-    whether or not each one built, so the block keeps its shape between reloads
-    and the eye can go straight to the row it wants. Sorting this one by ER
-    (Adj) made the rows move under you as the data changed.
+    Transposed for that reason alone: the two blocks answer the same question
+    at different grains, so reading one after the other should not mean
+    re-learning which axis is which. The five windows stay in a FIXED column
+    order whether or not each built, so the shape survives a reload.
     """
-    head = ('<th class="l">Window</th><th class="l">Best spread</th>'
-            '<th>ER</th><th>ER (Adj)</th><th>Tot%</th><th>Bars</th>')
+    wins = d.get("displayPeriods", d.get("periods", []))
     by_win = {r["window"]: r for r in d.get("summary", [])}
-    body = ""
-    for w in d.get("displayPeriods", d.get("periods", [])):
-        r = by_win.get(w)
-        on = (f'background:{t.get("teal", "#0d8f83")}1a' if w == per else "")
-        if r is None:
-            cellhtml = ('<td class="l faint" colspan="5">not built — no window '
-                        "of this length in the data</td>")
-        else:
-            # A short window ranks like any other; the bar count carries the
-            # warning. Refusing to draw it hid WTD for the first two days of
-            # every week, which is when it is most worth a look.
-            bars = cell(r.get("bars"), 0, "warn" if r.get("thin") else "faint")
-            cellhtml = (f'<td class="l">{esc(r.get("label") or "—")}</td>'
-                        + cell(r.get("er"), 3, "dim")
-                        + cell(r.get("erAdj"), 2, "last")
-                        + pct(r.get("tot"), 1) + bars)
-        body += f'<tr style="{on}"><td class="l">{esc(w)}</td>{cellhtml}</tr>'
+    wash = f'background:{t.get("teal", "#0d8f83")}1a'
+    ink = t.get("ink", "#0d1418")
+
+    head = ('<th class="l"></th>'
+            + "".join(f'<th{" class=\"on\"" if w == per else ""}>{esc(w)}</th>'
+                      for w in wins))
+
+    def row(label, fn, cls=""):
+        cells = ""
+        for w in wins:
+            r = by_win.get(w)
+            inner = "—" if r is None else fn(r)
+            style = wash if w == per else ""
+            c = f' class="{cls}"' if cls else ""
+            cells += f'<td{c} style="{style}">{inner}</td>'
+        return f'<tr><td class="l">{esc(label)}</td>{cells}</tr>'
+
+    def signed(v):
+        if v is None:
+            return "—"
+        col = t.get("pos", "#0a7c66") if v >= 0 else t.get("amber", "#96701c")
+        return (f'<span style="color:{col}">{"+" if v >= 0 else ""}'
+                f'{num(v, 1)}</span>')
+
+    def bars(r):
+        # A short window still ranks; the count carries the warning.
+        v = r.get("bars")
+        if v is None:
+            return "—"
+        col = t.get("amber", "#96701c") if r.get("thin") else t.get("faint")
+        return f'<span style="color:{col}">{v}</span>'
+
+    body = (
+        row("Best spread",
+            lambda r: f'<span style="color:{ink};font-weight:600">'
+                      f'{esc(r.get("label") or "—")}</span>', "l")
+        + row("ER (Adj)",
+              lambda r: (f'<span style="color:{ink};font-weight:600">'
+                         f'{num(r.get("erAdj"), 2)}</span>'
+                         if r.get("erAdj") is not None else "—"))
+        + row("ER", lambda r: num(r.get("er"), 3) or "—", "dim")
+        + row("Tot%", lambda r: signed(r.get("tot")))
+        + row("Bars", bars))
+
     return (eyebrow("Optimal Spread by Time Window")
             + note("ER (Adj) = ER &#215; &#8730;bars. Raw ER decays as "
                    "1/&#8730;n, so the adjusted figure is the one that "
