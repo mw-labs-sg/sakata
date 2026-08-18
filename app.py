@@ -185,7 +185,8 @@ UI.apply(st.session_state.dark)
 
 hc = st.columns([16, 1], vertical_alignment="center")
 with hc[0]:
-    UI.header(dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M") + " UTC · live")
+    UI.header(dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d %H:%M")
+              + " UTC · live")
 with hc[1]:
     # Anchored so the CSS can lift it onto the tab strip. Theme is the only
     # thing that belongs here now: refresh moved into the tabs, because the
@@ -197,7 +198,7 @@ with hc[1]:
         st.rerun()
 
 
-def source(label: str, *caches) -> None:
+def source(label: str, *caches, key: str = "") -> None:
     """A refresh button, hard left, above whatever controls the tab has.
 
     The source line that used to sit here is gone. It named where the data
@@ -208,7 +209,11 @@ def source(label: str, *caches) -> None:
     if not caches:
         return
     c = st.columns([1, 9])
-    if c[0].button("Refresh", key=f"rf_{label[:24]}", help="Refetch this tab"):
+    # Keyed on the tab, not on a slice of the source line: two tabs whose
+    # prose happened to share 24 characters would have collided into a
+    # DuplicateWidgetID at import time.
+    if c[0].button("Refresh", key=f"rf_{key or label[:24]}",
+                   help="Refetch this tab"):
         for fn in caches:
             fn.clear()
         st.rerun()
@@ -223,7 +228,7 @@ t = st.tabs([x.upper() for x in TABS])
 
 # ----------------------------------------------------------------- Board
 with t[0]:
-    source("Yahoo · daily closes", prices)
+    source("Yahoo · daily closes", prices, key="board")
     hz = st.radio("Horizon", R.HZ, horizontal=True, key="board_hz",
                   label_visibility="collapsed")
     daily = prices("1d", "10y")
@@ -234,7 +239,7 @@ with t[0]:
 
 # ------------------------------------------------------------------ News
 with t[1]:
-    source("Trading Economics · per-contract commentary", news_data)
+    source("Trading Economics · per-contract commentary", news_data, key="news")
     nd = news_data()
     UI.md(R.news(nd.get("markets", {}), nd.get("warn", "")))
 
@@ -253,7 +258,7 @@ with t[2]:
 
 # --------------------------------------------------------------- Margins
 with t[3]:
-    source("AMP margins + CME margin file · Yahoo OHLC for vol", margin_data)
+    source("AMP margins + CME margin file · Yahoo OHLC for vol", margin_data, key="margins")
     msort = st.radio("Sort", list(R.MARGIN_SORTS), horizontal=True,
                      key="mg_sort", label_visibility="collapsed")
     UI.md(R.margins(margin_data(), msort))
@@ -265,7 +270,7 @@ with t[4]:
     # byte-identical bars and Refresh fetched nothing — while Board's Refresh
     # DID clear prices, so the two tabs could then read different fetches of the
     # same daily series.
-    source("Yahoo · 1H, 4H, 1D, 1W", technical_grid, by_bar, prices)
+    source("Yahoo · 1H, 4H, 1D, 1W", technical_grid, by_bar, prices, key="technical")
     grid = technical_grid()
     codes = [c for c in U.CODES if c in grid["grid"]]
     if not codes:
@@ -282,7 +287,7 @@ with t[4]:
 
 # --------------------------------------------------------------- Spreads
 with t[5]:
-    source("Yahoo · 15m, 1H, 4H, 1D", spread_field, by_bar, prices)
+    source("Yahoo · 15m, 1H, 4H, 1D", spread_field, by_bar, prices, key="spreads")
     field = spread_field()
     if not field.get("periods"):
         st.error("No spread windows built — not enough price history.")
@@ -295,12 +300,13 @@ with t[5]:
         UI.md(R.spreads(field, per, spsort))
         with st.expander("Digest — copy this into an LLM"):
             st.code(R.digest(field["data"][per],
-                             dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M")),
+                             dt.datetime.now(dt.timezone.utc)
+                             .strftime("%Y-%m-%d %H:%M")),
                     language=None)
 
 # ----------------------------------------------------------------- Curve
 with t[6]:
-    source("CME settlements", curve_data)
+    source("CME settlements", curve_data, key="curve")
     cd = curve_data()
     codes = list(cd.get("curves", {}))
     if not codes:
