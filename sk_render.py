@@ -378,7 +378,8 @@ def spreads(d: dict, per: str, sort: str = "ER (Adj)") -> str:
     # made and what you gave back on the way.
     head = ('<th class="l">#</th><th class="l">Long</th><th class="l">Short</th>'
             '<th>ER</th><th>ER (Adj)</th><th>Win%</th><th>Vol%</th>'
-            '<th>Tot%</th><th>MDD%</th><th>vs leg</th><th>Top 10</th>')
+            '<th>Tot%</th><th>MDD%</th><th class="l">Size</th>'
+            '<th>vs leg</th><th>Top 10</th>')
     body = ""
     for i, r in enumerate(rows, 1):
         lg = (f'<span style="color:{teal};font-weight:600">{esc(r["long"])}'
@@ -397,6 +398,12 @@ def spreads(d: dict, per: str, sort: str = "ER (Adj)") -> str:
                        f'style="{wash}">{"+" if beat else ""}{dv:.0f}%</td>')
         # A count, not a list of names. The names are still there on hover for
         # the one row in twenty where you want to know which.
+        # Contracts per leg for equal dollar risk, long : short. Not the sigma
+        # ratio — a 6J contract carries $78k of notional against $24k for ZC,
+        # so matching volatility is not matching size.
+        size = (f'<td class="l dim" title="exact {r["sizeExact"]}">'
+                f'{esc(r["size"])}</td>' if r.get("size")
+                else '<td class="l faint">—</td>')
         also = r.get("alsoTop") or []
         alsocell = ('<td class="faint">—</td>' if not also else
                     f'<td class="dim" title="{esc(" ".join(also))}">'
@@ -407,14 +414,15 @@ def spreads(d: dict, per: str, sort: str = "ER (Adj)") -> str:
                  + cell(r["er"], 3, "dim") + cell(r.get("erAdj"), 2, "last")
                  + cell(r["win"], 0, "dim") + cell(r["vol"], 1, "dim")
                  + pct(r["tot"], 1) + cell(r["mdd"], 1, "warn")
-                 + legcell + alsocell + "</tr>")
+                 + size + legcell + alsocell + "</tr>")
 
     return (out
             + eyebrow(f"Spreads by Time Window — {esc(per)}, ranked on "
                       f"{esc(sort)}")
-            + note("vs leg is the spread's ER against the better of its two "
-                   "legs held alone; negative means it did not pay for itself. "
-                   "Top 10 counts the other windows it also ranks in.")
+            + note("Size is contracts per leg for equal dollar risk, long : "
+                   "short. vs leg is the spread's ER against the better of its "
+                   "two legs held alone; negative means it did not pay for "
+                   "itself. Top 10 counts the other windows it also ranks in.")
             + table(head, body)
             + chips([p["note"], f'{p["bars"]} bars · {p["instruments"]} '
                      f'instruments', f'{p["start"]} → {p["end"]}',
