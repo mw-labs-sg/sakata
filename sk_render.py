@@ -261,9 +261,11 @@ def _optimal(d: dict, per: str, t: dict) -> str:
         return f'<span style="color:{col}">{v}</span>'
 
     body = (
+        # Right-aligned like the numbers beneath it. Left-aligning this one row
+        # put a ragged cell at the top of every otherwise clean column.
         row("Best spread",
             lambda r: f'<span style="color:{ink};font-weight:600">'
-                      f'{esc(r.get("label") or "—")}</span>', "l")
+                      f'{esc(r.get("label") or "—")}</span>')
         + row("ER (Adj)",
               lambda r: (f'<span style="color:{ink};font-weight:600">'
                          f'{num(r.get("erAdj"), 2)}</span>'
@@ -853,7 +855,7 @@ def news(markets: dict, warn: str = "") -> str:
             # a class selector here.
             src = U.TE_PAGE.get(code, "")
             link = (f'<a href="{esc(src)}" target="_blank" rel="noopener" '
-                    f'style="color:{t["teal"]};text-decoration:none;'
+                    f'style="color:{t.get("teal", "#0d8f83")};text-decoration:none;'
                     f'font-size:11px">source ↗</a>' if src else "")
             # The headline is shown because the blurb is whatever paragraph sits
             # under it, and TE's market pages lead with a related-but-different
@@ -872,8 +874,8 @@ def news(markets: dict, warn: str = "") -> str:
                 + f'<p>{esc(m["blurb"])}</p>'
                 f'<div style="display:flex;justify-content:space-between;'
                 f'align-items:baseline;margin-top:10px;padding-top:8px;'
-                f'border-top:1px solid {t["line"]}">'
-                f'<span style="font-size:11px;color:{t["faint"]}">'
+                f'border-top:1px solid {t.get("line", "#e0e5e8")}">'
+                f'<span style="font-size:11px;color:{t.get("faint", "#97a2ab")}">'
                 f'{esc(m.get("date") or "")}</span>{link}</div></div>')
         if items:
             cols += (f'<div>{eyebrow(group)}<div class="card">{items}</div>'
