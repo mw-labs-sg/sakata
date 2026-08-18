@@ -107,7 +107,7 @@ def technical(d: dict, code: str, hz: str, dec: int) -> str:
                       f'{"+" if c["score"] > 0 else ""}{c["score"]}</td>')
         body += (f'<tr><td class="l ind">{esc(u_code)} '
                  f'{esc(U.NAME[u_code])}</td>{cells}'
-                 f'<td style="color:{C["pos"] if tot >= 0 else C["neg"]};'
+                 f'<td style="color:{C["pos"] if tot >= 0 else C["amber"]};'
                  f'font-weight:600">{"+" if tot > 0 else ""}{tot}</td></tr>')
 
     g = grid.get(code, {})
@@ -258,7 +258,17 @@ def _outrights(d: dict, per: str, t: dict) -> str:
             if w in d.get("data", {}) and d["data"][w].get("outER")]
     if not wins:
         return ""
-    mats = {w: d["data"][w]["outER"] for w in wins}
+    # ER (Adj), not raw ER. This matrix compares ACROSS windows by
+    # construction — the columns are the windows — which is the one place raw
+    # ER cannot be read straight: it decays as 1/sqrt(n), so a 64-bar Intraday
+    # column would always tower over a 229-bar YTD one for no reason but its
+    # length. Multiplying by sqrt(bars) removes exactly that, and puts 1.0 at
+    # the noise floor in every column.
+    mats = {}
+    for w in wins:
+        root = max(d["data"][w].get("bars", 0), 1) ** 0.5
+        mats[w] = {k: (None if v is None else round(v * root, 2))
+                   for k, v in d["data"][w]["outER"].items()}
     codes = [c for c in U.CODES if any(c in mats[w] for w in wins)]
     if not codes:
         return ""
@@ -288,10 +298,11 @@ def _outrights(d: dict, per: str, t: dict) -> str:
             # were meant to rank, and the ordering already says what the
             # gradient was saying.
             cells += (f'<td><span style="color:{ink};font-weight:600">'
-                      f'{v:.3f}</span></td>')
+                      f'{v:.2f}</span></td>')
         body += (f'<tr><td class="l">{swatch(U.SECTOR[c])}{esc(c)} '
                  f'<span class="nm">{esc(U.NAME[c])}</span></td>{cells}</tr>')
-    return (eyebrow(f"Outrights by Time Window — ranked on {esc(skey)}")
+    return (eyebrow(f"Outrights by Time Window — ER (Adj), ranked on "
+                    f"{esc(skey)}")
             + table(head, body))
 
 
@@ -323,8 +334,12 @@ def spreads(d: dict, per: str, sort: str = "ER (Adj)") -> str:
         if dv is None:
             legcell = '<td class="faint">—</td>'
         else:
-            cls = "pos" if dv >= 0 else "neg"
-            legcell = f'<td class="{cls}">{"+" if dv >= 0 else ""}{dv:.0f}%</td>'
+            # The column that decides whether the second ticket was worth it,
+            # so beating the leg gets a wash rather than only coloured text.
+            beat = dv >= 0
+            wash = (f'background:{t.get("pos", "#0a7c66")}1f' if beat else "")
+            legcell = (f'<td class="{"pos" if beat else "warn"}" '
+                       f'style="{wash}">{"+" if beat else ""}{dv:.0f}%</td>')
         # A count, not a list of names. The names are still there on hover for
         # the one row in twenty where you want to know which.
         also = r.get("alsoTop") or []
@@ -359,7 +374,9 @@ def spread_charts(p: dict, t: dict = None) -> str:
     t = t or _tok()
     ink = t.get("ink", "#0d1418")
     teal, amber = t.get("teal", "#0d8f83"), t.get("amber", "#96701c")
-    neg, pos = t.get("neg", "#c2453b"), t.get("pos", "#0a7c66")
+    # Amber, not red: a spread losing to its leg is a worse choice, not a
+    # blown-up one, and red is no longer used for numbers anywhere.
+    neg, pos = t.get("amber", "#96701c"), t.get("pos", "#0a7c66")
     mute, faint = t.get("mute", "#66727b"), t.get("faint", "#97a2ab")
     cards = ""
     for c in p["charts"]:

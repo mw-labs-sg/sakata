@@ -99,6 +99,17 @@ SECTOR_COL = {}
 BIAS_COL = {}
 
 
+def _rgb(hexcol: str) -> tuple:
+    """'#d3a355' -> (211, 163, 85). Falls back to a mid grey on anything odd."""
+    h = str(hexcol).strip().lstrip("#")
+    if len(h) == 3:
+        h = "".join(c * 2 for c in h)
+    try:
+        return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
+    except (ValueError, IndexError):
+        return (150, 112, 28)
+
+
 def _palette(dark: bool) -> None:
     """The same mapping core.js builds, minus the getComputedStyle round trip."""
     t = tokens(dark)
@@ -126,12 +137,21 @@ def _palette(dark: bool) -> None:
         "Metals": v("sec-metals", "#a8894f"), "Grains": v("sec-grains", "#7d8f4e"),
         "Softs": v("sec-softs", "#4f8f7d"),
     })
+    # The bias ladder keeps its diverging shape but loses the red half. Three
+    # amber steps carry -1/-2/-3 by intensity, so a short bias still reads as
+    # stronger the further it goes without the score column looking like an
+    # alarm. sakata.css keeps its own biasn tokens for the static site; this
+    # only re-points the Python palette.
+    ar, ag, ab = _rgb(C["amber"])
+
+    def amber(alpha):
+        return f"rgba({ar},{ag},{ab},{alpha})"
+
     BIAS_COL.clear()
     BIAS_COL.update({
         "3": v("bias3", "#0d5f58"), "2": v("bias2", "#0d9488"),
         "1": v("bias1", "#5fbcb1"), "0": v("bias0", "#9aa4ad"),
-        "-1": v("biasn1", "#dda29e"), "-2": v("biasn2", "#cf5a54"),
-        "-3": v("biasn3", "#a33f3a"),
+        "-1": amber(0.60), "-2": amber(0.82), "-3": amber(1),
     })
 
 
@@ -235,10 +255,17 @@ pre, pre *, code {{ color: {t.get('ink')} !important; }}
    its own box. Addressed through the stable testid plus the inner role=group. */
 [data-testid="stSelectbox"] div[role="group"] {{ background: {t.get('surface')} !important; border-color: {t.get('line')} !important; font-size: 13px; }}
 .stRadio [role="radiogroup"] {{ gap: 4px; flex-wrap: wrap; }}
-/* Elevated, not lost. Red is reserved for a number that went the wrong way; a
-   high percentile or a drawdown magnitude is a caution, and using the same red
-   for both made a calm table look like a bleeding one. */
-.warn {{ color: {t.get('amber')}; }}
+/* No red on numbers, anywhere in the app. sakata.css paints .neg red for the
+   static site; here every negative figure — Board changes, Tot%, roll and
+   carry, vs-leg, the Sigma column — reads amber instead, so the tab uses one
+   two-colour language throughout: teal is the good side, amber the other one.
+   The sign character and the token still carry the direction; only the alarm
+   goes. .warn is the same colour by intent: an elevated percentile and a
+   negative number are both "look here", not "you lost money". */
+.warn, td.neg, .neg {{ color: {t.get('amber')} !important; }}
+/* Charts keep their own up/down tokens — a candle body is a mark, not a
+   number — so this deliberately does not reach inside svg. */
+svg .neg {{ color: inherit !important; }}
 /* Spread charts: two per row rather than three. Twelve cards three-up made each
    one too short to read the shape that justifies the row. */
 .cgrid {{ grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 26px 22px !important; }}
