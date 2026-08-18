@@ -32,15 +32,6 @@ def _bars_per_year(index) -> float:
     return float(np.clip(len(index) / yrs, 12, 400))
 
 
-def _atr(df, period=14):
-    if df is None or len(df) < period + 1:
-        return None
-    hi, lo, cl = df["high"], df["low"], df["close"]
-    pc = cl.shift(1)
-    tr = pd.concat([(hi - lo), (hi - pc).abs(), (lo - pc).abs()], axis=1).max(axis=1)
-    return float(tr.rolling(period).mean().iloc[-1])
-
-
 def _rsi(df, period=14):
     """Wilder's RSI (1978) on daily closes.
 

@@ -303,8 +303,3 @@ def build(days: int = 28, symbol: str = "All", today=None) -> list:
         r["when"] = ("today" if n == 0 else "tomorrow" if n == 1
                      else f"in {n}d")
     return rows
-
-
-def symbols() -> list:
-    used = {s for _, _, _, syms, _, _ in EVENTS for s in syms}
-    return ["All"] + [c for c in U.CODES if c in used]

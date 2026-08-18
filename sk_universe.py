@@ -32,17 +32,14 @@ GROUPS = {
     "Financials":  ["Indices", "Bonds", "Currencies", "Crypto"],
     "Commodities": ["Energy", "Metals", "Grains", "Softs"],
 }
-SECTOR_ORDER = [s for secs in GROUPS.values() for s in secs]
 GROUP_OF = {sec: g for g, secs in GROUPS.items() for sec in secs}
 
 CODES = [i[0] for i in INSTRUMENTS]
 TICKERS = [i[2] for i in INSTRUMENTS]
 NAME = {i[0]: i[1] for i in INSTRUMENTS}
 TICKER = {i[0]: i[2] for i in INSTRUMENTS}
-CODE_OF = {i[2]: i[0] for i in INSTRUMENTS}
 DEC = {i[0]: i[3] for i in INSTRUMENTS}
 SECTOR = {i[0]: i[4] for i in INSTRUMENTS}
-LABEL = {i[0]: f"{i[0]}  {i[1]}" for i in INSTRUMENTS}
 
 # CME productIds for the settlement/curve endpoint. Missing = no curve.
 CME_PRODUCT = {

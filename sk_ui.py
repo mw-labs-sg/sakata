@@ -16,7 +16,6 @@ from pathlib import Path
 import streamlit as st
 
 CSS_PATH = Path(__file__).parent / "site" / "sakata.css"
-W = 1100          # nominal SVG width; viewBox scales it to the container
 
 # Offset of the theme switch from the top of .block-container, so it centres on
 # the tab rule. Measured against the live DOM rather than guessed: the tab strip
@@ -411,14 +410,3 @@ def chips(items) -> str:
     return ('<div class="chips">' +
             "".join(f'<span class="chip">{esc(c)}</span>' for c in items) +
             "</div>")
-
-
-def age_text(mins) -> str:
-    if mins is None:
-        return ""
-    if mins < 2:
-        return "just now"
-    if mins < 60:
-        return f"{mins}m ago"
-    h = mins // 60
-    return f"{h}h ago" if h < 24 else f"{h // 24}d ago"

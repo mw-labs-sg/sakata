@@ -52,39 +52,6 @@ def pos_label(c):
     return "—"
 
 
-# --------------------------------------------------------------- periods
-PERIOD_BARS = {"WTD": "1h", "MTD": "4h", "QTD": "1d", "YTD": "1wk"}
-BAR_NAMES = {"1h": "1-hour", "4h": "4-hour", "1d": "daily", "1wk": "weekly"}
-
-
-def period_start(period, now=None):
-    now = (now or datetime.now()).replace(hour=0, minute=0, second=0, microsecond=0)
-    if period == "WTD":
-        return now - _dt.timedelta(days=now.weekday())
-    if period == "MTD":
-        return now.replace(day=1)
-    if period == "QTD":
-        return now.replace(month=((now.month - 1) // 3) * 3 + 1, day=1)
-    if period == "YTD":
-        return now.replace(month=1, day=1)
-    return None
-
-
-def period_end(period, now=None):
-    now = (now or datetime.now()).replace(hour=0, minute=0, second=0, microsecond=0)
-    if period == "WTD":
-        return period_start("WTD", now) + _dt.timedelta(days=7)
-    if period == "MTD":
-        return (now.replace(day=28) + _dt.timedelta(days=8)).replace(day=1)
-    if period == "QTD":
-        q0 = ((now.month - 1) // 3) * 3 + 1
-        return (now.replace(year=now.year + 1, month=1, day=1) if q0 == 10
-                else now.replace(month=q0 + 3, day=1))
-    if period == "YTD":
-        return now.replace(year=now.year + 1, month=1, day=1)
-    return None
-
-
 def sharpe_se(span_days):
     """Standard error of an annualised Sharpe over a calendar span.
 

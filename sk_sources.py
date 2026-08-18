@@ -246,47 +246,6 @@ def fetch_curves() -> dict:
 AMP_URL = "https://www.ampfutures.com/trading-info/margins"
 
 
-def fetch_margins() -> dict:
-    """{code: {maint, day}} scraped by matching cell VALUES, not headers."""
-    if DRY:
-        return {c: {"maint": 1000 + 500 * (i % 7), "day": 500 + 250 * (i % 5)}
-                for i, c in enumerate(U.CODES)}
-    want = {c for c in U.CODES}
-    out = {}
-    try:
-        html = session().get(AMP_URL, timeout=25).text
-    except Exception as e:
-        print(f"    AMP failed: {str(e)[:60]}")
-        return out
-    for t in pd.read_html(io.StringIO(html)):
-        for row in t.itertuples(index=False):
-            cells = [str(c).strip() for c in row if str(c).strip().lower() != "nan"]
-            sym = next((c for c in cells if c in want), None)
-            if not sym or sym in out:
-                continue
-            monies = [m for m in (num(c) for c in cells
-                                  if str(c).strip().startswith("$")) if m is not None]
-            if not monies:
-                continue
-            out[sym] = {"maint": monies[0],
-                        "day": monies[1] if len(monies) > 1 else None}
-    # BTC/ETH are not on AMP's list — CME's outright CSV carries them.
-    for code in ("BTC", "ETH"):
-        if code in out:
-            continue
-        try:
-            csv = session().get(
-                "https://www.cmegroup.com/CmeWS/mvc/Margins/OUTRIGHT.csv",
-                timeout=25).text
-            df = pd.read_csv(io.StringIO(csv))
-            hit = df[df["Product Code"].astype(str).str.strip().str.upper() == code]
-            if not hit.empty:
-                out[code] = {"maint": num(hit.iloc[0]["Maintenance"]), "day": None}
-        except Exception:
-            pass
-    return out
-
-
 # ------------------------------------------------------------------- news
 # What a story about THIS instrument would mention. Used to choose among the
 # news anchors on a market page rather than taking whichever one the page leads
@@ -352,21 +311,3 @@ def fetch_te(url: str, code: str = "") -> dict:
             break
     return {"headline": headline, "blurb": blurb, "date": date,
             "onTopic": on_topic}
-
-
-def fetch_news() -> dict:
-    """Per-instrument commentary only. The CoinDesk wire was dropped: a
-    general crypto feed is not instrument commentary, it pushed the part
-    that is below the fold, and it is read better in a reader."""
-    if DRY:
-        return {"markets": {c: {"blurb": f"Synthetic commentary for {c}.",
-                                "date": str(dt.date.today())}
-                            for c in list(U.TE_PAGE)[:6]}}
-    markets = {}
-    for code, url in U.TE_PAGE.items():
-        d = fetch_te(url, code)
-        if d.get("blurb"):
-            markets[code] = {"blurb": d["blurb"], "date": d.get("date", "")}
-        else:
-            print(f"    TE {code}: nothing parsed")
-    return {"markets": markets}
