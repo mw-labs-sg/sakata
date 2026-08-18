@@ -209,6 +209,14 @@ def digest(p: dict, generated: str = "") -> str:
 SORTS = {"ER (Adj)": "erAdj", "Win%": "win", "Tot%": "tot", "Sharpe": "sharpe"}
 
 
+def _wincols(n_windows: int) -> str:
+    """One column grid shared by the two by-window blocks, so their windows sit
+    on the same verticals. Both tables must therefore carry the SAME number of
+    columns — which is why the outrights matrix now renders every display
+    window, dashing the ones with no data rather than dropping the column."""
+    return '<col style="width:21%">' + "<col>" * n_windows
+
+
 def _optimal(d: dict, per: str, t: dict) -> str:
     """Best spread in each window — windows across the top, metrics down the
     left, matching the outrights matrix directly beneath it.
@@ -268,7 +276,7 @@ def _optimal(d: dict, per: str, t: dict) -> str:
             + note("ER (Adj) = ER &#215; &#8730;bars. Raw ER decays as "
                    "1/&#8730;n, so the adjusted figure is the one that "
                    "compares across windows — 1.0 is the noise floor.")
-            + table(head, body))
+            + table(head, body, _wincols(len(wins))))
 
 
 def _outrights(d: dict, per: str, t: dict) -> str:
@@ -281,8 +289,11 @@ def _outrights(d: dict, per: str, t: dict) -> str:
     still a fact about the window, and leaving the column out just looked like
     a bug.
     """
-    wins = [w for w in d.get("displayPeriods", [])
-            if w in d.get("data", {}) and d["data"][w].get("outER")]
+    # Every display window, present or not — a dropped column would knock this
+    # table out of alignment with the one above it.
+    wins = list(d.get("displayPeriods", []))
+    live = [w for w in wins if w in d.get("data", {})
+            and d["data"][w].get("outER")]
     if not wins:
         return ""
     # ER (Adj), not raw ER. This matrix compares ACROSS windows by
@@ -292,19 +303,21 @@ def _outrights(d: dict, per: str, t: dict) -> str:
     # length. Multiplying by sqrt(bars) removes exactly that, and puts 1.0 at
     # the noise floor in every column.
     mats = {}
-    for w in wins:
+    for w in live:
         root = max(d["data"][w].get("bars", 0), 1) ** 0.5
         mats[w] = {k: (None if v is None else round(v * root, 2))
                    for k, v in d["data"][w]["outER"].items()}
-    codes = [c for c in U.CODES if any(c in mats[w] for w in wins)]
+    codes = [c for c in U.CODES if any(c in mats.get(w, {}) for w in live)]
     if not codes:
         return ""
 
-    skey = per if per in mats else wins[0]
+    if not live:
+        return ""
+    skey = per if per in mats else live[0]
     codes.sort(key=lambda c: (mats[skey].get(c) is None,
                               -(mats[skey].get(c) or 0)))
 
-    vals = [abs(v) for w in wins for v in mats[w].values() if v is not None]
+    vals = [abs(v) for w in live for v in mats[w].values() if v is not None]
     ref = max(vals) if vals else 1
     ink = t.get("ink", "#0d1418")
     teal = t.get("teal", "#0d8f83")
@@ -316,7 +329,7 @@ def _outrights(d: dict, per: str, t: dict) -> str:
     for c in codes:
         cells = ""
         for w in wins:
-            v = mats[w].get(c)
+            v = mats.get(w, {}).get(c)
             if v is None:
                 cells += '<td class="faint">—</td>'
                 continue
@@ -330,7 +343,7 @@ def _outrights(d: dict, per: str, t: dict) -> str:
                  f'<span class="nm">{esc(U.NAME[c])}</span></td>{cells}</tr>')
     return (eyebrow(f"Outrights by Time Window — ER (Adj), ranked on "
                     f"{esc(skey)}")
-            + table(head, body))
+            + table(head, body, _wincols(len(wins))))
 
 
 def spreads(d: dict, per: str, sort: str = "ER (Adj)") -> str:

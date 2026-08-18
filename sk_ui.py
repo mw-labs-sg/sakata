@@ -383,8 +383,15 @@ def cell(v, d=2, cls="") -> str:
     return f'<td class="{cls}">{n}</td>'
 
 
-def table(head: str, body: str) -> str:
-    return (f'<div class="card scroll"><table><thead><tr>{head}</tr></thead>'
+def table(head: str, body: str, cols: str = "") -> str:
+    """`cols` is an optional <colgroup>. Passing one also switches the table to
+    a fixed layout, which is the only way two stacked tables can be made to
+    share a column grid — auto layout sizes each table independently from its
+    own content, so the Spreads blocks drifted out of line with each other."""
+    fixed = ' style="table-layout:fixed"' if cols else ""
+    group = f"<colgroup>{cols}</colgroup>" if cols else ""
+    return (f'<div class="card scroll"><table{fixed}>{group}'
+            f"<thead><tr>{head}</tr></thead>"
             f"<tbody>{body}</tbody></table></div>")
 
 
