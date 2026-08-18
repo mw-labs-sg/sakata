@@ -128,6 +128,35 @@ def r2_signed(r):
     return v if slope > 0 else -v
 
 
+def _observed(index) -> np.ndarray:
+    """Mask of steps that happened during hours the window actually watched.
+
+    align_frames(intraday=True) keeps only the timestamps every instrument
+    shares, so an intraday window is a handful of hours a day stitched together
+    — measured on a live Intraday field, 47 steps of 15 minutes plus one of an
+    hour and one of fifteen and a half. ER divides net progress by path length,
+    and an unobserved overnight jump contributes its whole move to the numerator
+    while costing a single step of the denominator. That is not efficiency, it
+    is a gap being counted as a trend: ES drew 79% of its net move from two
+    steps worth 40% of its path, ranking 3rd of 19 on the strength of hours this
+    window cannot see. Excluding those steps drops it to 9th and lifts BTC, which
+    trades around the clock and had no gap to exploit, from 8th to 2nd.
+
+    Daily and weekly bars are left alone. A weekend is not an unobserved gap in
+    a daily series — Monday's bar is one honest observation of one trading day —
+    so masking there would throw away every Monday.
+    """
+    if not isinstance(index, pd.DatetimeIndex) or len(index) < 3:
+        return None
+    step = pd.Series(index[1:] - index[:-1])
+    modal = step.mode()
+    if modal.empty or modal[0] >= pd.Timedelta(days=1):
+        return None
+    keep = np.ones(len(index), bool)
+    keep[1:] = (index[1:] - index[:-1]) <= modal[0] * 2
+    return keep
+
+
 def efficiency(r):
     """Kaufman efficiency ratio: |net move| / path length, signed.
 
@@ -149,10 +178,14 @@ def efficiency(r):
     # ZW by 42%, ZC by 24% and 6E by 17%, enough to reorder the field. Prepending
     # 1.0 restores bar 0 and reproduces the definition exactly.
     cum = np.r_[1.0, (1 + r).cumprod().values]
-    path = np.abs(np.diff(cum)).sum()
+    d = np.diff(cum)
+    obs = _observed(getattr(r, "index", None))
+    if obs is not None:
+        d = d[obs]
+    path = np.abs(d).sum()
     if path == 0:
         return 0.0
-    net = cum[-1] - cum[0]
+    net = d.sum()
     er = abs(net) / path
     return float(er if net >= 0 else -er)
 

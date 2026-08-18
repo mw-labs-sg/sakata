@@ -327,19 +327,22 @@ def _outrights(d: dict, per: str, t: dict) -> str:
     head = ('<th class="l">Instrument</th>'
             + "".join(f'<th{" class=\"on\"" if w == skey else ""}>{esc(w)}'
                       f'</th>' for w in wins))
+    # One washed column, not ninety-five tinted cells. The old per-cell gradient
+    # competed with the numbers it was meant to rank; a single wash on the
+    # column the rows are sorted by says "you are here" and nothing else, and
+    # matches how the by-window block above marks the same thing.
+    wash = f'background:{teal}1a'
     body = ""
     for c in codes:
         cells = ""
         for w in wins:
             v = mats.get(w, {}).get(c)
+            style = wash if w == skey else ""
             if v is None:
-                cells += '<td class="faint">—</td>'
+                cells += f'<td class="faint" style="{style}">—</td>'
                 continue
-            # Explicit ink and weight: these numbers are the table.
-            # No wash. Ninety-five tinted cells competed with the numbers they
-            # were meant to rank, and the ordering already says what the
-            # gradient was saying.
-            cells += (f'<td><span style="color:{ink};font-weight:600">'
+            cells += (f'<td style="{style}">'
+                      f'<span style="color:{ink};font-weight:600">'
                       f'{v:.2f}</span></td>')
         body += (f'<tr><td class="l">{swatch(U.SECTOR[c])}{esc(c)} '
                  f'<span class="nm">{esc(U.NAME[c])}</span></td>{cells}</tr>')
