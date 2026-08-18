@@ -95,7 +95,9 @@ def by_bar(v: str = CACHE_V) -> dict:
 
 
 @st.cache_data(ttl=TTL_FAST, show_spinner="ranking the field…")
-def spread_field(v: str = CACHE_V) -> dict:
+def spread_field(mode: str = "vol", v: str = CACHE_V) -> dict:
+    """`mode` is a cache key, not a display flag: it selects the return series
+    the whole field is computed from, so each basis gets its own entry."""
     bb = by_bar()
     m15 = prices("15m", "60d")
 
@@ -104,7 +106,8 @@ def spread_field(v: str = CACHE_V) -> dict:
                 for c, df in frames.items() if df is not None and len(df)}
 
     return SP.build_spreads({"15m": closes(m15), "1h": closes(bb["1h"]),
-                             "4h": closes(bb["4h"]), "1d": closes(bb["1d"])})
+                             "4h": closes(bb["4h"]), "1d": closes(bb["1d"])},
+                            mode=mode)
 
 
 @st.cache_data(ttl=TTL_FAST, show_spinner="reading the ladder…")
@@ -306,20 +309,22 @@ with t[4]:
 # --------------------------------------------------------------- Spreads
 with t[5]:
     source("Yahoo · 15m, 1H, 4H, 1D", spread_field, by_bar, prices, key="spreads")
-    field = spread_field()
+    # The basis is read BEFORE the field is built, because it decides what gets
+    # built. Writing into sc[2] first still lands it in the third column —
+    # st.columns places by container, not by call order — so the controls read
+    # left to right while the dependency runs the other way.
+    sc = st.columns([5, 4, 3])
+    basis = sc[2].radio("Basis", list(R.BASES), horizontal=True,
+                        key="sp_basis", label_visibility="collapsed")
+    field = spread_field(R.BASES[basis])
     if not field.get("periods"):
         st.error("No spread windows built — not enough price history.")
     else:
-        sc = st.columns([5, 4, 2])
         per = sc[0].radio("Window", field["periods"], horizontal=True,
                           key="sp_window", label_visibility="collapsed")
         spsort = sc[1].radio("Sort", list(R.SORTS), horizontal=True,
                              key="sp_sort", label_visibility="collapsed")
-        # Which convention the Size column sizes the legs under. Ranking is
-        # unaffected — the field is always computed vol-adjusted.
-        spsize = sc[2].radio("Size", list(R.SIZINGS), horizontal=True,
-                             key="sp_size", label_visibility="collapsed")
-        UI.md(R.spreads(field, per, spsort, spsize))
+        UI.md(R.spreads(field, per, spsort))
         with st.expander("Digest — copy this into an LLM"):
             st.code(R.digest(field["data"][per],
                              dt.datetime.now(dt.timezone.utc)

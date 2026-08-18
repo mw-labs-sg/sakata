@@ -21,6 +21,12 @@ import pandas as pd
 import sakata_stats as ss
 import sk_universe as U
 
+# Default leg weighting. Threaded through as a parameter now rather than read
+# as a constant, because it is not a display choice: it changes the return
+# series every statistic is computed from. Measured across 116 comparable pairs
+# on one Intraday window, moving vol -> equal shifted ER by 17% at the median
+# and moved ranks 21 places, and grew the field from 136 pairs to 171 because
+# apply_ratio_cap only bites in vol mode.
 MODE = "vol"            # vol-adjusted legs; equal notional lets the loud leg win
 RATIO_CAP = 5.0         # above this the sizing is not executable
 TOP_N = 30              # rows in the table
@@ -168,7 +174,7 @@ def _curves(cand, data, mode):
 
 
 # ------------------------------------------------------------------ compute
-def _window_field(name, by_bar):
+def _window_field(name, by_bar, mode=MODE):
     spec = WINDOWS[name]
     frames = by_bar.get(spec["bar"])
     if not frames:
@@ -193,8 +199,8 @@ def _window_field(name, by_bar):
 
     ann = ss.ann_factor_for(data.index)
     outs = ss.compute_outrights(data, ann, allow_short=True)
-    pairs = ss.compute_pairs(data, ann, MODE)
-    pairs, n_capped = ss.apply_ratio_cap(pairs, RATIO_CAP, MODE)
+    pairs = ss.compute_pairs(data, ann, mode)
+    pairs, n_capped = ss.apply_ratio_cap(pairs, RATIO_CAP, mode)
     field = outs + pairs
     if not field:
         return None
@@ -324,7 +330,7 @@ def _window_field(name, by_bar):
         if any(seen.get(s, 0) >= MAX_LEG_CHARTS for s in legs):
             continue
         try:
-            cv = _curves(c, data, MODE)
+            cv = _curves(c, data, mode)
         except Exception:
             continue
         for s in legs:
@@ -343,7 +349,7 @@ def _window_field(name, by_bar):
         charts.append(cv)
 
     return {
-        "window": name, "bar": spec["bar"], "note": spec["note"],
+        "window": name, "bar": spec["bar"], "note": spec["note"], "mode": mode,
         "bars": n_bars, "instruments": len(data.columns),
         "thin": n_bars < MIN_DISPLAY_BARS,
         "outER": out_er, "outDir": out_dir, "outSigned": out_signed,
@@ -423,12 +429,12 @@ def _persistence(out: dict, top=10):
     return rows[:12]
 
 
-def build_spreads(by_bar: dict) -> dict:
+def build_spreads(by_bar: dict, mode: str = MODE) -> dict:
     """by_bar is {bar: {ticker: close Series}} — every window slices from it."""
     out, summary = {}, []
     for name in PERIODS:
         try:
-            r = _window_field(name, by_bar)
+            r = _window_field(name, by_bar, mode)
         except Exception as e:
             print(f"    spreads {name} failed: {str(e)[:70]}")
             r = None
@@ -467,7 +473,7 @@ def build_spreads(by_bar: dict) -> dict:
             # fails to build or falls under the bar floor.
             "displayPeriods": list(DISPLAY_PERIODS),
             "allPeriods": [p for p in PERIODS if p in out],
-            "mode": MODE, "cap": RATIO_CAP, "topN": TOP_N, "summary": summary,
+            "mode": mode, "cap": RATIO_CAP, "topN": TOP_N, "summary": summary,
             "minBars": MIN_DISPLAY_BARS, "nWindows": len(out), "data": out,
             # Static-site key. The Streamlit tab carries this as the "also top
             # 10 in" column instead of a section of its own.

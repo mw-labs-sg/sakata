@@ -208,11 +208,13 @@ def digest(p: dict, generated: str = "") -> str:
 # keys that behave the same inside a table only invites the question.
 SORTS = {"ER (Adj)": "erAdj", "Win%": "win", "Tot%": "tot", "Sharpe": "sharpe"}
 
-# How the Size column sizes the two legs. Vol matches dollar RISK and is what
-# the field is ranked on; notional matches dollar EXPOSURE and ignores how
-# twitchy each leg is.
-SIZINGS = {"Vol": ("sizeVol", "sizeVolExact"),
-           "Notional": ("sizeNot", "sizeNotExact")}
+# Leg weighting. This is not a display switch: it selects the return series the
+# whole field is computed from, so ER, Sharpe, drawdown, the ranking and the
+# chart's spread line all follow it. Vol equalises dollar RISK, notional
+# equalises dollar EXPOSURE. The Size column shows the matching contract ratio.
+BASES = {"Vol": "vol", "Notional": "equal"}
+SIZINGS = {"vol": ("sizeVol", "sizeVolExact"),
+           "equal": ("sizeNot", "sizeNotExact")}
 
 
 def _wincols(n_windows: int) -> str:
@@ -367,8 +369,7 @@ def _outrights(d: dict, per: str, t: dict) -> str:
             + table(head, body, _wincols(len(wins))))
 
 
-def spreads(d: dict, per: str, sort: str = "ER (Adj)",
-            sizing: str = "Vol") -> str:
+def spreads(d: dict, per: str, sort: str = "ER (Adj)") -> str:
     p = d["data"][per]
     t = _tok()
 
@@ -386,7 +387,7 @@ def spreads(d: dict, per: str, sort: str = "ER (Adj)",
     head = ('<th class="l">#</th><th class="l">Long</th><th class="l">Short</th>'
             '<th>ER</th><th>ER (Adj)</th><th>Win%</th><th>Vol%</th>'
             '<th>Tot%</th><th>MDD%</th>'
-            f'<th class="l">Size ({esc(sizing.lower())})</th>'
+            f'<th class="l">Size</th>'
             '<th>vs leg</th><th>Top 10</th>')
     body = ""
     for i, r in enumerate(rows, 1):
@@ -409,7 +410,7 @@ def spreads(d: dict, per: str, sort: str = "ER (Adj)",
         # Contracts per leg for equal dollar risk, long : short. Not the sigma
         # ratio — a 6J contract carries $78k of notional against $24k for ZC,
         # so matching volatility is not matching size.
-        skey, sxkey = SIZINGS.get(sizing, SIZINGS["Vol"])
+        skey, sxkey = SIZINGS.get(d.get("mode", "vol"), SIZINGS["vol"])
         size = (f'<td class="l dim" title="exact {r[sxkey]}">'
                 f'{esc(r[skey])}</td>' if r.get(skey)
                 else '<td class="l faint">—</td>')
@@ -427,18 +428,25 @@ def spreads(d: dict, per: str, sort: str = "ER (Adj)",
 
     return (out
             + eyebrow(f"Spreads by Time Window — {esc(per)}, ranked on "
-                      f"{esc(sort)}")
+                      f"{esc(sort)}, "
+                      + ("vol-adjusted legs" if d.get("mode") == "vol"
+                         else "equal-notional legs"))
             + note("Size is contracts per leg, long : short — "
-                   + ("matching dollar risk, n × notional × σ, the basis the "
-                      "field is ranked on." if sizing == "Vol" else
+                   + ("matching dollar risk, n × notional × σ."
+                      if d.get("mode") == "vol" else
                       "matching dollar exposure, n × notional, ignoring vol.")
                    + " vs leg is the spread's ER against the better of its two "
                      "legs held alone; negative means it did not pay for itself. "
                      "Top 10 counts the other windows it also ranks in.")
             + table(head, body)
+            # The last two chips follow the basis. They were hardcoded, so
+            # notional mode still claimed vol-adjusted legs and advertised a
+            # 5:1 cap that apply_ratio_cap does not apply in that mode.
             + chips([p["note"], f'{p["bars"]} bars · {p["instruments"]} '
-                     f'instruments', f'{p["start"]} → {p["end"]}',
-                     "vol-adjusted legs", f'cap {d["cap"]}:1'])
+                     f'instruments', f'{p["start"]} → {p["end"]}']
+                    + (["vol-adjusted legs", f'cap {d["cap"]}:1']
+                       if d.get("mode") == "vol" else
+                       ["equal-notional legs", "no leg cap"]))
             + spread_charts(p, t))
 
 
@@ -446,6 +454,7 @@ def spread_charts(p: dict, t: dict = None) -> str:
     """Legs rebased to 100 in the side colours, spread over them in the ink."""
     if not p.get("charts"):
         return ""
+    mode = p.get("mode", "vol")
     t = t or _tok()
     ink = t.get("ink", "#0d1418")
     teal, amber = t.get("teal", "#0d8f83"), t.get("amber", "#96701c")
@@ -518,10 +527,13 @@ def spread_charts(p: dict, t: dict = None) -> str:
                   + CH.line_chart(c["t"], series, None, 560, 220, 1) + "</div>")
     return (eyebrow("Why they ranked")
             + note("Legs rebased to 100 — turquoise long, orange short — so "
-                   "they sit at equal notional. The spread over them is "
-                   "<b>vol-adjusted</b>, the basis the field is ranked on, so "
-                   "it is not the gap between the two lines. Two charts per "
-                   "instrument at most.")
+                   "they sit at equal notional. "
+                   + ("The spread over them is <b>vol-adjusted</b>, so it is "
+                      "not the gap between the two lines."
+                      if mode == "vol" else
+                      "The spread over them is <b>equal-notional</b>, which is "
+                      "the gap between the two lines.")
+                   + " Two charts per instrument at most.")
             + f'<div class="cgrid">{cards}</div>')
 
 # ------------------------------------------------------------------ Curve
