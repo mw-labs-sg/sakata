@@ -27,7 +27,13 @@ TOP_N = 30              # rows in the table
 CHART_N = 12            # candidates that ship a chart series
 CHART_PTS = 160         # points per line after decimation
 MAX_LEG_CHARTS = 2      # times one instrument may appear across those charts
-MIN_DISPLAY_BARS = 20   # below this a window is not a ranked table, it is noise
+# Below this a window is SHORT, and gets said so — but it still ranks. The
+# floor used to suppress the table outright; a 19-bar WTD then rendered as a
+# refusal on a Monday, which is exactly when you want to look at it. ER is
+# descriptive rather than an estimate of a forward parameter, so it survives a
+# short sample better than Sharpe does; the bar count rides along so the reader
+# can discount it themselves.
+MIN_DISPLAY_BARS = 20
 
 # Windows offered in the selector. The rolling ones keep computing because the
 # "also top-10 in" column is only worth reading if it spans more than the five

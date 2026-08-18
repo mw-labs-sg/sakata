@@ -235,6 +235,10 @@ pre, pre *, code {{ color: {t.get('ink')} !important; }}
    its own box. Addressed through the stable testid plus the inner role=group. */
 [data-testid="stSelectbox"] div[role="group"] {{ background: {t.get('surface')} !important; border-color: {t.get('line')} !important; font-size: 13px; }}
 .stRadio [role="radiogroup"] {{ gap: 4px; flex-wrap: wrap; }}
+/* Elevated, not lost. Red is reserved for a number that went the wrong way; a
+   high percentile or a drawdown magnitude is a caution, and using the same red
+   for both made a calm table look like a bleeding one. */
+.warn {{ color: {t.get('amber')}; }}
 /* Spread charts: two per row rather than three. Twelve cards three-up made each
    one too short to read the shape that justifies the row. */
 .cgrid {{ grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 26px 22px !important; }}

@@ -209,23 +209,6 @@ def digest(p: dict, generated: str = "") -> str:
 SORTS = {"ER (Adj)": "erAdj", "Win%": "win", "Tot%": "tot", "Sharpe": "sharpe"}
 
 
-def _heat(v, ref, t) -> str:
-    """Cell wash for the outrights matrix: teal above zero, red below, alpha
-    carrying magnitude. ER is signed and centred on zero, so a diverging scale
-    is the honest shape and a sequential one would hide the sign."""
-    if v is None:
-        return ""
-    a = min(abs(v) / (ref or 1), 1.0)
-    col = t.get("neg", "#c2453b") if v < 0 else t.get("teal", "#0d8f83")
-    return f'background:{col}{int(a * 58 + 10):02x}'
-
-
-def _thin_note(p: dict, minbars: int) -> str:
-    return ('<div class="skel">Insufficient data — '
-            f'{p["bars"]} bars, under the {minbars} needed to rank a field. '
-            "Nothing here would be a measurement.</div>")
-
-
 def _optimal(d: dict, per: str, t: dict) -> str:
     """Best spread in each window, in a FIXED row order.
 
@@ -244,16 +227,17 @@ def _optimal(d: dict, per: str, t: dict) -> str:
         if r is None:
             cellhtml = ('<td class="l faint" colspan="5">not built — no window '
                         "of this length in the data</td>")
-        elif r.get("thin"):
-            cellhtml = (f'<td class="l faint" colspan="5">insufficient data '
-                        f'({r["bars"]} bars)</td>')
         else:
+            # A short window ranks like any other; the bar count carries the
+            # warning. Refusing to draw it hid WTD for the first two days of
+            # every week, which is when it is most worth a look.
+            bars = cell(r.get("bars"), 0, "warn" if r.get("thin") else "faint")
             cellhtml = (f'<td class="l">{esc(r.get("label") or "—")}</td>'
                         + cell(r.get("er"), 3, "dim")
                         + cell(r.get("erAdj"), 2, "last")
-                        + pct(r.get("tot"), 1) + cell(r.get("bars"), 0, "faint"))
+                        + pct(r.get("tot"), 1) + bars)
         body += f'<tr style="{on}"><td class="l">{esc(w)}</td>{cellhtml}</tr>'
-    return (eyebrow("Optimal spread by time window")
+    return (eyebrow("Optimal Spread by Time Window")
             + note("ER (Adj) = ER &#215; &#8730;bars. Raw ER decays as "
                    "1/&#8730;n, so the adjusted figure is the one that "
                    "compares across windows — 1.0 is the noise floor.")
@@ -300,12 +284,14 @@ def _outrights(d: dict, per: str, t: dict) -> str:
                 cells += '<td class="faint">—</td>'
                 continue
             # Explicit ink and weight: these numbers are the table.
-            cells += (f'<td style="{_heat(v, ref, t)}">'
-                      f'<span style="color:{ink};font-weight:600">'
+            # No wash. Ninety-five tinted cells competed with the numbers they
+            # were meant to rank, and the ordering already says what the
+            # gradient was saying.
+            cells += (f'<td><span style="color:{ink};font-weight:600">'
                       f'{v:.3f}</span></td>')
         body += (f'<tr><td class="l">{swatch(U.SECTOR[c])}{esc(c)} '
                  f'<span class="nm">{esc(U.NAME[c])}</span></td>{cells}</tr>')
-    return (eyebrow(f"Outrights — efficiency ratio, ranked on {esc(skey)}")
+    return (eyebrow(f"Outrights by Time Window — ranked on {esc(skey)}")
             + table(head, body))
 
 
@@ -316,9 +302,6 @@ def spreads(d: dict, per: str, sort: str = "ER (Adj)") -> str:
     # Reading order: best spread per window, then how the single instruments
     # did, then the full field for the window you picked, then the pictures.
     out = _optimal(d, per, t) + _outrights(d, per, t)
-
-    if p.get("thin"):
-        return out + _thin_note(p, d.get("minBars", 20))
 
     teal = t.get("teal", "#0d8f83")
     amber = t.get("amber", "#96701c")
@@ -353,11 +336,11 @@ def spreads(d: dict, per: str, sort: str = "ER (Adj)") -> str:
                  f'<td class="l">{sh}</td>'
                  + cell(r["er"], 3, "dim") + cell(r.get("erAdj"), 2, "last")
                  + cell(r["win"], 0, "dim") + cell(r["vol"], 1, "dim")
-                 + pct(r["tot"], 1) + cell(r["mdd"], 1, "neg")
+                 + pct(r["tot"], 1) + cell(r["mdd"], 1, "warn")
                  + legcell + alsocell + "</tr>")
 
     return (out
-            + eyebrow(f"Spreads by time window — {esc(per)}, ranked on "
+            + eyebrow(f"Spreads by Time Window — {esc(per)}, ranked on "
                       f"{esc(sort)}")
             + note("vs leg is the spread's ER against the better of its two "
                    "legs held alone; negative means it did not pay for itself. "
@@ -592,7 +575,7 @@ def margins(d: dict, sort: str = "RV %ile") -> str:
     def pcell(p):
         if p is None:
             return '<td class="faint">—</td>'
-        cls = "neg" if p >= 80 else "pos" if p <= 20 else "dim"
+        cls = "warn" if p >= 80 else "pos" if p <= 20 else "dim"
         return f'<td class="{cls}">{p:.0f}</td>'
 
     def rsicell(v):
@@ -602,7 +585,7 @@ def margins(d: dict, sort: str = "RV %ile") -> str:
         # invite reading them as the same kind of statement.
         if v is None:
             return '<td class="faint">—</td>'
-        cls = "neg" if v >= 70 else "pos" if v <= 30 else "dim"
+        cls = "warn" if v >= 70 else "pos" if v <= 30 else "dim"
         return f'<td class="{cls}">{v:.0f}</td>'
 
     def zcell(z):
@@ -611,7 +594,7 @@ def margins(d: dict, sort: str = "RV %ile") -> str:
         # it would light most of the table; beyond two is genuinely unusual.
         if z is None:
             return '<td class="faint">—</td>'
-        cls = "neg" if z >= 2 else "pos" if z <= -2 else "dim"
+        cls = "warn" if z >= 2 else "pos" if z <= -2 else "dim"
         return f'<td class="{cls}">{z:+.1f}</td>'
 
     def panel(group):
@@ -628,7 +611,7 @@ def margins(d: dict, sort: str = "RV %ile") -> str:
             # different reasons — which is worse than tinting on one.
             tint = ""
             if vp is not None and vp >= 80:
-                tint = f'background:{t.get("neg")}1a'
+                tint = f'background:{t.get("amber")}1a'
             elif vp is not None and vp <= 20:
                 tint = f'background:{t.get("teal")}14'
             body += (f'<tr style="{tint}"><td class="l">'
