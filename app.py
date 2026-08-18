@@ -69,6 +69,10 @@ CACHE_V = _cache_key()
 DOCS = Path(__file__).parent / "docs" / "data"
 
 
+def _utc() -> str:
+    return dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d %H:%M")
+
+
 def _fallback(name: str):
     """The last committed build, for when a live source refuses. Cheap
     insurance: the static site's JSON is still in the repo."""
@@ -212,8 +216,7 @@ UI.apply(st.session_state.dark)
 
 hc = st.columns([16, 1], vertical_alignment="center")
 with hc[0]:
-    UI.header(dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d %H:%M")
-              + " UTC · live")
+    UI.header(_utc() + " UTC · live")
 with hc[1]:
     # Anchored so the CSS can lift it onto the tab strip. Theme is the only
     # thing that belongs here now: refresh moved into the tabs, because the
@@ -223,17 +226,6 @@ with hc[1]:
     if st.button("☀" if st.session_state.dark else "☾", help="Switch theme"):
         st.session_state.dark = not st.session_state.dark
         st.rerun()
-
-
-def freshness(stamp, ttl: int) -> str:
-    """How old this data is, and how long before it expires by itself."""
-    if not stamp:
-        return ""
-    age = int((dt.datetime.now(dt.timezone.utc) - stamp).total_seconds())
-    left = max(ttl - age, 0)
-    ago = "just now" if age < 60 else f"{age // 60}m ago"
-    return (f"computed {ago} · refreshes itself in {left // 60}m {left % 60}s"
-            if left else "computed " + ago + " · due to refresh")
 
 
 @st.fragment(run_every=20)
@@ -346,7 +338,7 @@ with t[4]:
 # --------------------------------------------------------------- Spreads
 with t[5]:
     source("Yahoo · 15m, 1H, 4H, 1D", spread_field, by_bar, prices, key="spreads")
-    # The basis is read BEFORE the field is built, because it decides what gets
+    # Basis is read BEFORE the field is built, because it decides what gets
     # built. Writing into sc[2] first still lands it in the third column —
     # st.columns places by container, not by call order — so the controls read
     # left to right while the dependency runs the other way.
@@ -357,26 +349,23 @@ with t[5]:
     if not field.get("periods"):
         st.error("No spread windows built — not enough price history.")
     else:
+        stamp = field.get("computed")
         per = sc[0].radio("Window", field["periods"], horizontal=True,
                           key="sp_window", label_visibility="collapsed")
         spsort = sc[1].radio("Sort", list(R.SORTS), horizontal=True,
                              key="sp_sort", label_visibility="collapsed")
-        # Display only: which contract ratio the Size column reads off the
-        # field the Basis above already built.
+        # Display only: which ratio to read off the field Basis already built.
         spsize = sc[3].radio("Size", list(R.SIZINGS), horizontal=True,
                              key="sp_size", label_visibility="collapsed")
         sc[3].checkbox("Auto", key="sp_auto",
                        help="Refetch by itself once the 15-minute cache "
                             "expires, instead of waiting for Refresh")
         UI.md(R.spreads(field, per, spsort, spsize,
-                        freshness(field.get("computed"), TTL_FAST)))
+                        R.freshness(stamp, TTL_FAST)))
         if st.session_state.get("sp_auto"):
-            autorefresh(field.get("computed"), TTL_FAST)
+            autorefresh(stamp, TTL_FAST)
         with st.expander("Digest — copy this into an LLM"):
-            st.code(R.digest(field["data"][per],
-                             dt.datetime.now(dt.timezone.utc)
-                             .strftime("%Y-%m-%d %H:%M")),
-                    language=None)
+            st.code(R.digest(field["data"][per], _utc()), language=None)
 
 # ----------------------------------------------------------------- Curve
 with t[6]:

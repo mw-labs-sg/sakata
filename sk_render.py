@@ -212,17 +212,18 @@ SORTS = {"ER (Adj)": "erAdj", "Win%": "win", "Tot%": "tot", "Sharpe": "sharpe"}
 # whole field is computed from, so ER, Sharpe, drawdown, the ranking and the
 # chart's spread line all follow it. Vol equalises dollar RISK, notional
 # equalises dollar EXPOSURE. The Size column shows the matching contract ratio.
+# One table, not four. Each weighting knows its internal name (what
+# weighted_spread calls it), the label a reader picked, and which pair of row
+# keys carries its contract ratio — those three were drifting apart across
+# BASES / SIZINGS / _SIZE_KEYS / _SIZE_LABEL, which is how the column header
+# ended up printing "equal" at a reader who had chosen "Notional".
+WEIGHTINGS = {
+    "vol":   {"label": "vol",      "keys": ("sizeVol", "sizeVolExact")},
+    "equal": {"label": "notional", "keys": ("sizeNot", "sizeNotExact")},
+}
+# Basis picks what gets COMPUTED; Size picks which ratio is READ off it.
 BASES = {"Vol": "vol", "Notional": "equal"}
-
-# Which contract ratio the Size column shows. Display only, and deliberately
-# separate from BASES: the basis decides what is computed, this decides which
-# sizing you want to read off it. "Match basis" keeps them in step.
 SIZINGS = {"Match basis": None, "Vol": "vol", "Notional": "equal"}
-_SIZE_KEYS = {"vol": ("sizeVol", "sizeVolExact"),
-              "equal": ("sizeNot", "sizeNotExact")}
-# "equal" is the internal weighting name; the column header should say what the
-# reader chose, not what weighted_spread calls it.
-_SIZE_LABEL = {"vol": "vol", "equal": "notional"}
 
 
 def _wincols(n_windows: int) -> str:
@@ -377,6 +378,24 @@ def _outrights(d: dict, per: str, t: dict) -> str:
             + table(head, body, _wincols(len(wins))))
 
 
+def freshness(stamp, ttl: int) -> str:
+    """How old this field is, and how long until it refetches on its own.
+
+    Presentation, so it sits beside the chips that show it. The stamp is taken
+    inside the cached builder, so it reports when the data was BUILT — a page
+    reload advances this countdown while leaving every number untouched, which
+    is the whole confusion it exists to answer.
+    """
+    if not stamp:
+        return ""
+    import datetime as _dt
+    age = int((_dt.datetime.now(_dt.timezone.utc) - stamp).total_seconds())
+    left = max(ttl - age, 0)
+    ago = "just now" if age < 60 else f"{age // 60}m ago"
+    return (f"computed {ago} · refreshes itself in {left // 60}m {left % 60}s"
+            if left else f"computed {ago} · due to refresh")
+
+
 def spreads(d: dict, per: str, sort: str = "ER (Adj)",
             sizing: str = "Match basis", fresh: str = "") -> str:
     p = d["data"][per]
@@ -390,7 +409,8 @@ def spreads(d: dict, per: str, sort: str = "ER (Adj)",
     amber = t.get("amber", "#96701c")
     # The column follows its own selector; "Match basis" tracks the maths.
     size_mode = SIZINGS.get(sizing) or d.get("mode", "vol")
-    skey, sxkey = _SIZE_KEYS.get(size_mode, _SIZE_KEYS["vol"])
+    weighting = WEIGHTINGS.get(size_mode, WEIGHTINGS["vol"])
+    skey, sxkey = weighting["keys"]
     key = SORTS.get(sort, "erAdj")
     rows = sorted(p["rows"], key=lambda r: -(r.get(key) if r.get(key)
                                              is not None else -9e9))
@@ -399,7 +419,7 @@ def spreads(d: dict, per: str, sort: str = "ER (Adj)",
     head = ('<th class="l">#</th><th class="l">Long</th><th class="l">Short</th>'
             '<th>ER</th><th>ER (Adj)</th><th>Win%</th><th>Vol%</th>'
             '<th>Tot%</th><th>MDD%</th>'
-            f'<th class="l">Size ({esc(_SIZE_LABEL[size_mode])})</th>'
+            f'<th class="l">Size ({esc(weighting["label"])})</th>'
             '<th>vs leg</th><th>Top 10</th>')
     body = ""
     for i, r in enumerate(rows, 1):
