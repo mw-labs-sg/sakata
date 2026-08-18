@@ -213,8 +213,16 @@ SORTS = {"ER (Adj)": "erAdj", "Win%": "win", "Tot%": "tot", "Sharpe": "sharpe"}
 # chart's spread line all follow it. Vol equalises dollar RISK, notional
 # equalises dollar EXPOSURE. The Size column shows the matching contract ratio.
 BASES = {"Vol": "vol", "Notional": "equal"}
-SIZINGS = {"vol": ("sizeVol", "sizeVolExact"),
-           "equal": ("sizeNot", "sizeNotExact")}
+
+# Which contract ratio the Size column shows. Display only, and deliberately
+# separate from BASES: the basis decides what is computed, this decides which
+# sizing you want to read off it. "Match basis" keeps them in step.
+SIZINGS = {"Match basis": None, "Vol": "vol", "Notional": "equal"}
+_SIZE_KEYS = {"vol": ("sizeVol", "sizeVolExact"),
+              "equal": ("sizeNot", "sizeNotExact")}
+# "equal" is the internal weighting name; the column header should say what the
+# reader chose, not what weighted_spread calls it.
+_SIZE_LABEL = {"vol": "vol", "equal": "notional"}
 
 
 def _wincols(n_windows: int) -> str:
@@ -369,7 +377,8 @@ def _outrights(d: dict, per: str, t: dict) -> str:
             + table(head, body, _wincols(len(wins))))
 
 
-def spreads(d: dict, per: str, sort: str = "ER (Adj)") -> str:
+def spreads(d: dict, per: str, sort: str = "ER (Adj)",
+            sizing: str = "Match basis") -> str:
     p = d["data"][per]
     t = _tok()
 
@@ -379,6 +388,9 @@ def spreads(d: dict, per: str, sort: str = "ER (Adj)") -> str:
 
     teal = t.get("teal", "#0d8f83")
     amber = t.get("amber", "#96701c")
+    # The column follows its own selector; "Match basis" tracks the maths.
+    size_mode = SIZINGS.get(sizing) or d.get("mode", "vol")
+    skey, sxkey = _SIZE_KEYS.get(size_mode, _SIZE_KEYS["vol"])
     key = SORTS.get(sort, "erAdj")
     rows = sorted(p["rows"], key=lambda r: -(r.get(key) if r.get(key)
                                              is not None else -9e9))
@@ -387,7 +399,7 @@ def spreads(d: dict, per: str, sort: str = "ER (Adj)") -> str:
     head = ('<th class="l">#</th><th class="l">Long</th><th class="l">Short</th>'
             '<th>ER</th><th>ER (Adj)</th><th>Win%</th><th>Vol%</th>'
             '<th>Tot%</th><th>MDD%</th>'
-            f'<th class="l">Size</th>'
+            f'<th class="l">Size ({esc(_SIZE_LABEL[size_mode])})</th>'
             '<th>vs leg</th><th>Top 10</th>')
     body = ""
     for i, r in enumerate(rows, 1):
@@ -410,7 +422,6 @@ def spreads(d: dict, per: str, sort: str = "ER (Adj)") -> str:
         # Contracts per leg for equal dollar risk, long : short. Not the sigma
         # ratio — a 6J contract carries $78k of notional against $24k for ZC,
         # so matching volatility is not matching size.
-        skey, sxkey = SIZINGS.get(d.get("mode", "vol"), SIZINGS["vol"])
         size = (f'<td class="l dim" title="exact {r[sxkey]}">'
                 f'{esc(r[skey])}</td>' if r.get(skey)
                 else '<td class="l faint">—</td>')

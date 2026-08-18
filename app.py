@@ -313,7 +313,7 @@ with t[5]:
     # built. Writing into sc[2] first still lands it in the third column —
     # st.columns places by container, not by call order — so the controls read
     # left to right while the dependency runs the other way.
-    sc = st.columns([5, 4, 3])
+    sc = st.columns([4, 3, 2, 3])
     basis = sc[2].radio("Basis", list(R.BASES), horizontal=True,
                         key="sp_basis", label_visibility="collapsed")
     field = spread_field(R.BASES[basis])
@@ -324,7 +324,11 @@ with t[5]:
                           key="sp_window", label_visibility="collapsed")
         spsort = sc[1].radio("Sort", list(R.SORTS), horizontal=True,
                              key="sp_sort", label_visibility="collapsed")
-        UI.md(R.spreads(field, per, spsort))
+        # Display only: which contract ratio the Size column reads off the
+        # field the Basis above already built.
+        spsize = sc[3].radio("Size", list(R.SIZINGS), horizontal=True,
+                             key="sp_size", label_visibility="collapsed")
+        UI.md(R.spreads(field, per, spsort, spsize))
         with st.expander("Digest — copy this into an LLM"):
             st.code(R.digest(field["data"][per],
                              dt.datetime.now(dt.timezone.utc)
