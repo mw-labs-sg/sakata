@@ -210,6 +210,15 @@ def _window_field(name, by_bar):
     # a "long GC" in one window can be a "short GC" in another, and an ER matrix
     # that hides that is telling you the size of a move without its sign.
     out_dir = {ss.name_of(c["sym"]): c["dir"] for c in outs}
+    # Signed ER, long convention: (last - first) / sum|bar-to-bar|, straight off
+    # the price series with no Sharpe orientation in front of it. efficiency()
+    # already returns a signed value and already skips unobserved session gaps,
+    # so this is the same measure the rest of the tab uses, just not flipped.
+    #
+    # The oriented figure above stays, because the field ranks on it; this one
+    # is for the matrix, where the sign IS the information.
+    out_signed = {ss.name_of(sym): _num(ss.efficiency(
+        data[sym].pct_change().dropna()), 3) for sym in data.columns}
 
     def adj(er):
         """ER * sqrt(bars). Raw ER decays as 1/sqrt(n) — a coarser bar traces a
@@ -288,7 +297,7 @@ def _window_field(name, by_bar):
         "window": name, "bar": spec["bar"], "note": spec["note"],
         "bars": n_bars, "instruments": len(data.columns),
         "thin": n_bars < MIN_DISPLAY_BARS,
-        "outER": out_er, "outDir": out_dir,
+        "outER": out_er, "outDir": out_dir, "outSigned": out_signed,
         "span": span, "ann": round(ann),
         "se": _num(ss.sharpe_se(span)), "noise": _num(ss.sharpe_se(span) * 2.8, 1),
         "start": data.index[0].strftime("%d %b %H:%M"),

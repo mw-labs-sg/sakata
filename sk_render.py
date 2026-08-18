@@ -304,10 +304,19 @@ def _outrights(d: dict, per: str, t: dict) -> str:
     # column would always tower over a 229-bar YTD one for no reason but its
     # length. Multiplying by sqrt(bars) removes exactly that, and puts 1.0 at
     # the noise floor in every column.
-    mats = {}
+    # Two maps: what is shown, and what the rows are ranked by.
+    #
+    # Shown is SIGNED ER — sign carries direction, so a clean downtrend reads
+    # negative instead of being silently flipped to a positive "short". Ranked
+    # is the Sharpe-oriented figure the field already uses, left alone so the
+    # row order does not move.
+    mats, rank = {}, {}
     for w in live:
         root = max(d["data"][w].get("bars", 0), 1) ** 0.5
+        src = d["data"][w].get("outSigned") or d["data"][w]["outER"]
         mats[w] = {k: (None if v is None else round(v * root, 2))
+                   for k, v in src.items()}
+        rank[w] = {k: (None if v is None else v * root)
                    for k, v in d["data"][w]["outER"].items()}
     codes = [c for c in U.CODES if any(c in mats.get(w, {}) for w in live)]
     if not codes:
@@ -316,8 +325,8 @@ def _outrights(d: dict, per: str, t: dict) -> str:
     if not live:
         return ""
     skey = per if per in mats else live[0]
-    codes.sort(key=lambda c: (mats[skey].get(c) is None,
-                              -(mats[skey].get(c) or 0)))
+    codes.sort(key=lambda c: (rank[skey].get(c) is None,
+                              -(rank[skey].get(c) or 0)))
 
     vals = [abs(v) for w in live for v in mats[w].values() if v is not None]
     ref = max(vals) if vals else 1
