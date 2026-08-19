@@ -487,7 +487,10 @@ def spreads(d: dict, per: str, sort: str = "ER (Adj)",
                          else "equal-notional legs"))
             + note("ROA is return over maximum drawdown: Tot% divided by the "
                    "worst hole it took, unannualised, so 10 means it made ten "
-                   "times what that hole cost. Ratio is how much of the short leg "
+                   "times what that hole cost — measured on the finest marks "
+                   "the window reaches back over, not on its own bar, so a "
+                   "daily window cannot step over an intraday trough. "
+                   "Ratio is how much of the short leg "
                    "one long leg needs; hover for a whole-contract fill. "
                    "Sizing: "
                    + ("matching dollar risk, n × notional × σ."
@@ -502,6 +505,10 @@ def spreads(d: dict, per: str, sort: str = "ER (Adj)",
             # 5:1 cap that apply_ratio_cap does not apply in that mode.
             + chips([p["note"], f'{p["bars"]} bars · {p["instruments"]} '
                      f'instruments', f'{p["start"]} → {p["end"]}']
+                    # MDD is the one column measured on something other than
+                    # the window's own bar, so the window says so.
+                    + ([f'MDD on {p["ddBars"]:,} {p["ddBar"]} marks']
+                       if p.get("ddBar") else [])
                     + (["vol-adjusted legs", f'cap {d["cap"]}:1']
                        if d.get("mode") == "vol" else
                        ["equal-notional legs", "no leg cap"])

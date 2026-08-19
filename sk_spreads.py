@@ -135,6 +135,86 @@ def _thin(s, n=CHART_PTS):
     return out
 
 
+# Bar sizes finest first. A drawdown is the worst mark-to-market the position
+# ever printed, so it is the one statistic that gets strictly better with finer
+# marks — daily closes step straight over an intraday trough and report a hole
+# that was never the bottom.
+BAR_ORDER = ("15m", "1h", "4h", "1d")
+
+
+def _fine_frame(by_bar, symbols, t0, t1, display_bar):
+    """Closes over [t0, t1] on the finest bar whose history reaches back to t0.
+
+    All-or-nothing per window: a bar is only used if EVERY instrument has
+    history that far back, so one late-listed symbol cannot leave the column
+    measuring half its rows on 15-minute marks and half on daily ones.
+    """
+    for bar in BAR_ORDER:
+        if bar == display_bar:
+            return None, None           # nothing finer than what we already have
+        frames = by_bar.get(bar) or {}
+        cols = {}
+        for sym in symbols:
+            ser = frames.get(sym)
+            if ser is None or len(ser) < 5 or ser.index[0] > t0:
+                cols = None
+                break
+            cut = ser[(ser.index >= t0) & (ser.index <= t1)]
+            if len(cut) < 5:
+                cols = None
+                break
+            cols[sym] = cut
+        if cols:
+            return cols, bar
+    return None, None
+
+
+def _remark_drawdowns(field, fine, sigma, mode):
+    """Recompute MDD on the fine marks, holding the display-bar weights.
+
+    The weights are the position: long 1/sigma of one leg against 1/sigma of
+    the other, scaled to a single leg's volatility. Recomputing sigma from the
+    fine bars would be a different position, so the drawdown would no longer
+    belong to the row that carries it. Everything else — return, Sharpe, ER —
+    stays on the display bar, where the bar count is what those statistics are
+    defined against.
+    """
+    for c in field:
+        lg, sh = c.get("long"), c.get("short")
+        if lg and sh:
+            if lg not in fine or sh not in fine:
+                continue
+            # Joined on PRICES, then differenced: both legs marked at the same
+            # instants. Differencing first and joining after would pad each
+            # leg across the other's gaps and invent returns to fill them.
+            j = pd.concat([fine[lg], fine[sh]], axis=1).dropna().pct_change()
+            j = j.dropna()
+            if len(j) < 5:
+                continue
+            a, b = j.iloc[:, 0], j.iloc[:, 1]
+            s1, s2 = sigma.get(lg), sigma.get(sh)
+            if mode == "vol":
+                if not s1 or not s2:
+                    continue
+                sp = (a / s1 - b / s2) * ((s1 + s2) / 2)
+            elif mode == "beta":
+                sp = a - float(c.get("Ratio", 1.0)) * b
+            else:
+                sp = a - b
+        else:
+            sym = lg or sh
+            if sym not in fine:
+                continue
+            r = fine[sym].pct_change().dropna()
+            if len(r) < 5:
+                continue
+            sp = r if lg else -r
+        mdd, add = ss.drawdowns(sp)
+        c["MDD%"], c["ADD%"] = mdd, add
+        # MAR is quoted off the average drawdown, so it moves with it.
+        c["MAR"] = float(np.clip(c["Ann%"] / max(abs(add), 0.5), -99, 99))
+
+
 def _curves(cand, data, mode):
     """The three lines: each leg rebased, and the spread itself.
 
@@ -204,6 +284,11 @@ def _window_field(name, by_bar, mode=MODE, chart_keys=()):
     field = outs + pairs
     if not field:
         return None
+    # Drawdown on the finest marks the span allows, before anything reads it.
+    fine, dd_bar = _fine_frame(by_bar, list(data.columns),
+                               data.index[0], data.index[-1], spec["bar"])
+    if fine is not None:
+        _remark_drawdowns(field, fine, sigma, mode)
     ss.rank_field(field)
     # ER descending, everywhere. ER is scale-free and descriptive, so it stays
     # meaningful on the short windows where Sharpe — an estimate of a forward
@@ -520,6 +605,11 @@ def _window_field(name, by_bar, mode=MODE, chart_keys=()):
         "legShort": [[ss.name_of(k), v] for k, v in sh.most_common(6)],
         "legLong": [[ss.name_of(k), v] for k, v in lg.most_common(6)],
         "rows": rows, "charts": charts,
+        # Which bar the drawdown was measured on, when it is not the one
+        # everything else uses. The table says so rather than leaving MDD to
+        # look like it came off the same marks as Sharpe.
+        "ddBar": dd_bar,
+        "ddBars": (max(len(v) for v in fine.values()) if fine else None),
         # The renderer takes this many off the top of whichever ranking is on
         # screen, so it reads the number from here rather than keeping a copy.
         "chartCap": CHART_N,
