@@ -420,7 +420,7 @@ def spreads(d: dict, per: str, sort: str = "ER (Adj)",
     head = ('<th class="l">#</th><th class="l">Long</th><th class="l">Short</th>'
             '<th>ER</th><th>ER (Adj)</th><th>Win%</th><th>Vol%</th>'
             '<th>Tot%</th><th>MDD%</th>'
-            f'<th class="l">Size ({esc(weighting["label"])})</th>'
+            f'<th class="l">Ticket ({esc(weighting["label"])})</th>'
             '<th>vs leg</th><th>Top 10</th>')
     body = ""
     for i, r in enumerate(rows, 1):
@@ -443,9 +443,22 @@ def spreads(d: dict, per: str, sort: str = "ER (Adj)",
         # Contracts per leg for equal dollar risk, long : short. Not the sigma
         # ratio — a 6J contract carries $78k of notional against $24k for ZC,
         # so matching volatility is not matching size.
-        size = (f'<td class="l dim" title="exact {r[sxkey]}">'
-                f'{esc(r[skey])}</td>' if r.get(skey)
-                else '<td class="l faint">—</td>')
+        # The order, not the ratio. 1.6 : 1 cannot be sent anywhere; the
+        # whole-contract equivalent can, and micros are what make it reachable.
+        # The ratio it targets, how far off the hedge lands and what one unit
+        # costs all sit on hover rather than widening the row.
+        tk = r.get("ticket")
+        if tk:
+            off = tk.get("err")
+            cls = "warn" if (off or 0) >= 5 else "dim"
+            size = (f'<td class="l {cls}" title="targets {r.get(skey)} · '
+                    f'hedge {off}% off · ${tk.get("risk", 0):,.0f} risk per '
+                    f'unit">{esc(tk["text"])}</td>')
+        elif r.get(skey):
+            size = (f'<td class="l dim" title="exact {r[sxkey]}">'
+                    f'{esc(r[skey])}</td>')
+        else:
+            size = '<td class="l faint">—</td>'
         also = r.get("alsoTop") or []
         alsocell = ('<td class="faint">—</td>' if not also else
                     f'<td class="dim" title="{esc(" ".join(also))}">'
@@ -463,7 +476,10 @@ def spreads(d: dict, per: str, sort: str = "ER (Adj)",
                       f"{esc(sort)}, "
                       + ("vol-adjusted legs" if d.get("mode") == "vol"
                          else "equal-notional legs"))
-            + note("Size is contracts per leg, long : short — "
+            + note("Ticket is the smallest whole-contract order that "
+                   "holds the target ratio, micros included; scale by "
+                   "multiplying both legs. Hover for the ratio it targets and "
+                   "how far off it lands. Sizing: "
                    + ("matching dollar risk, n × notional × σ."
                       if d.get("mode") == "vol" else
                       "matching dollar exposure, n × notional, ignoring vol.")
@@ -895,6 +911,42 @@ def calendar(rows, horizon_days: int, warn=None) -> str:
 
 
 # -------------------------------------------------------------- Knowledge
+def contracts_table() -> str:
+    """What you actually trade: multiplier, notional per contract, and the
+    small version where one exists.
+
+    Sits here because it is the reference you reach for once and then need
+    beside the sizing — a ticket reading "8 MBT : 1 MNQ" is only checkable if
+    you can see that MBT is a fiftieth of BTC.
+    """
+    t = _tok()
+    ink, mute = t.get("ink", "#0d1418"), t.get("mute", "#66727b")
+    head = ('<th class="l">Instrument</th><th class="l">Sector</th>'
+            '<th>Multiplier</th><th class="l">Small contract</th>'
+            '<th>Multiplier</th><th>Fraction</th>')
+    body = ""
+    for c in U.CODES:
+        m = U.MULT.get(c)
+        mic = U.MICRO.get(c)
+        body += (f'<tr><td class="l">{swatch(U.SECTOR[c])}{esc(c)} '
+                 f'<span class="nm">{esc(U.NAME[c])}</span></td>'
+                 f'<td class="l faint">{esc(U.SECTOR[c])}</td>'
+                 + cell(m, 0, "dim")
+                 + (f'<td class="l" style="color:{ink}">{esc(mic[0])}</td>'
+                    + cell(mic[1], 0, "dim")
+                    + f'<td class="dim">1/{mic[2]}</td>'
+                    if mic else
+                    f'<td class="l faint">—</td><td class="faint">—</td>'
+                    f'<td class="faint">—</td>')
+                 + "</tr>")
+    return (eyebrow("Contract specifications")
+            + note("Notional = price × multiplier. The small contract is what "
+                   "makes a computed ratio executable — a 1.6 : 1 spread is "
+                   "8 : 1 in micros. Transcribed from the exchange, not "
+                   "fetched: <b>check against CME before trading off them</b>.")
+            + table(head, body))
+
+
 def knowledge(group: str = "All") -> str:
     cards = ""
     for code in U.CODES:
@@ -914,7 +966,8 @@ def knowledge(group: str = "All") -> str:
                  "sets the tone rather than by how much it can move on its day. "
                  "Maintained by hand — a driver you cannot sign is a topic, "
                  "not a driver.")
-            + f'<div class="dgrid">{cards}</div>')
+            + f'<div class="dgrid">{cards}</div>'
+            + contracts_table())
 
 
 # ------------------------------------------------------------------- News

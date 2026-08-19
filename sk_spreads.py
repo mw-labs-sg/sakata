@@ -280,6 +280,55 @@ def _window_field(name, by_bar, mode=MODE):
             out["sizeVol"] = label(v)
         return out
 
+    def ticket(c):
+        """The smallest whole-contract order that lands near the target risk.
+
+        A ratio is not an order. 1.6 : 1 rounds to 2 : 1 and carries a hedge 25%
+        off; the point of the micros is that the same risk is reachable in whole
+        numbers. So this searches both sizes on both legs for the fewest
+        contracts whose dollar risk lands within tolerance, and reports how far
+        off it actually is rather than implying it is exact.
+        """
+        if c["kind"] != "pair":
+            return None
+        lg, sh = c["long"], c["short"]
+        cl, cs = ss.name_of(lg), ss.name_of(sh)
+        if lg not in raw_last or sh not in raw_last:
+            return None
+
+        def variants(code, sym):
+            """(label, risk per contract) for the standard and the micro."""
+            out = []
+            m = U.MULT.get(code)
+            if m:
+                out.append((code, raw_last[sym] * m * sigma.get(sym, 0)))
+            mic = U.MICRO.get(code)
+            if mic:
+                out.append((mic[0], raw_last[sym] * mic[1] * sigma.get(sym, 0)))
+            return [(n, r) for n, r in out if r > 0]
+
+        best = None
+        for ln, lr in variants(cl, lg):
+            for sn, sr in variants(cs, sh):
+                for a in range(1, 11):
+                    for b in range(1, 11):
+                        err = abs((a * lr) / (b * sr) - 1)
+                        risk = a * lr + b * sr
+                        # Hedge quality first, then CAPITAL. Ranking on error
+                        # alone returned a $112 ticket beside a $3,509 one and
+                        # called both clean; bucketing error to the nearest
+                        # percent lets the cheaper of two equally good hedges
+                        # win. Scale up by multiplying both legs.
+                        rank = (round(err, 2), risk)
+                        if best is None or rank < best[0]:
+                            best = (rank, ln, a, sn, b, err, risk)
+        if best is None:
+            return None
+        _, ln, a, sn, b, err, risk = best
+        return {"long": f"{a} {ln}", "short": f"{b} {sn}",
+                "text": f"{a} {ln} : {b} {sn}", "err": _num(err * 100, 1),
+                "risk": _num(risk, 0), "micro": ln != cl or sn != cs}
+
     def leg_delta(c):
         """Pair ER against the better of its two legs, as a percentage.
 
@@ -316,7 +365,7 @@ def _window_field(name, by_bar, mode=MODE):
             "mdd": _num(c["MDD%"], 1), "corr": _num(c["Corr"]),
             "ratio": _num(c["Ratio"]),
             "bestLegEr": best_leg, "legDelta": delta,
-            **contracts(c),
+            **contracts(c), "ticket": ticket(c),
         })
 
     # Charts follow the table's order, capped so one instrument cannot occupy

@@ -56,6 +56,35 @@ MULT = {
     "KC": 375,
 }
 
+# The small contract, where one exists: (ticker, multiplier, divisor).
+#
+# This is what makes a computed ratio executable. A spread sized 1.6 : 1 cannot
+# be traded — you round to 2 : 1 and carry a hedge that is 25% off — but the
+# same risk in micros is 8 : 5, or in a mixed ticket often 1 : 3 of something
+# smaller. The divisor is only carried so the arithmetic can be checked on
+# sight: MULT[code] / divisor must equal the multiplier.
+#
+# VERIFY THESE AGAINST CME BEFORE TRADING OFF THEM. They are transcribed
+# specifications, not fetched, and a wrong multiplier here is a wrong hedge —
+# the failure is silent and it is in the direction of your money. ZB, ZN, NKD,
+# SB and KC have no micro on the same underlying, so they size in standards.
+MICRO = {
+    "ES":  ("MES", 5,        10),    # Micro E-mini S&P 500, $5 x index
+    "NQ":  ("MNQ", 2,        10),    # Micro E-mini Nasdaq-100, $2 x index
+    "BTC": ("MBT", 0.1,      50),    # Micro Bitcoin, 0.1 BTC
+    "ETH": ("MET", 0.1,     500),    # Micro Ether, 0.1 ETH
+    "GC":  ("MGC", 10,       10),    # Micro Gold, 10 troy oz
+    "SI":  ("SIL", 1000,      5),    # Micro Silver, 1,000 troy oz
+    "HG":  ("MHG", 2500,     10),    # Micro Copper, 2,500 lbs
+    "CL":  ("MCL", 100,      10),    # Micro WTI, 100 barrels
+    "6E":  ("M6E", 12500,    10),    # Micro EUR/USD, 12,500 EUR
+    "6J":  ("M6J", 1250000,  10),    # Micro JPY/USD, 12,500,000 yen / 10
+    "NG":  ("QG",  2500,      4),    # E-mini Nat Gas, 2,500 MMBtu
+    "ZC":  ("XC",  10,        5),    # Mini Corn, 1,000 bu
+    "ZW":  ("XW",  10,        5),    # Mini Wheat, 1,000 bu
+    "ZS":  ("XK",  10,        5),    # Mini Soybean, 1,000 bu
+}
+
 # Trading Economics commentary pages, per instrument.
 # Crypto is deliberately absent. Their btcusd/ethusd pages carry a commentary
 # paragraph that goes weeks without changing — a July paragraph was still
