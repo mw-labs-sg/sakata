@@ -277,7 +277,11 @@ svg .neg {{ color: inherit !important; }}
 .cgrid .clegend {{ display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; margin-bottom: 4px; }}
 /* Risk stats under the legend: one line, wrapping, so the card answers the
    same questions the table row does without leaving the picture. */
-.cstats {{ display: flex; flex-wrap: wrap; gap: 3px 14px; margin: 0 0 8px; font-size: 11px; line-height: 1.5; }}
+/* Seven stats, one line: ER (Adj) joined them when it left the title, and
+   a wrapped eighth of a row reads as a mistake rather than as overflow.
+   10.5px with an 8px gap leaves the widest card 42px of slack, which is
+   the margin a three-digit Sharpe or a 100% Vol needs. */
+.cstats {{ display: flex; flex-wrap: wrap; gap: 3px 8px; margin: 0 0 8px; font-size: 10.5px; line-height: 1.5; }}
 @media (max-width: 900px) {{ .cgrid {{ grid-template-columns: 1fr !important; }} }}
 /* Icon button: square, quiet, teal on hover — the header switch from
    index.html, minus the SVG. Scoped to the theme toggle. Unscoped, this block

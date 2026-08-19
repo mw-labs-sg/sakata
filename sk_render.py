@@ -209,6 +209,10 @@ def digest(p: dict, generated: str = "") -> str:
 SORTS = {"ER (Adj)": "erAdj", "Win%": "win", "Tot%": "tot",
          "Sharpe": "sharpe", "ROA": "roa"}
 
+# Card stats carry short labels; this is which one each ranking lights up.
+RANKED_AS = {"erAdj": "ER (Adj)", "win": "Win%", "tot": "Tot%",
+             "sharpe": "Sharpe", "roa": "ROA"}
+
 # Leg weighting. This is not a display switch: it selects the return series the
 # whole field is computed from, so ER, Sharpe, drawdown, the ranking and the
 # chart's spread line all follow it. Vol equalises dollar RISK, notional
@@ -562,39 +566,37 @@ def spread_charts(p: dict, t: dict = None, sort: str = "ER (Adj)") -> str:
 
         # The same risk columns the table carries, so a shape you like can be
         # checked here rather than by hunting for its row.
-        def stat(label, val, suffix="", col=None):
+        def stat(label, val, suffix="", col=None, on=None):
             if val is None:
                 return ""
+            live = (on or label) == RANKED_AS.get(key)
             return (f'<span style="white-space:nowrap"><span style="color:'
-                    f'{faint};font-size:9.5px;letter-spacing:.07em;'
+                    f'{ink if live else faint};font-size:9px;'
+                    f'letter-spacing:.07em;font-weight:{600 if live else 400};'
                     f'text-transform:uppercase">{label}</span> '
-                    f'<span style="color:{col or ink};font-weight:600">'
+                    f'<span style="color:{col or ink};'
+                    f'font-weight:{700 if live else 600}">'
                     f'{val}{suffix}</span></span>')
 
         stats = "".join([
+            stat("ER (Adj)", c.get("erAdj")),
             stat("ROA", c.get("roa")),
             stat("Sharpe", c.get("sharpe")),
-            stat("Win", c.get("win"), "%"),
+            stat("Win", c.get("win"), "%", on="Win%"),
             stat("Vol", c.get("vol"), "%"),
             stat("MDD", c.get("mdd"), "%", neg),
             stat("Tot", (f'{"+" if (c.get("tot") or 0) >= 0 else ""}'
                          f'{c.get("tot")}') if c.get("tot") is not None
-                 else None, "%", pos if (c.get("tot") or 0) >= 0 else neg),
+                 else None, "%", pos if (c.get("tot") or 0) >= 0 else neg,
+                 on="Tot%"),
         ])
-        # ER (Adj) reads as part of the name — this is the BTC/NKD that
-        # scored 6.08 — so it sits against it rather than across the card.
-        # margin-right:auto holds the pair together against .ctitle's
-        # space-between, which would otherwise strand it in the middle. Raw
-        # ER keeps its column in the table; the card carries the key the
-        # field is ordered by, since the order is what it exists to explain.
-        adjpart = ("" if c.get("erAdj") is None else
-                   f'<span style="color:{ink};font-weight:700;'
-                   f'margin-right:auto">ER (Adj) {c["erAdj"]}</span>')
         cards += (f'<div class="plot"><div class="ctitle">'
                   f'<b>{n}. {esc(c["label"])}</b>'
                   # The verdict was already reaching for the far corner with
-                  # margin-left:auto; on the title row it gets one.
-                  f'{adjpart}{verdict}</div>'
+                  # margin-left:auto; on the title row it gets one, and the
+                  # name has the row to itself now that its number moved down
+                  # into the stat line with the rest of them.
+                  f'{verdict}</div>'
                   f'<div class="clegend">{legend}</div>'
                   f'<div class="cstats">{stats}</div>'
                   + CH.line_chart(c["t"], series, None, 560, 220, 1) + "</div>")
