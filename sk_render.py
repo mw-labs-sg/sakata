@@ -419,7 +419,7 @@ def spreads(d: dict, per: str, sort: str = "ER (Adj)",
     # made and what you gave back on the way.
     head = ('<th class="l">#</th><th class="l">Long</th><th class="l">Short</th>'
             '<th>ER</th><th>ER (Adj)</th><th>Win%</th><th>Vol%</th>'
-            '<th>Tot%</th><th>MDD%</th>'
+            '<th>Tot%</th><th>MDD%</th><th>Recovery</th>'
             f'<th class="l">Ticket ({esc(weighting["label"])})</th>'
             '<th>vs leg</th><th>Top 10</th>')
     body = ""
@@ -447,13 +447,23 @@ def spreads(d: dict, per: str, sort: str = "ER (Adj)",
         # whole-contract equivalent can, and micros are what make it reachable.
         # The ratio it targets, how far off the hedge lands and what one unit
         # costs all sit on hover rather than widening the row.
+        # Both orders, because they answer different questions about size:
+        # the full-size one, and the smallest that still hedges. The second
+        # line only appears when the micro version is genuinely smaller.
         tk = r.get("ticket")
         if tk:
-            off = tk.get("err")
-            cls = "warn" if (off or 0) >= 5 else "dim"
-            size = (f'<td class="l {cls}" title="targets {r.get(skey)} · '
-                    f'hedge {off}% off · ${tk.get("risk", 0):,.0f} risk per '
-                    f'unit">{esc(tk["text"])}</td>')
+            sd, sm = tk.get("std") or {}, tk.get("small")
+            cls = "warn" if (sd.get("err") or 0) >= 5 else "dim"
+            tip = (f'targets {r.get(skey)} · standard {sd.get("err")}% off, '
+                   f'${sd.get("risk", 0):,.0f} risk')
+            line2 = ""
+            if sm:
+                tip += (f' · smallest {sm["err"]}% off, ${sm["risk"]:,.0f}')
+                line2 = (f'<div style="color:{t.get("mute", "#66727b")};'
+                         f'font-size:10.5px;margin-top:1px">{esc(sm["text"])}'
+                         f'</div>')
+            size = (f'<td class="l {cls}" title="{esc(tip)}">'
+                    f'{esc(sd.get("text", "—"))}{line2}</td>')
         elif r.get(skey):
             size = (f'<td class="l dim" title="exact {r[sxkey]}">'
                     f'{esc(r[skey])}</td>')
@@ -469,6 +479,7 @@ def spreads(d: dict, per: str, sort: str = "ER (Adj)",
                  + cell(r["er"], 3, "dim") + cell(r.get("erAdj"), 2, "last")
                  + cell(r["win"], 0, "dim") + cell(r["vol"], 1, "dim")
                  + pct(r["tot"], 1) + cell(r["mdd"], 1, "warn")
+                 + cell(r.get("recovery"), 1, "last")
                  + size + legcell + alsocell + "</tr>")
 
     return (out
@@ -476,10 +487,12 @@ def spreads(d: dict, per: str, sort: str = "ER (Adj)",
                       f"{esc(sort)}, "
                       + ("vol-adjusted legs" if d.get("mode") == "vol"
                          else "equal-notional legs"))
-            + note("Ticket is the smallest whole-contract order that "
-                   "holds the target ratio, micros included; scale by "
-                   "multiplying both legs. Hover for the ratio it targets and "
-                   "how far off it lands. Sizing: "
+            + note("Recovery is Tot% over the worst drawdown it took — "
+                   "unannualised, so 10 means it made ten times what the "
+                   "deepest hole cost. Ticket is the full-size order, with the "
+                   "smallest micro equivalent beneath it where one exists; "
+                   "both hedge within 2%, so pick on capital and scale by "
+                   "multiplying both legs. Sizing: "
                    + ("matching dollar risk, n × notional × σ."
                       if d.get("mode") == "vol" else
                       "matching dollar exposure, n × notional, ignoring vol.")

@@ -280,14 +280,24 @@ def _window_field(name, by_bar, mode=MODE):
             out["sizeVol"] = label(v)
         return out
 
-    def ticket(c):
-        """The smallest whole-contract order that lands near the target risk.
+    HEDGE_TOL = 0.02        # 2% off is inside the noise of a sampled sigma
 
-        A ratio is not an order. 1.6 : 1 rounds to 2 : 1 and carries a hedge 25%
-        off; the point of the micros is that the same risk is reachable in whole
-        numbers. So this searches both sizes on both legs for the fewest
-        contracts whose dollar risk lands within tolerance, and reports how far
-        off it actually is rather than implying it is exact.
+    def ticket(c):
+        """Two orders for the same spread: the full-size one, and the smallest.
+
+        Both answer "what do I send", but they answer different questions about
+        size. STANDARD uses full contracts only — fewest tickets, most capital.
+        SMALLEST allows the micro, which is what micros are actually for: not
+        precision, but getting the same trade into a smaller account. BTC/ES is
+        5 BTC : 9 ES at $7,241 of risk, or 8 MBT : 3 MES at $236 — the same
+        position at a thirty-first of the size.
+
+        Both minimise CAPITAL subject to hedging within tolerance, rather than
+        minimising error outright. Chasing the last half-percent of a sigma
+        estimated off a few dozen bars is false precision, and the first
+        version of this did exactly that: it returned whichever combination was
+        marginally more accurate and ignored that one cost thirty times more.
+        Scale either by multiplying both legs.
         """
         if c["kind"] != "pair":
             return None
@@ -296,38 +306,70 @@ def _window_field(name, by_bar, mode=MODE):
         if lg not in raw_last or sh not in raw_last:
             return None
 
-        def variants(code, sym):
-            """(label, risk per contract) for the standard and the micro."""
+        def variants(code, sym, micros):
             out = []
             m = U.MULT.get(code)
             if m:
-                out.append((code, raw_last[sym] * m * sigma.get(sym, 0)))
-            mic = U.MICRO.get(code)
+                out.append((code, raw_last[sym] * m * sigma.get(sym, 0), 10))
+            mic = U.MICRO.get(code) if micros else None
             if mic:
-                out.append((mic[0], raw_last[sym] * mic[1] * sigma.get(sym, 0)))
-            return [(n, r) for n, r in out if r > 0]
+                # A micro is a fraction of the standard, so a sane position in
+                # them runs to more contracts. Capping both at 10 was what hid
+                # nearly every micro solution.
+                out.append((mic[0], raw_last[sym] * mic[1] * sigma.get(sym, 0),
+                            min(4 * mic[2], 60)))
+            return [(n, r, cap) for n, r, cap in out if r > 0]
 
-        best = None
-        for ln, lr in variants(cl, lg):
-            for sn, sr in variants(cs, sh):
-                for a in range(1, 11):
-                    for b in range(1, 11):
-                        err = abs((a * lr) / (b * sr) - 1)
-                        risk = a * lr + b * sr
-                        # Hedge quality first, then CAPITAL. Ranking on error
-                        # alone returned a $112 ticket beside a $3,509 one and
-                        # called both clean; bucketing error to the nearest
-                        # percent lets the cheaper of two equally good hedges
-                        # win. Scale up by multiplying both legs.
-                        rank = (round(err, 2), risk)
-                        if best is None or rank < best[0]:
-                            best = (rank, ln, a, sn, b, err, risk)
-        if best is None:
+        def search(micros):
+            best = fallback = None
+            for ln, lr, lcap in variants(cl, lg, micros):
+                for sn, sr, scap in variants(cs, sh, micros):
+                    for x in range(1, lcap + 1):
+                        for y in range(1, scap + 1):
+                            err = abs((x * lr) / (y * sr) - 1)
+                            risk = x * lr + y * sr
+                            cand = (risk, f"{x} {ln} : {y} {sn}", err)
+                            if err <= HEDGE_TOL:
+                                if best is None or risk < best[0]:
+                                    best = cand
+                            elif fallback is None or (err, risk) < fallback[:1] + (0,):
+                                if fallback is None or err < fallback[2]:
+                                    fallback = cand
+            pick = best or fallback
+            if pick is None:
+                return None
+            risk, text, err = pick
+            return {"text": text, "err": _num(err * 100, 1),
+                    "risk": _num(risk, 0)}
+
+        std, small = search(False), search(True)
+        if std is None:
             return None
-        _, ln, a, sn, b, err, risk = best
-        return {"long": f"{a} {ln}", "short": f"{b} {sn}",
-                "text": f"{a} {ln} : {b} {sn}", "err": _num(err * 100, 1),
-                "risk": _num(risk, 0), "micro": ln != cl or sn != cs}
+        # Only worth showing as an alternative if it is genuinely smaller.
+        smaller = bool(small and std["risk"] and
+                       small["risk"] < std["risk"] * 0.7)
+        return {"std": std, "small": small if smaller else None, **std}
+
+    MIN_MDD = 0.05      # below this a drawdown is not a denominator
+
+    def recovery(c):
+        """Total return over the worst drawdown it took to get it.
+
+        The recovery factor, not MAR or Calmar. Both of those annualise the
+        numerator, and annualising a three-day window multiplies its noise by
+        about a hundred and twenty — a number that says more about the window
+        length than the position. This is unannualised and reads directly: 10
+        means it made ten times what the deepest hole cost.
+
+        Computed off the UNROUNDED drawdown. The displayed MDD is rounded to
+        one decimal, so a true 0.04% drawdown shows as 0.0 and would divide the
+        ratio to infinity. Below MIN_MDD there is no denominator worth having
+        and this returns None rather than a large number.
+        """
+        tot, mdd = c.get("Tot%"), c.get("MDD%")
+        if tot is None or mdd is None or abs(mdd) < MIN_MDD:
+            return None
+        return _num(max(min(tot / abs(mdd), 99), -99), 1)
 
     def leg_delta(c):
         """Pair ER against the better of its two legs, as a percentage.
@@ -365,7 +407,7 @@ def _window_field(name, by_bar, mode=MODE):
             "mdd": _num(c["MDD%"], 1), "corr": _num(c["Corr"]),
             "ratio": _num(c["Ratio"]),
             "bestLegEr": best_leg, "legDelta": delta,
-            **contracts(c), "ticket": ticket(c),
+            **contracts(c), "ticket": ticket(c), "recovery": recovery(c),
         })
 
     # Charts follow the table's order, capped so one instrument cannot occupy
