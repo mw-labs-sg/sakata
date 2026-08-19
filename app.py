@@ -399,4 +399,9 @@ with t[7]:
     source("Hand-maintained in sk_knowledge.py · no fetch")
     grp = st.radio("Group", ["All", "Financials", "Commodities"],
                    horizontal=True, key="kn_group", label_visibility="collapsed")
-    UI.md(R.knowledge(grp))
+    # Priced off the same cached daily closes the Board reads, so the
+    # notionals on this tab and the prices on that one cannot disagree.
+    daily_kn = prices("1d", "10y")
+    last_kn = {c: float(df["close"].iloc[-1]) for c, df in daily_kn.items()
+               if df is not None and len(df)}
+    UI.md(R.knowledge(grp, last_kn))

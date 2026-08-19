@@ -911,43 +911,49 @@ def calendar(rows, horizon_days: int, warn=None) -> str:
 
 
 # -------------------------------------------------------------- Knowledge
-def contracts_table() -> str:
-    """What you actually trade: multiplier, notional per contract, and the
-    small version where one exists.
+def contracts_table(last: dict = None) -> str:
+    """What you actually trade: multiplier, live notional, and the small
+    contract where one exists.
 
-    Sits here because it is the reference you reach for once and then need
-    beside the sizing — a ticket reading "8 MBT : 1 MNQ" is only checkable if
-    you can see that MBT is a fiftieth of BTC.
+    Notional is carried because a multiplier alone does not tell you the size
+    of the thing — 6J's 12,500,000 and ZC's 50 are unreadable side by side
+    until both are priced, and it is the notional that decides how many
+    contracts balance a spread.
     """
     t = _tok()
-    ink, mute = t.get("ink", "#0d1418"), t.get("mute", "#66727b")
-    head = ('<th class="l">Instrument</th><th class="l">Sector</th>'
-            '<th>Multiplier</th><th class="l">Small contract</th>'
-            '<th>Multiplier</th><th>Fraction</th>')
+    last = last or {}
+    ink = t.get("ink", "#0d1418")
+    head = ('<th class="l">Instrument</th><th>Last</th><th>Multiplier</th>'
+            '<th>Notional</th><th class="l">Small</th><th>Multiplier</th>'
+            '<th>Notional</th><th>Fraction</th>')
     body = ""
     for c in U.CODES:
-        m = U.MULT.get(c)
-        mic = U.MICRO.get(c)
+        m, mic, px = U.MULT.get(c), U.MICRO.get(c), last.get(c)
+        notl = px * m if (px and m) else None
         body += (f'<tr><td class="l">{swatch(U.SECTOR[c])}{esc(c)} '
                  f'<span class="nm">{esc(U.NAME[c])}</span></td>'
-                 f'<td class="l faint">{esc(U.SECTOR[c])}</td>'
+                 + cell(px, U.DEC.get(c, 2), "dim")
                  + cell(m, 0, "dim")
+                 + f'<td style="color:{ink};font-weight:600">'
+                 + (f'{notl:,.0f}' if notl else "—") + "</td>"
                  + (f'<td class="l" style="color:{ink}">{esc(mic[0])}</td>'
                     + cell(mic[1], 0, "dim")
+                    + cell(px * mic[1] if px else None, 0, "dim")
                     + f'<td class="dim">1/{mic[2]}</td>'
                     if mic else
-                    f'<td class="l faint">—</td><td class="faint">—</td>'
-                    f'<td class="faint">—</td>')
+                    '<td class="l faint">—</td><td class="faint">—</td>'
+                    '<td class="faint">—</td><td class="faint">—</td>')
                  + "</tr>")
     return (eyebrow("Contract specifications")
-            + note("Notional = price × multiplier. The small contract is what "
-                   "makes a computed ratio executable — a 1.6 : 1 spread is "
-                   "8 : 1 in micros. Transcribed from the exchange, not "
-                   "fetched: <b>check against CME before trading off them</b>.")
+            + note("Notional = last × multiplier, priced off the same daily "
+                   "closes as the Board. The small contract is what makes a "
+                   "computed ratio executable — a 1.6 : 1 spread is 8 : 1 in "
+                   "micros. Specifications are transcribed, not fetched: "
+                   "<b>check against CME before trading off them</b>.")
             + table(head, body))
 
 
-def knowledge(group: str = "All") -> str:
+def knowledge(group: str = "All", last: dict = None) -> str:
     cards = ""
     for code in U.CODES:
         sec = U.SECTOR[code]
@@ -962,12 +968,12 @@ def knowledge(group: str = "All") -> str:
                   f'<b>{esc(code)}</b> {esc(U.NAME[code])}'
                   f'<span class="dsec">{esc(sec)}</span></div>'
                   f'<ol class="dlist">{items}</ol></div>')
-    return (note("What actually moves each contract, ordered by how often it "
+    return (contracts_table(last)
+            + note("What actually moves each contract, ordered by how often it "
                  "sets the tone rather than by how much it can move on its day. "
                  "Maintained by hand — a driver you cannot sign is a topic, "
                  "not a driver.")
-            + f'<div class="dgrid">{cards}</div>'
-            + contracts_table())
+            + f'<div class="dgrid">{cards}</div>')
 
 
 # ------------------------------------------------------------------- News

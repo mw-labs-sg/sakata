@@ -42,7 +42,12 @@ def build_board(daily: dict) -> dict:
         rows.append({
             "code": code, "name": U.NAME[code], "sector": U.SECTOR[code],
             "group": U.GROUP_OF[U.SECTOR[code]], "dec": U.DEC[code],
-            "last": _r(last, 6), "asof": str(today),
+            # 8, not 6. DEC goes to 7 for 6J, so rounding the display value
+            # to six decimals padded the seventh with a zero that was not in
+            # the data: a 0.0063355 close rendered as 0.0063360 on Board while
+            # every other tab priced it correctly. The percentage columns use
+            # the unrounded `last`, so this only ever affected what was shown.
+            "last": _r(last, 8), "asof": str(today),
             "Day": _r((last / pairs[-2][1] - 1) * 100, 2) if len(pairs) > 1 else None,
             "WTD": pct(ref_before(wk)), "MTD": pct(ref_before(mo)),
             "QTD": pct(ref_before(qt)), "YTD": pct(ref_before(yr)),
