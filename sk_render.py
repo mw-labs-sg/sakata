@@ -206,7 +206,8 @@ def digest(p: dict, generated: str = "") -> str:
 # rows identically — bars is constant, so sqrt(bars) is a positive scale factor
 # — but the adjusted one is what the by-window tables compare, and offering two
 # keys that behave the same inside a table only invites the question.
-SORTS = {"ER (Adj)": "erAdj", "Win%": "win", "Tot%": "tot", "Sharpe": "sharpe"}
+SORTS = {"ER (Adj)": "erAdj", "Win%": "win", "Tot%": "tot",
+         "Sharpe": "sharpe", "ROA": "roa"}
 
 # Leg weighting. This is not a display switch: it selects the return series the
 # whole field is computed from, so ER, Sharpe, drawdown, the ranking and the
@@ -419,7 +420,7 @@ def spreads(d: dict, per: str, sort: str = "ER (Adj)",
     # made and what you gave back on the way.
     head = ('<th class="l">#</th><th class="l">Long</th><th class="l">Short</th>'
             '<th>ER</th><th>ER (Adj)</th><th>Win%</th><th>Vol%</th>'
-            '<th>Tot%</th><th>MDD%</th><th>Recovery</th>'
+            '<th>Tot%</th><th>MDD%</th><th>ROA</th>'
             f'<th class="l">Ratio ({esc(weighting["label"])})</th>'
             '<th>vs leg</th><th>Top 10</th>')
     body = ""
@@ -454,12 +455,12 @@ def spreads(d: dict, per: str, sort: str = "ER (Adj)",
         # hover, for when the order is actually being filled.
         ex = r.get(sxkey)
         if ex:
-            per = 1 / ex          # short legs per single long leg
+            qty = 1 / ex          # short legs per single long leg
             tk = (r.get("ticket") or {}).get("std") or {}
             tip = (f'whole contracts: {tk["text"]} ({tk["err"]}% off, '
                    f'${tk.get("risk", 0):,.0f} risk)' if tk.get("text") else "")
             size = (f'<td class="l dim" title="{esc(tip)}">'
-                    f'1 {esc(r["long"])} : {per:,.2f} {esc(r["short"])}</td>')
+                    f'1 {esc(r["long"])} : {qty:,.2f} {esc(r["short"])}</td>')
         else:
             size = '<td class="l faint">—</td>'
         also = r.get("alsoTop") or []
@@ -472,7 +473,7 @@ def spreads(d: dict, per: str, sort: str = "ER (Adj)",
                  + cell(r["er"], 3, "dim") + cell(r.get("erAdj"), 2, "last")
                  + cell(r["win"], 0, "dim") + cell(r["vol"], 1, "dim")
                  + pct(r["tot"], 1) + cell(r["mdd"], 1, "warn")
-                 + cell(r.get("recovery"), 1, "last")
+                 + cell(r.get("roa"), 1, "last")
                  + size + legcell + alsocell + "</tr>")
 
     return (out
@@ -480,9 +481,9 @@ def spreads(d: dict, per: str, sort: str = "ER (Adj)",
                       f"{esc(sort)}, "
                       + ("vol-adjusted legs" if d.get("mode") == "vol"
                          else "equal-notional legs"))
-            + note("Recovery is Tot% over the worst drawdown it took — "
-                   "unannualised, so 10 means it made ten times what the "
-                   "deepest hole cost. Ratio is how much of the short leg "
+            + note("ROA is return over maximum drawdown: Tot% divided by the "
+                   "worst hole it took, unannualised, so 10 means it made ten "
+                   "times what that hole cost. Ratio is how much of the short leg "
                    "one long leg needs; hover for a whole-contract fill. "
                    "Sizing: "
                    + ("matching dollar risk, n × notional × σ."

@@ -352,12 +352,14 @@ def _window_field(name, by_bar, mode=MODE):
 
     MIN_MDD = 0.05      # below this a drawdown is not a denominator
 
-    def recovery(c):
-        """Total return over the worst drawdown it took to get it.
+    def roa(c):
+        """Return over maximum drawdown: total return per unit of worst hole.
 
-        The recovery factor, not MAR or Calmar. Both of those annualise the
-        numerator, and annualising a three-day window multiplies its noise by
-        about a hundred and twenty — a number that says more about the window
+        Also called the recovery factor, but ROA says what it divides by and
+        "recovery" reads as a duration — how long it took to get back — which
+        is a different statistic entirely. Not MAR or Calmar: both annualise
+        the numerator, and annualising a three-day window multiplies its noise
+        by about a hundred and twenty, a number that says more about the window
         length than the position. This is unannualised and reads directly: 10
         means it made ten times what the deepest hole cost.
 
@@ -407,7 +409,7 @@ def _window_field(name, by_bar, mode=MODE):
             "mdd": _num(c["MDD%"], 1), "corr": _num(c["Corr"]),
             "ratio": _num(c["Ratio"]),
             "bestLegEr": best_leg, "legDelta": delta,
-            **contracts(c), "ticket": ticket(c), "recovery": recovery(c),
+            **contracts(c), "ticket": ticket(c), "roa": roa(c),
         })
 
     # Charts follow the table's order, capped so one instrument cannot occupy
