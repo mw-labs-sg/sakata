@@ -516,19 +516,9 @@ def spread_charts(p: dict, t: dict = None, sort: str = "ER (Adj)") -> str:
     if not p.get("charts"):
         return ""
     key = SORTS.get(sort, "erAdj")
-    cap, legcap = p.get("chartCap", 12), p.get("legCap", 2)
     ranked = sorted(p["charts"], key=lambda c: -(c.get(key) if c.get(key)
                                                  is not None else -9e9))
-    picked, legseen = [], {}
-    for c in ranked:
-        if len(picked) >= cap:
-            break
-        legs = [s for s in (c.get("lgName"), c.get("shName")) if s]
-        if any(legseen.get(s, 0) >= legcap for s in legs):
-            continue
-        for s in legs:
-            legseen[s] = legseen.get(s, 0) + 1
-        picked.append(c)
+    picked = ranked[:p.get("chartCap", 12)]
     mode = p.get("mode", "vol")
     t = t or _tok()
     ink = t.get("ink", "#0d1418")
@@ -616,8 +606,8 @@ def spread_charts(p: dict, t: dict = None, sort: str = "ER (Adj)") -> str:
                       if mode == "vol" else
                       "The spread over them is <b>equal-notional</b>, which is "
                       "the gap between the two lines.")
-                   + f' Ranked on {esc(sort)}, like the table, and capped'
-                     ' at two charts per instrument.')
+                   + f" The table's top twelve on {esc(sort)}, in its"
+                     " order — card 3 is row 3.")
             + f'<div class="cgrid">{cards}</div>')
 
 # ------------------------------------------------------------------ Curve

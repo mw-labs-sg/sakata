@@ -426,14 +426,21 @@ def _window_field(name, by_bar, mode=MODE, chart_keys=()):
                 drawn[i] = None
         return drawn[i]
 
-    def selection(order):
-        """Indices of the CHART_N charts to draw, in `order`, leg-capped."""
+    def selection(order, legcap=MAX_LEG_CHARTS):
+        """Indices of the CHART_N charts to draw, in `order`.
+
+        legcap None draws the ranking straight: whatever the top twelve are,
+        even if four of them are the same long leg. That is the right answer
+        when the grid exists to picture the table — a grid that silently skips
+        rows 5 through 10 because BTC already appeared twice is not showing
+        the ranking, it is showing a different one.
+        """
         picked, seen = [], {}
         for i in order:
             if len(picked) >= CHART_N:
                 break
             legs = [s for s in (field[i]["long"], field[i]["short"]) if s]
-            if any(seen.get(s, 0) >= MAX_LEG_CHARTS for s in legs):
+            if legcap and any(seen.get(s, 0) >= legcap for s in legs):
                 continue
             if curve_for(i) is None:
                 continue
@@ -457,14 +464,24 @@ def _window_field(name, by_bar, mode=MODE, chart_keys=()):
                "tot": lambda c: _num(c["Tot%"], 1),
                "sharpe": lambda c: _num(c["Sharpe"]),
                "roa": roa}
-    base = list(range(len(field)))
-    keep = selection(base)
+    # Ranked over the ROWS, not the whole field: the table only lists TOP_N of
+    # it, and a grid drawn from candidates that have no row is not the table's
+    # top twelve however well they score.
+    listed = list(range(min(len(field), TOP_N)))
+    keep = []
     for k in chart_keys or ():
         if k not in rank_by:
             continue
         val = rank_by[k]
-        keep += selection(sorted(base, key=lambda i: -(
-            val(field[i]) if val(field[i]) is not None else -9e9)))
+        keep += selection(sorted(listed, key=lambda i: -(
+            val(field[i]) if val(field[i]) is not None else -9e9)), None)
+    # Held in field order, which is the order `rows` is in, so that the
+    # renderer's stable sort breaks ties exactly where the table breaks them.
+    keep = sorted(dict.fromkeys(keep))
+    # No keys asked for means the one default grid the static site ships,
+    # where nothing can be reordered and the leg cap still earns its place.
+    # That one scans the whole field, as it always has.
+    keep = keep or selection(list(range(len(field))))
     charts = []
     for n, i in enumerate(dict.fromkeys(keep), 1):
         c = field[i]
@@ -503,9 +520,9 @@ def _window_field(name, by_bar, mode=MODE, chart_keys=()):
         "legShort": [[ss.name_of(k), v] for k, v in sh.most_common(6)],
         "legLong": [[ss.name_of(k), v] for k, v in lg.most_common(6)],
         "rows": rows, "charts": charts,
-        # The renderer reproduces this selection for whichever ranking is on
-        # screen, so it needs the same two numbers rather than its own copy.
-        "chartCap": CHART_N, "legCap": MAX_LEG_CHARTS,
+        # The renderer takes this many off the top of whichever ranking is on
+        # screen, so it reads the number from here rather than keeping a copy.
+        "chartCap": CHART_N,
     }
 
 
