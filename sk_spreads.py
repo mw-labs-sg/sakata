@@ -432,7 +432,8 @@ def _window_field(name, by_bar, mode=MODE):
         er = _num(c["ER"], 3)
         cv.update({"n": len(charts) + 1, "label": ss.pos_label(c),
                    "kind": c["kind"], "sharpe": _num(c["Sharpe"]),
-                   "er": er, "erAdj": adj(er), "tot": _num(c["Tot%"], 1),
+                   "er": er, "erAdj": adj(er), "roa": roa(c),
+                   "tot": _num(c["Tot%"], 1),
                    # The card carries the same risk columns as the table, so a
                    # shape you like can be sanity-checked without scrolling
                    # back up to find its row.

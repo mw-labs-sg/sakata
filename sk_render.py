@@ -516,7 +516,7 @@ def spread_charts(p: dict, t: dict = None) -> str:
     # Amber, not red: a spread losing to its leg is a worse choice, not a
     # blown-up one, and red is no longer used for numbers anywhere.
     neg, pos = t.get("amber", "#96701c"), t.get("pos", "#0a7c66")
-    mute, faint = t.get("mute", "#66727b"), t.get("faint", "#97a2ab")
+    faint = t.get("faint", "#97a2ab")
     cards = ""
     for c in p["charts"]:
         series = []
@@ -536,7 +536,7 @@ def spread_charts(p: dict, t: dict = None) -> str:
             f'<span style="color:{s["c"]};font-weight:600">{esc(s["k"])}</span>'
             f'</span>' for s in series)
 
-        dv, best = c.get("legDelta"), c.get("bestLegEr")
+        dv = c.get("legDelta")
         if dv is None:
             verdict = ""
         else:
@@ -562,6 +562,8 @@ def spread_charts(p: dict, t: dict = None) -> str:
                     f'{val}{suffix}</span></span>')
 
         stats = "".join([
+            stat("ER (Adj)", c.get("erAdj")),
+            stat("ROA", c.get("roa")),
             stat("Sharpe", c.get("sharpe")),
             stat("Win", c.get("win"), "%"),
             stat("Vol", c.get("vol"), "%"),
@@ -570,13 +572,15 @@ def spread_charts(p: dict, t: dict = None) -> str:
                          f'{c.get("tot")}') if c.get("tot") is not None
                  else None, "%", pos if (c.get("tot") or 0) >= 0 else neg),
         ])
-        legpart = ("" if best is None else
-                   f'<span style="color:{mute}"> · leg {best:.3f}</span>')
         cards += (f'<div class="plot"><div class="ctitle">'
                   f'<b>{c["n"]}. {esc(c["label"])}</b>'
-                  # ER (Adj) is the ranking key, so it is the number in ink.
-                  f'<span><span style="color:{ink};font-weight:700">ER '
-                  f'{c["er"]}</span>{legpart}</span></div>'
+                  # Raw ER here, adjusted in the stats row below: the title
+                  # says how straight the path was, the stats say what that
+                  # is worth once the bar count is taken out of it. The best
+                  # leg's own ER went with it — the badge to the right already
+                  # reports the comparison in the unit that decides anything.
+                  f'<span style="color:{ink};font-weight:700">ER '
+                  f'{c["er"]}</span></div>'
                   f'<div class="clegend">{legend}{verdict}</div>'
                   f'<div class="cstats">{stats}</div>'
                   + CH.line_chart(c["t"], series, None, 560, 220, 1) + "</div>")
