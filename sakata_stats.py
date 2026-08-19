@@ -243,6 +243,10 @@ def weighted_spread(r1, r2, mode):
 MIN_BARS, MIN_SYMBOLS = 20, 8
 
 
+SESSION_SHARE = 0.5     # of instruments that must really print for a date to
+                        # count as a session
+
+
 def align_frames(frames, intraday, min_bars=MIN_BARS, min_symbols=MIN_SYMBOLS):
     """Align {symbol: close Series} by shedding COLUMNS, not rows.
 
@@ -251,6 +255,15 @@ def align_frames(frames, intraday, min_bars=MIN_BARS, min_symbols=MIN_SYMBOLS):
     listing, so dropna deletes every row before it, and on intraday the
     intersection collapses to whichever market trades the fewest hours. Both
     were measured cutting a 31-week window to 6 rows and a 73-hour window to 9.
+
+    Daily is the exception, and only for dates nothing traded on. Crypto prints
+    every day of the year, so a Saturday enters the union index with two real
+    prices and seventeen forward-filled ones — a bar on which most of the board
+    could not have been bought or sold, contributing a zero return for every
+    closed market and a live one for BTC. Measured over 200 daily rows, 62 of
+    them were that: weekends and holidays where under half the board printed.
+    They are dropped before the ffill rather than after, so a genuine single
+    market holiday still fills from its own last price.
     """
     syms = [k for k, v in frames.items() if v is not None and len(v) > 0]
     if len(syms) < 2:
@@ -263,7 +276,10 @@ def align_frames(frames, intraday, min_bars=MIN_BARS, min_symbols=MIN_SYMBOLS):
     keep, dropped = list(syms), []
     while True:
         df = pd.DataFrame({k: frames[k] for k in keep})
-        df = df.dropna() if intraday else df.ffill().dropna()
+        if intraday:
+            df = df.dropna()
+        else:
+            df = df[df.notna().mean(axis=1) >= SESSION_SHARE].ffill().dropna()
         if len(df) >= min_bars or len(keep) <= min_symbols:
             break
         victim = next((k for k in order if k in keep), None)

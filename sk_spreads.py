@@ -91,7 +91,14 @@ def _cal_start(unit, now=None):
 
 def _slice(frames, spec):
     """Calendar windows cut by date, rolling windows by bar count. A '30D'
-    that quietly became 22 because of holidays is a lie with a label on it."""
+    that quietly became 22 because of holidays is a lie with a label on it.
+
+    Bar-counted windows are cut generously here and trimmed to exactly n AFTER
+    alignment. Cutting each symbol's own tail first means counting a different
+    thing per symbol — BTC's last 60 prints span 60 days, ES's span 84 — and
+    the join then truncates everyone to the shortest, which is how 60D came to
+    cover 42 sessions.
+    """
     if spec["kind"] == "cal":
         start = pd.Timestamp(_cal_start(spec["unit"]))
         return {k: v[v.index >= start] for k, v in frames.items()}
@@ -102,7 +109,7 @@ def _slice(frames, spec):
         last = max(v.index[-1] for v in live)
         start = last.normalize() - pd.Timedelta(days=spec["n"])
         return {k: v[v.index >= start] for k, v in frames.items()}
-    return {k: v.tail(spec["n"]) for k, v in frames.items()}
+    return {k: v.tail(spec["n"] * 2 + 10) for k, v in frames.items()}
 
 
 def _num(v, n=2):
@@ -268,6 +275,9 @@ def _window_field(name, by_bar, mode=MODE, chart_keys=()):
         frames, intraday=spec["bar"] in INTRADAY_BARS)
     if data is None:
         return None
+    # Now that every symbol is on one index, n bars means n bars.
+    if spec["kind"] == "bars":
+        data = data.tail(spec["n"])
     # Raw levels, captured before the rebase, so leg sizing can be expressed in
     # CONTRACTS rather than in the sigma ratio. Equal risk means
     # n x notional x sigma matched on both sides, and notional needs a real
