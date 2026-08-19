@@ -111,7 +111,12 @@ def spread_field(mode: str = "vol", v: str = CACHE_V) -> dict:
 
     out = SP.build_spreads({"15m": closes(m15), "1h": closes(bb["1h"]),
                             "4h": closes(bb["4h"]), "1d": closes(bb["1d"])},
-                           mode=mode)
+                           mode=mode,
+                           # Every ranking the Function picker offers, so the
+                           # chart grid can follow the table into any of them
+                           # without a rebuild. The site build asks for none of
+                           # this and keeps its single default grid.
+                           chart_keys=tuple(R.SORTS.values()))
     # Stamped INSIDE the cached function, so it records when the field was
     # actually built rather than when the page happened to render. A browser
     # reload reruns the script but returns this same entry untouched, which is

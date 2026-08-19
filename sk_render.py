@@ -502,13 +502,33 @@ def spreads(d: dict, per: str, sort: str = "ER (Adj)",
                        if d.get("mode") == "vol" else
                        ["equal-notional legs", "no leg cap"])
                     + ([fresh] if fresh else []))
-            + spread_charts(p, t))
+            + spread_charts(p, t, sort))
 
 
-def spread_charts(p: dict, t: dict = None) -> str:
-    """Legs rebased to 100 in the side colours, spread over them in the ink."""
+def spread_charts(p: dict, t: dict = None, sort: str = "ER (Adj)") -> str:
+    """Legs rebased to 100 in the side colours, spread over them in the ink.
+
+    The grid follows the table: same ranking, same order, same twelve. The
+    payload carries every ranking's candidates, so this reproduces the pick
+    rather than recomputing it — a chart cannot be drawn from here, only
+    chosen.
+    """
     if not p.get("charts"):
         return ""
+    key = SORTS.get(sort, "erAdj")
+    cap, legcap = p.get("chartCap", 12), p.get("legCap", 2)
+    ranked = sorted(p["charts"], key=lambda c: -(c.get(key) if c.get(key)
+                                                 is not None else -9e9))
+    picked, legseen = [], {}
+    for c in ranked:
+        if len(picked) >= cap:
+            break
+        legs = [s for s in (c.get("lgName"), c.get("shName")) if s]
+        if any(legseen.get(s, 0) >= legcap for s in legs):
+            continue
+        for s in legs:
+            legseen[s] = legseen.get(s, 0) + 1
+        picked.append(c)
     mode = p.get("mode", "vol")
     t = t or _tok()
     ink = t.get("ink", "#0d1418")
@@ -518,7 +538,7 @@ def spread_charts(p: dict, t: dict = None) -> str:
     neg, pos = t.get("amber", "#96701c"), t.get("pos", "#0a7c66")
     faint = t.get("faint", "#97a2ab")
     cards = ""
-    for c in p["charts"]:
+    for n, c in enumerate(picked, 1):
         series = []
         if c.get("lg"):
             series.append({"k": c["lgName"], "v": c["lg"], "c": teal,
@@ -581,7 +601,7 @@ def spread_charts(p: dict, t: dict = None) -> str:
                    f'<span style="color:{ink};font-weight:700;'
                    f'margin-right:auto">ER (Adj) {c["erAdj"]}</span>')
         cards += (f'<div class="plot"><div class="ctitle">'
-                  f'<b>{c["n"]}. {esc(c["label"])}</b>'
+                  f'<b>{n}. {esc(c["label"])}</b>'
                   # The verdict was already reaching for the far corner with
                   # margin-left:auto; on the title row it gets one.
                   f'{adjpart}{verdict}</div>'
@@ -596,7 +616,8 @@ def spread_charts(p: dict, t: dict = None) -> str:
                       if mode == "vol" else
                       "The spread over them is <b>equal-notional</b>, which is "
                       "the gap between the two lines.")
-                   + " Two charts per instrument at most.")
+                   + f' Ranked on {esc(sort)}, like the table, and capped'
+                     ' at two charts per instrument.')
             + f'<div class="cgrid">{cards}</div>')
 
 # ------------------------------------------------------------------ Curve

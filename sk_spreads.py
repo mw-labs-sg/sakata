@@ -174,7 +174,7 @@ def _curves(cand, data, mode):
 
 
 # ------------------------------------------------------------------ compute
-def _window_field(name, by_bar, mode=MODE):
+def _window_field(name, by_bar, mode=MODE, chart_keys=()):
     spec = WINDOWS[name]
     frames = by_bar.get(spec["bar"])
     if not frames:
@@ -415,22 +415,63 @@ def _window_field(name, by_bar, mode=MODE):
     # Charts follow the table's order, capped so one instrument cannot occupy
     # the grid. Twelve charts of the same short leg is one macro bet drawn
     # twelve times, which leg_frequency already says in a single line.
-    charts, seen = [], {}
-    for c in field:
-        if len(charts) >= CHART_N:
-            break
-        legs = [s for s in (c["long"], c["short"]) if s]
-        if any(seen.get(s, 0) >= MAX_LEG_CHARTS for s in legs):
+    drawn = {}
+
+    def curve_for(i):
+        """Cached three lines for field[i], or None if they cannot be drawn."""
+        if i not in drawn:
+            try:
+                drawn[i] = _curves(field[i], data, mode)
+            except Exception:
+                drawn[i] = None
+        return drawn[i]
+
+    def selection(order):
+        """Indices of the CHART_N charts to draw, in `order`, leg-capped."""
+        picked, seen = [], {}
+        for i in order:
+            if len(picked) >= CHART_N:
+                break
+            legs = [s for s in (field[i]["long"], field[i]["short"]) if s]
+            if any(seen.get(s, 0) >= MAX_LEG_CHARTS for s in legs):
+                continue
+            if curve_for(i) is None:
+                continue
+            for s in legs:
+                seen[s] = seen.get(s, 0) + 1
+            picked.append(i)
+        return picked
+
+    # The tab lets the field be reordered, and a chart grid still in ER order
+    # under a table ranked on ROA is answering a question nobody asked. The
+    # renderer picks and numbers per ranking; what it cannot do is compute a
+    # curve, so every ranking's twelve are drawn here. They overlap heavily —
+    # the leg cap admits far fewer distinct pairs than five rankings suggest —
+    # so this is a handful of extra series, not five grids.
+    # The same numbers the row carries, read off the candidate instead: the
+    # grid ranks the whole field, as it always has, and the table only holds
+    # TOP_N of it. Anything not listed here simply gets no ranking of its own.
+    rank_by = {"erAdj": lambda c: adj(_num(c["ER"], 3)),
+               "er": lambda c: _num(c["ER"], 3),
+               "win": lambda c: _num(c["Win%"], 0),
+               "tot": lambda c: _num(c["Tot%"], 1),
+               "sharpe": lambda c: _num(c["Sharpe"]),
+               "roa": roa}
+    base = list(range(len(field)))
+    keep = selection(base)
+    for k in chart_keys or ():
+        if k not in rank_by:
             continue
-        try:
-            cv = _curves(c, data, mode)
-        except Exception:
-            continue
-        for s in legs:
-            seen[s] = seen.get(s, 0) + 1
+        val = rank_by[k]
+        keep += selection(sorted(base, key=lambda i: -(
+            val(field[i]) if val(field[i]) is not None else -9e9)))
+    charts = []
+    for n, i in enumerate(dict.fromkeys(keep), 1):
+        c = field[i]
         best_leg, delta = leg_delta(c)
         er = _num(c["ER"], 3)
-        cv.update({"n": len(charts) + 1, "label": ss.pos_label(c),
+        cv = dict(curve_for(i))
+        cv.update({"n": n, "label": ss.pos_label(c),
                    "kind": c["kind"], "sharpe": _num(c["Sharpe"]),
                    "er": er, "erAdj": adj(er), "roa": roa(c),
                    "tot": _num(c["Tot%"], 1),
@@ -462,6 +503,9 @@ def _window_field(name, by_bar, mode=MODE):
         "legShort": [[ss.name_of(k), v] for k, v in sh.most_common(6)],
         "legLong": [[ss.name_of(k), v] for k, v in lg.most_common(6)],
         "rows": rows, "charts": charts,
+        # The renderer reproduces this selection for whichever ranking is on
+        # screen, so it needs the same two numbers rather than its own copy.
+        "chartCap": CHART_N, "legCap": MAX_LEG_CHARTS,
     }
 
 
@@ -523,12 +567,18 @@ def _persistence(out: dict, top=10):
     return rows[:12]
 
 
-def build_spreads(by_bar: dict, mode: str = MODE) -> dict:
-    """by_bar is {bar: {ticker: close Series}} — every window slices from it."""
+def build_spreads(by_bar: dict, mode: str = MODE,
+                  chart_keys: tuple = ()) -> dict:
+    """by_bar is {bar: {ticker: close Series}} — every window slices from it.
+
+    chart_keys names the row keys the caller may reorder the field by.
+    Each gets its own twelve charts in the payload; empty means the one
+    default ranking, which is what the static site ships.
+    """
     out, summary = {}, []
     for name in PERIODS:
         try:
-            r = _window_field(name, by_bar, mode)
+            r = _window_field(name, by_bar, mode, chart_keys)
         except Exception as e:
             print(f"    spreads {name} failed: {str(e)[:70]}")
             r = None
