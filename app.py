@@ -208,6 +208,19 @@ def news_data(v: str = CACHE_V) -> dict:
                      if failed else "")}
 
 
+# Every price-derived tab clears the same group. They all descend from one
+# Yahoo fetch, so clearing a subset left them disagreeing about the same
+# instrument at the same moment: refreshing Board dropped `prices` but left
+# `by_bar` holding the older frames, so Board showed the new close while
+# Spreads and Technical still ranked the old one — and Spreads' own refresh
+# rebuilt the field without touching technical_grid.
+#
+# News, Margins and Curve stay out of it deliberately. They hit slower sources
+# that rate-limit, and re-scraping AMP because a price tab was refreshed is the
+# waste the per-tab button existed to avoid.
+PRICE_CACHES = (prices, by_bar, spread_field, technical_grid)
+
+
 # ------------------------------------------------------------------ shell
 if "dark" not in st.session_state:
     st.session_state.dark = True
@@ -278,7 +291,7 @@ t = st.tabs([x.upper() for x in TABS])
 
 # ----------------------------------------------------------------- Board
 with t[0]:
-    source("Yahoo · daily closes", prices, key="board")
+    source("Yahoo · daily closes", *PRICE_CACHES, key="board")
     hz = st.radio("Horizon", R.HZ, horizontal=True, key="board_hz",
                   label_visibility="collapsed")
     daily = prices("1d", "10y")
@@ -320,7 +333,7 @@ with t[4]:
     # byte-identical bars and Refresh fetched nothing — while Board's Refresh
     # DID clear prices, so the two tabs could then read different fetches of the
     # same daily series.
-    source("Yahoo · 1H, 4H, 1D, 1W", technical_grid, by_bar, prices, key="technical")
+    source("Yahoo · 1H, 4H, 1D, 1W", *PRICE_CACHES, key="technical")
     grid = technical_grid()
     codes = [c for c in U.CODES if c in grid["grid"]]
     if not codes:
@@ -337,7 +350,7 @@ with t[4]:
 
 # --------------------------------------------------------------- Spreads
 with t[5]:
-    source("Yahoo · 15m, 1H, 4H, 1D", spread_field, by_bar, prices, key="spreads")
+    source("Yahoo · 15m, 1H, 4H, 1D", *PRICE_CACHES, key="spreads")
     # Basis is read BEFORE the field is built, because it decides what gets
     # built. Writing into sc[2] first still lands it in the third column —
     # st.columns places by container, not by call order — so the controls read
