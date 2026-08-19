@@ -221,9 +221,11 @@ WEIGHTINGS = {
     "vol":   {"label": "vol",      "keys": ("sizeVol", "sizeVolExact")},
     "equal": {"label": "notional", "keys": ("sizeNot", "sizeNotExact")},
 }
-# Basis picks what gets COMPUTED; Size picks which ratio is READ off it.
+# One selector, one meaning: it decides the weighting the field is computed on
+# AND the contract ratio shown against it. There used to be a second,
+# display-only control with a "Match basis" option that deferred to this one —
+# two knobs for a distinction that needed explaining every time it was seen.
 BASES = {"Vol": "vol", "Notional": "equal"}
-SIZINGS = {"Match basis": None, "Vol": "vol", "Notional": "equal"}
 
 
 def _wincols(n_windows: int) -> str:
@@ -397,7 +399,7 @@ def freshness(stamp, ttl: int) -> str:
 
 
 def spreads(d: dict, per: str, sort: str = "ER (Adj)",
-            sizing: str = "Match basis", fresh: str = "") -> str:
+            fresh: str = "") -> str:
     p = d["data"][per]
     t = _tok()
 
@@ -408,8 +410,7 @@ def spreads(d: dict, per: str, sort: str = "ER (Adj)",
     teal = t.get("teal", "#0d8f83")
     amber = t.get("amber", "#96701c")
     # The column follows its own selector; "Match basis" tracks the maths.
-    size_mode = SIZINGS.get(sizing) or d.get("mode", "vol")
-    weighting = WEIGHTINGS.get(size_mode, WEIGHTINGS["vol"])
+    weighting = WEIGHTINGS.get(d.get("mode", "vol"), WEIGHTINGS["vol"])
     skey, sxkey = weighting["keys"]
     key = SORTS.get(sort, "erAdj")
     rows = sorted(p["rows"], key=lambda r: -(r.get(key) if r.get(key)

@@ -342,26 +342,27 @@ with t[5]:
     # built. Writing into sc[2] first still lands it in the third column —
     # st.columns places by container, not by call order — so the controls read
     # left to right while the dependency runs the other way.
-    sc = st.columns([4, 3, 2, 3])
-    basis = sc[2].radio("Basis", list(R.BASES), horizontal=True,
-                        key="sp_basis", label_visibility="collapsed")
+    # Dropdowns, not radios: nine options across three groups wrapped onto two
+    # ragged lines and read as clutter above a dense table. Sizing is read
+    # first because it decides what gets built; st.columns places by container,
+    # so the controls still sit left to right.
+    sc = st.columns([3, 3, 3, 2])
+    basis = sc[2].selectbox("Sizing type", list(R.BASES), key="sp_basis",
+                            help="Vol equalises dollar risk (n × notional × σ);"
+                                 " notional equalises dollar exposure. Sets the"
+                                 " weighting the field is ranked on and the"
+                                 " contract ratio shown in Size.")
     field = spread_field(R.BASES[basis])
     if not field.get("periods"):
         st.error("No spread windows built — not enough price history.")
     else:
         stamp = field.get("computed")
-        per = sc[0].radio("Window", field["periods"], horizontal=True,
-                          key="sp_window", label_visibility="collapsed")
-        spsort = sc[1].radio("Sort", list(R.SORTS), horizontal=True,
-                             key="sp_sort", label_visibility="collapsed")
-        # Display only: which ratio to read off the field Basis already built.
-        spsize = sc[3].radio("Size", list(R.SIZINGS), horizontal=True,
-                             key="sp_size", label_visibility="collapsed")
+        per = sc[0].selectbox("Time frame", field["periods"], key="sp_window")
+        spsort = sc[1].selectbox("Function", list(R.SORTS), key="sp_sort")
         sc[3].checkbox("Auto", key="sp_auto",
                        help="Refetch by itself once the 15-minute cache "
                             "expires, instead of waiting for Refresh")
-        UI.md(R.spreads(field, per, spsort, spsize,
-                        R.freshness(stamp, TTL_FAST)))
+        UI.md(R.spreads(field, per, spsort, R.freshness(stamp, TTL_FAST)))
         if st.session_state.get("sp_auto"):
             autorefresh(stamp, TTL_FAST)
         with st.expander("Digest — copy this into an LLM"):
