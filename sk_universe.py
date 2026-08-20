@@ -112,7 +112,7 @@ FEES = {
 # What the fee schedule is scaled by. Retail is the table above; a funded or
 # professional account clears a good deal cheaper, and zero is for reading the
 # portfolio without them.
-FEE_TIERS = {"retail": 1.0, "pro": 0.45, "none": 0.0}
+FEE_TIERS = {"Retail": 1.0, "Pro": 0.45, "None": 0.0}
 
 
 # Trading Economics commentary pages, per instrument.

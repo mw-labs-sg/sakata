@@ -444,7 +444,7 @@ with t[6]:
                              help="What the search maximises. ROA and ER (Adj)"
                                   " depend on the order of the returns, so"
                                   " weights are searched, not solved.")
-    pf_legs = pc[2].selectbox("Max legs", list(range(2, 11)), index=2,
+    pf_legs = pc[2].selectbox("Max legs", list(range(2, 11)), index=4,
                               key="pf_legs")
     pf_cap = pc[3].selectbox("Weight cap", ["25%", "35%", "50%", "100%"],
                              index=2, key="pf_cap",
@@ -459,7 +459,8 @@ with t[6]:
     # it is drawn. They take effect immediately, without a re-run.
     sc2 = st.columns([3, 2, 2, 2, 3])
     pf_cap_usd = sc2[0].number_input("Capital", min_value=1_000,
-                                     max_value=1_000_000_000, value=1_000_000,
+                                     max_value=1_000_000_000,
+                                     value=10_000_000,
                                      step=100_000, key="pf_capital",
                                      help="What the weights are sized against."
                                           " Notional and contracts scale with"
@@ -468,7 +469,7 @@ with t[6]:
                                           " fillable — watch the Miss column.")
     pf_vol = sc2[1].selectbox("Vol target",
                               ["5%", "10%", "15%", "20%", "30%", "none"],
-                              index=2, key="pf_vol",
+                              index=4, key="pf_vol",
                               help="Annualised volatility to hold the basket"
                                    " at; leverage is this over the portfolio's"
                                    " own volatility, so a noisy basket is held"
