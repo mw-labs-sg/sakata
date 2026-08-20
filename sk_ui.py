@@ -281,6 +281,9 @@ svg .neg {{ color: inherit !important; }}
    a wrapped eighth of a row reads as a mistake rather than as overflow.
    10.5px with an 8px gap leaves the widest card 42px of slack, which is
    the margin a three-digit Sharpe or a 100% Vol needs. */
+/* A caption that introduces a table belongs to the table's width, not to
+   the 74ch measure that keeps body prose readable. */
+.note.wide {{ max-width: none; font-size: 12.5px; line-height: 1.6; }}
 .cstats {{ display: flex; flex-wrap: wrap; gap: 3px 8px; margin: 0 0 8px; font-size: 10.5px; line-height: 1.5; }}
 @media (max-width: 900px) {{ .cgrid {{ grid-template-columns: 1fr !important; }} }}
 /* Icon button: square, quiet, teal on hover — the header switch from
@@ -403,8 +406,11 @@ def eyebrow(text: str, extra: str = "") -> str:
     return f'<div class="eyebrow">{esc(text)}{extra}</div>'
 
 
-def note(html_text: str) -> str:
-    return f'<div class="note">{html_text}</div>'
+def note(html_text: str, wide: bool = False) -> str:
+    """`wide` drops the 74ch measure so the text runs the width of the
+    table it introduces. Prose wants a short line; a caption under a
+    900px table wants to be one or two lines rather than five."""
+    return f'<div class="note{" wide" if wide else ""}">{html_text}</div>'
 
 
 def chips(items) -> str:

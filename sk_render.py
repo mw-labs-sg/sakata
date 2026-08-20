@@ -429,43 +429,96 @@ def _outrights(d: dict, per: str, t: dict, sort: str = DEFAULT_SORT) -> str:
 
 
 # ------------------------------------------------------------- Portfolio
-def portfolio(res: dict, per: str, fresh: str = "") -> str:
-    """Optimised weights, what they scored, and the curve they scored it on.
+def portfolio(res: dict, per: str, capital: float = 100_000,
+              vol_target: float = 15.0, last: dict = None,
+              fresh: str = "") -> str:
+    """Optimised weights, the size they imply, and the curve they scored on.
 
-    Two blocks and a picture: the weights themselves, then the same statistics
-    the Trends table carries, quoted twice — the searched weights against equal
-    weight over the SAME legs. That comparison is the point of the second row.
-    A search that cannot beat naive weighting on its own objective has found a
-    way to spend a click, and the only way to see that is side by side.
+    Sizing is post-processing, not part of the search: the weights are a shape,
+    and capital and vol target only decide how large that shape is drawn. That
+    is why changing either updates the table without re-running anything —
+    scaling every leg by one factor cannot move ER, ROA or Sharpe.
     """
     if not res or not res.get("weights"):
         return ('<div class="skel">No portfolio yet — set the objective and '
                 "press Optimise.</div>")
     t = _tok()
+    last = last or {}
     ink = t.get("ink", "#0d1418")
     teal, amber = t.get("teal", "#0d8f83"), t.get("amber", "#96701c")
-    faint = t.get("faint", "#97a2ab")
+    faint, mute = t.get("faint", "#97a2ab"), t.get("mute", "#66727b")
     st_, eq = res["stats"], res["equal"]
 
-    # Weight as a bar as well as a number: the sizes are the whole output, and
-    # a column of percentages makes the reader do the comparing.
+    # Leverage is the whole of the sizing. The search returns a unit-gross
+    # shape whose own volatility is whatever it is; the target decides how much
+    # of it to hold. A 12% portfolio against a 15% target means holding 1.25
+    # times the capital in notional, and saying so is more honest than showing
+    # contract counts that quietly assume it.
+    pvol = st_.get("vol") or 0
+    lev = (vol_target / pvol) if pvol > 0 else 0
+    gross = capital * lev
+
+    line = " · ".join(f'{w["code"]} {w["w"]:+.0f}%' for w in res["weights"])
     top = max(abs(w["w"]) for w in res["weights"]) or 1
-    rows = ""
+
+    rows, total, undersized = "", 0.0, []
     for i, w in enumerate(res["weights"], 1):
         long_ = w["w"] >= 0
         col = teal if long_ else amber
         code = w["code"]
-        name = U.NAME.get(code, "")
+        notl = gross * abs(w["w"]) / 100
+        total += notl
+        px, mult = last.get(code), U.MULT.get(code)
+        one = (px * mult) if (px and mult) else None
+        n = (notl / one) if one else None
+        # The executable line: whole contracts of the smallest instrument that
+        # gets within reach. A leg wanting 0.4 of an ES is not a rounding
+        # problem, it is an instruction to trade micros — 4 MES is the same
+        # position and it exists.
+        fill, tip, style = "—", "", f"color:{ink};font-weight:600"
+        if n is not None:
+            n = n if long_ else -n
+            mic = U.MICRO.get(code)
+            mn = (notl / (px * mic[1]) * (1 if long_ else -1)) if mic else 0.0
+            # Standards while a standard is close to the size; micros the
+            # moment it is not, which is what micros are for.
+            if abs(n) >= 1.5 or not mic:
+                unit, cnt, exact, one_ = code, round(n), n, one
+            else:
+                unit, cnt, exact, one_ = mic[0], round(mn), mn, px * mic[1]
+            if cnt:
+                fill = f'{cnt:+d} {unit}'
+                tip = (f'exact {exact:+.2f} {unit} · one is ${one_:,.0f} · '
+                       f'the fill sits {abs(cnt) * one_ / notl - 1:+.0%} '
+                       f'against the leg')
+            else:
+                # Rounding a real position to zero is not a fill, it is the
+                # answer "not at this size". Print the fraction and what one
+                # ticket costs instead of a confident 0.
+                fill = f'{exact:+.2f} {unit}'
+                style = ""
+                tip = (f'one {unit} is ${one_:,.0f}, more than this leg&#39;s '
+                       f'${notl:,.0f} — raise capital or drop a leg')
+                undersized.append(code)
         bar = (f'<span style="display:inline-block;height:8px;border-radius:2px;'
-               f'background:{col};width:{abs(w["w"]) / top * 84:.0f}px;'
+               f'background:{col};width:{abs(w["w"]) / top * 60:.0f}px;'
                f'vertical-align:middle"></span>')
         rows += (f'<tr><td class="l faint">{i}</td>'
                  f'<td class="l">{swatch(U.SECTOR.get(code, ""))}{esc(code)} '
-                 f'<span class="nm">{esc(name)}</span></td>'
+                 f'<span class="nm">{esc(U.NAME.get(code, ""))}</span></td>'
                  f'<td class="l" style="color:{col};font-weight:600">'
                  f'{"long" if long_ else "short"}</td>'
-                 f'<td style="color:{ink};font-weight:700">{abs(w["w"]):.1f}%</td>'
-                 f'<td class="l">{bar}</td></tr>')
+                 f'<td style="color:{ink};font-weight:700">'
+                 f'{abs(w["w"]):.1f}%</td>'
+                 f'<td class="l">{bar}</td>'
+                 f'<td class="dim">{notl:,.0f}</td>'
+                 f'<td class="l{"" if style else " faint"}" '
+                 f'style="{style}" title="{tip}">{esc(fill)}</td></tr>')
+    rows += (f'<tr><td class="l"></td><td class="l dim">Gross exposure</td>'
+             f'<td class="l dim">{lev:.2f}×</td>'
+             f'<td class="dim">100.0%</td><td></td>'
+             f'<td style="color:{ink};font-weight:700">{total:,.0f}</td>'
+             f'<td class="l faint">on {capital:,.0f}</td></tr>')
 
     def statrow(label, d, strong):
         cells = "".join(
@@ -473,9 +526,8 @@ def portfolio(res: dict, per: str, fresh: str = "") -> str:
             f'font-weight:{700 if strong else 600}">{v}</td>'
             for v, col in (
                 (num(d.get("erAdj"), 2), None), (num(d.get("roa"), 1), None),
-                (num(d.get("sharpe"), 2), None), (f'{d.get("win", 0):.0f}',
-                                                  None),
-                (num(d.get("vol"), 1), None),
+                (num(d.get("sharpe"), 2), None),
+                (f'{d.get("win", 0):.0f}', None), (num(d.get("vol"), 1), None),
                 (f'{"+" if (d.get("tot") or 0) >= 0 else ""}'
                  f'{num(d.get("tot"), 1)}',
                  t.get("pos", "#0a7c66") if (d.get("tot") or 0) >= 0 else amber),
@@ -487,18 +539,27 @@ def portfolio(res: dict, per: str, fresh: str = "") -> str:
                "dash": "4 3", "o": 0.9},
               {"k": "optimised", "v": curve["v"], "c": ink, "w": 2.6}]
 
-    return (eyebrow(f"Portfolio Weights — {esc(res['objective'])}, {esc(per)}")
-            + note("Weights are gross: they sum to 100% of the risk budget, "
-                   "with shorts carrying the same weight as longs. Searched, "
-                   "not solved — ROA and ER depend on the order of the "
-                   "returns, so there is no covariance matrix to invert and "
-                   "no proof this is the global best. Fitted on this window "
-                   "with no holdout, so read the equal-weight row as the bar "
-                   "it had to clear.")
+    return (eyebrow(f"Portfolio Weights — {esc(res['objective'])}, {esc(per)}",
+                    f'<span style="margin-left:auto;color:{mute};'
+                    f'font-size:11.5px;font-weight:500">{esc(line)}</span>')
+            + note("Weights are gross — they sum to 100% and a short counts "
+                   "the same as a long. Size follows the vol target: leverage "
+                   f"is {vol_target:.0f}% over the portfolio&#39;s own "
+                   f"{pvol:.1f}%, and contracts are notional over price × "
+                   "multiplier, filled in micros where a standard contract "
+                   "overshoots. Searched, not solved — ROA and ER depend on "
+                   "the order of the returns, so there is no covariance "
+                   "matrix to invert and no proof this is the best. Fitted on "
+                   "this window with no holdout: read the equal-weight row as "
+                   "the bar it had to clear.", wide=True)
             + table('<th class="l">#</th><th class="l">Instrument</th>'
-                    '<th class="l">Side</th><th>Weight</th><th class="l"></th>',
-                    rows)
+                    '<th class="l">Side</th><th>Weight</th><th class="l"></th>'
+                    '<th>Notional</th><th class="l">Fill</th>', rows)
             + eyebrow("What those weights scored")
+            + note("The statistics the Trends table carries, over the same "
+                   "window. Sizing does not appear here: scaling every leg by "
+                   "one factor moves Tot% and MDD% together and leaves every "
+                   "ratio where it was.", wide=True)
             + table('<th class="l"></th><th>ER (Adj)</th><th>ROA</th>'
                     '<th>Sharpe</th><th>Win%</th><th>Vol%</th><th>Tot%</th>'
                     '<th>MDD%</th>',
@@ -506,7 +567,10 @@ def portfolio(res: dict, per: str, fresh: str = "") -> str:
                     + statrow("Equal weight, same legs", eq, False))
             + chips([f'{res["legs"]} legs', f'{res["bars"]} bars',
                      f'drawdown on {res["fineBars"]:,} marks',
-                     f'net {res["net"]:+.0f}% of gross']
+                     f'net {res["net"]:+.0f}% of gross',
+                     f'{lev:.2f}× leverage']
+                    + ([f'{len(undersized)} of {res["legs"]} legs under one '
+                        f'contract at ${capital:,.0f}'] if undersized else [])
                     + ([fresh] if fresh else []))
             + '<div class="plot" style="margin-top:10px">'
             + CH.line_chart(curve["t"], series, None, 1100, 300, 1)

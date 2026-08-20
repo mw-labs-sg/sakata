@@ -434,6 +434,22 @@ with t[6]:
     pf_short = pc[4].checkbox("Shorts", value=True, key="pf_short",
                               help="Allow negative weights. Off makes it a "
                                    "long-only basket.")
+    # Capital and vol target sit on their own row because they are not search
+    # arguments: the weights are a shape, and these two only decide how large
+    # it is drawn. They take effect immediately, without a re-run.
+    sc2 = st.columns([3, 3, 6])
+    pf_cap_usd = sc2[0].number_input("Capital", min_value=1_000,
+                                     max_value=100_000_000, value=100_000,
+                                     step=10_000, key="pf_capital",
+                                     help="What the weights are sized against."
+                                          " Notional and contracts scale with"
+                                          " it; the ratios do not.")
+    pf_vol = sc2[1].selectbox("Vol target", ["5%", "10%", "15%", "20%", "30%"],
+                              index=2, key="pf_vol",
+                              help="Annualised volatility to hold the basket"
+                                   " at. Leverage is this over the portfolio's"
+                                   " own volatility, so a quiet basket is held"
+                                   " larger than a noisy one.")
     # Behind a button on purpose: st.tabs runs every tab body on every rerun,
     # so an optimiser called at the top level would charge a search to anyone
     # who touched a radio on Board.
@@ -446,7 +462,15 @@ with t[6]:
     res = st.session_state.get("pf_result")
     if res and st.session_state.get("pf_for") != pf_args:
         st.caption("Controls changed since this ran — press Optimise again.")
-    UI.md(R.portfolio(res or {}, st.session_state.get("pf_for", pf_args)[0]))
+    # Priced off the same cached daily closes as the Board and the contract
+    # specs on Knowledge, so three tabs cannot disagree about what one
+    # contract costs.
+    last_pf = {c: float(df["close"].iloc[-1])
+               for c, df in prices("1d", "10y").items()
+               if df is not None and len(df)}
+    UI.md(R.portfolio(res or {}, st.session_state.get("pf_for", pf_args)[0],
+                      capital=pf_cap_usd,
+                      vol_target=float(pf_vol.rstrip("%")), last=last_pf))
 
 
 # ----------------------------------------------------------------- Curve
