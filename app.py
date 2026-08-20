@@ -457,7 +457,7 @@ with t[6]:
     # Capital and vol target sit on their own row because they are not search
     # arguments: the weights are a shape, and these two only decide how large
     # it is drawn. They take effect immediately, without a re-run.
-    sc2 = st.columns([3, 3, 3, 3])
+    sc2 = st.columns([3, 2, 2, 2, 3])
     pf_cap_usd = sc2[0].number_input("Capital", min_value=1_000,
                                      max_value=1_000_000_000, value=1_000_000,
                                      step=100_000, key="pf_capital",
@@ -474,6 +474,12 @@ with t[6]:
                                    " own volatility, so a noisy basket is held"
                                    " below 1×. Pick none to size on leverage"
                                    " instead and hold the cap.")
+    pf_fee = sc2[3].selectbox("Fees", list(U.FEE_TIERS), key="pf_fee",
+                              help="Round-turn commission per contract,"
+                                   " scaled from a retail schedule. It decides"
+                                   " between fills that are equally close to"
+                                   " the target, so it changes the tickets"
+                                   " rather than the weights.")
     pf_lev = sc2[2].selectbox("Max leverage", ["1×", "2×", "3×", "5×", "none"],
                               index=2, key="pf_lev",
                               help="Ceiling on gross notional over capital. A"
@@ -508,7 +514,8 @@ with t[6]:
                            else float(pf_vol.rstrip("%")),
                            last_pf, U.MULT, U.MICRO,
                            max_lev=(None if pf_lev == "none"
-                                    else float(pf_lev.rstrip("×"))))
+                                    else float(pf_lev.rstrip("×"))),
+                           fees=U.FEES, fee_tier=U.FEE_TIERS[pf_fee])
     UI.md(R.portfolio(res or {}, shown_win, plan, capital=pf_cap_usd,
                       vol_target=(None if pf_vol == "none"
                                   else float(pf_vol.rstrip("%")))))

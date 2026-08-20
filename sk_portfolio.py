@@ -284,7 +284,7 @@ def optimise(closes: pd.DataFrame, fine=None, objective: str = "ROA",
 
 
 def _fill(target: float, unit: float, small: float, small_name: str,
-          code: str) -> dict:
+          code: str, fee_std: float = 0.0, fee_small: float = 0.0) -> dict:
     """Whole contracts closest to `target` dollars, standards and smalls mixed.
 
     A pure-standard fill on a leg worth 1.4 contracts is 40% off whichever way
@@ -294,7 +294,7 @@ def _fill(target: float, unit: float, small: float, small_name: str,
     position and not a basis trade.
     """
     if not unit or unit <= 0:
-        return {"text": "—", "notional": 0.0, "err": None}
+        return {"text": "—", "notional": 0.0, "err": None, "fee": 0.0}
     want, sign = abs(target), (1 if target >= 0 else -1)
     # Standards first: {floor, floor+1} of them. Zero is in that set only when
     # the leg is smaller than one contract, which is the case where smalls ARE
@@ -308,21 +308,28 @@ def _fill(target: float, unit: float, small: float, small_name: str,
         # or close the gap exactly however many smalls that takes.
         for b in {0, min(exact, TOPUP_SMALLS), exact}:
             got = a * unit + b * small
-            cands.append((abs(got - want), a + b, a, b, got))
-    # Tolerance decides, not ticket count: among fills that land within 2% of
-    # the leg, take the one with fewest tickets — 22 ETH beats 22 ETH and 5
-    # METs to shave 1.8%. Only when NOTHING is within tolerance does precision
-    # win, and then 120 micros is the right answer rather than a silly one,
-    # because the alternative is a hedge 10% away from the one ranked.
+            cands.append((abs(got - want), a * fee_std + b * fee_small,
+                          a + b, a, b, got))
+    # Tolerance decides which fills are candidates; COMMISSION decides between
+    # them. Among fills landing within 2% of the leg, take the cheapest to
+    # send — 22 ETH beats 22 ETH and 5 METs to shave 1.8%, and now for a
+    # reason denominated in dollars rather than in tidiness. Only when nothing
+    # is within tolerance does precision win, because a hedge 10% away from
+    # the one ranked costs more than any ticket.
+    # Ticket count sits behind commission in the ordering rather than being
+    # replaced by it: with fees switched off the cheapest fill is every
+    # fill, and 362 micro tickets came straight back as free precision.
     ok = [c for c in cands if want and c[0] / want * 100 <= HEDGE_TOL]
-    err, _lots, a, b, got = min(ok, key=lambda c: (c[1], c[0])) if ok \
-        else min(cands, key=lambda c: (round(c[0], 6), c[1]))
+    err, fee, _n, a, b, got = (
+        min(ok, key=lambda c: (round(c[1], 2), c[2], c[0])) if ok
+        else min(cands, key=lambda c: (round(c[0], 6), c[1], c[2])))
     if not (a or b):
         # Nothing is a legitimate answer, and on a leg whose smallest ticket
         # is four times its target it is the RIGHT one. The alternative — one
         # contract, 330% of the intended size — is not a rounding error, it is
         # a different position wearing this one's name.
-        return {"text": "—", "notional": 0.0, "err": None, "lots": 0}
+        return {"text": "—", "notional": 0.0, "err": None, "lots": 0,
+                "fee": 0.0}
     parts = []
     if a:
         parts.append(f"{sign * a:+d} {code}")
@@ -330,12 +337,13 @@ def _fill(target: float, unit: float, small: float, small_name: str,
         parts.append(f"{'+' if sign > 0 else '-'}{b} {small_name}"
                      if a else f"{sign * b:+d} {small_name}")
     return {"text": " ".join(parts) if parts else "—",
-            "notional": sign * got, "lots": a + b,
+            "notional": sign * got, "lots": a + b, "fee": round(fee, 2),
             "err": round((got / want - 1) * 100, 1) if want else None}
 
 
 def plan(closes, fine, res: dict, capital: float, vol_target: float,
-         last: dict, mult: dict, micro: dict, max_lev=None) -> dict:
+         last: dict, mult: dict, micro: dict, max_lev=None,
+         fees: dict = None, fee_tier: float = 1.0) -> dict:
     """Turn a weight vector into money, contracts, and what those score.
 
     Weights first, contracts second, and the difference measured rather than
@@ -374,8 +382,11 @@ def plan(closes, fine, res: dict, capital: float, vol_target: float,
         unit = px * m if (px and m) else None
         mic = micro.get(code)
         small = px * mic[1] if (mic and px) else 0.0
-        f = (_fill(target, unit, small, mic[0] if mic else "", code)
-             if unit else {"text": "—", "notional": 0.0, "err": None})
+        fee_std, fee_small = (fees or {}).get(code, (0.0, 0.0))
+        f = (_fill(target, unit, small, mic[0] if mic else "", code,
+                   (fee_std or 0.0) * fee_tier, (fee_small or 0.0) * fee_tier)
+             if unit else {"text": "—", "notional": 0.0, "err": None,
+                           "fee": 0.0})
         if sym in idx and capital:
             # Fraction of CAPITAL, not of gross: that is the levered weight,
             # so stats() on it reports the position as held.
@@ -401,7 +412,16 @@ def plan(closes, fine, res: dict, capital: float, vol_target: float,
         # against capital too. Multiplying by `gross` counted the
         # leverage twice and reported a fill 1.7x its own target.
         filled["gross"] = float(np.abs(achieved).sum()) * capital
+    # One round turn, in and out. Against a window's return it is usually
+    # noise; against 11,000 micro tickets it was not, which is the whole
+    # reason the fill chooser now spends in dollars.
+    fee_total = sum((l["fill"].get("fee") or 0.0) for l in legs)
+    tot = (res["stats"].get("tot") or 0) * lev
     return {"legs": legs, "lev": lev, "wantLev": want, "gross": gross,
+            "fees": fee_total,
+            "feeBps": (fee_total / capital * 10_000) if capital else 0,
+            "feeShare": (fee_total / capital * 100 / abs(tot) * 100)
+            if capital and tot else None,
             "sized": sized, "sizedEqual": sized_eq, "pvol": pvol,
             "capped": bool(max_lev and want > max_lev + 1e-9),
             "volAt": pvol * lev,

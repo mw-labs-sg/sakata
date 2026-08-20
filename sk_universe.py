@@ -85,6 +85,36 @@ MICRO = {
     "ZS":  ("XK",  10,        5),    # Mini Soybean, 1,000 bu
 }
 
+# Round-turn cost of ONE contract, all in: broker commission plus exchange,
+# clearing and NFA fees. (standard, small) in dollars.
+#
+# ESTIMATES, AND YOURS WILL DIFFER. Commission is the negotiable part and the
+# exchange half moves with rule changes, so these are a plausible retail
+# schedule rather than a quote. They are here to answer one question — is a
+# fill worth its tickets — and that answer is robust to being 30% out. It is
+# not robust to a fee being ten times wrong, so check the ones you trade.
+#
+# The pattern worth knowing: a micro costs roughly a fifth of its standard
+# while carrying a tenth of the notional, so filling in micros costs about
+# twice as much per dollar of exposure. That is what makes 400 METs to close a
+# 3% gap expensive rather than merely untidy.
+FEES = {
+    "ES":  (4.00, 1.00), "NQ":  (4.00, 1.00), "NKD": (4.50, None),
+    "ZB":  (3.20, None), "ZN":  (3.20, None),
+    "6E":  (3.60, 0.90), "6J":  (3.60, 0.90),
+    "BTC": (6.00, 0.60), "ETH": (6.00, 0.60),
+    "CL":  (4.00, 0.90), "NG":  (4.00, 1.60),
+    "GC":  (4.00, 1.00), "SI":  (4.00, 1.00), "HG": (4.00, 1.00),
+    "ZC":  (4.40, 1.60), "ZW":  (4.40, 1.60), "ZS": (4.40, 1.60),
+    "SB":  (5.00, None), "KC":  (5.00, None),
+}
+
+# What the fee schedule is scaled by. Retail is the table above; a funded or
+# professional account clears a good deal cheaper, and zero is for reading the
+# portfolio without them.
+FEE_TIERS = {"retail": 1.0, "pro": 0.45, "none": 0.0}
+
+
 # Trading Economics commentary pages, per instrument.
 # Crypto is deliberately absent. Their btcusd/ethusd pages carry a commentary
 # paragraph that goes weeks without changing — a July paragraph was still

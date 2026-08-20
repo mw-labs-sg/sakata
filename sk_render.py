@@ -521,8 +521,10 @@ def portfolio(res: dict, per: str, pl: dict = None,
                     f'title="{esc(tip)}">{esc(f.get("text", "—"))}</td>'
                     f'<td style="color:{ecol}">'
                     f'{"—" if err is None else f"{err:+.1f}%"}</td>'
+                    + (f'<td class="dim">{f["fee"]:,.0f}</td>'
+                       if f.get("fee") else '<td class="faint">—</td>')
                     if f else '<td class="l faint">—</td>'
-                              '<td class="faint">—</td>')
+                              '<td class="faint">—</td><td class="faint">—</td>')
                  + "</tr>")
     if pl:
         got = (pl.get("filled") or {}).get("gross") or 0
@@ -533,7 +535,9 @@ def portfolio(res: dict, per: str, pl: dict = None,
                  f'<td style="color:{ink};font-weight:700">'
                  f'{pl.get("target", 0):,.0f}</td>'
                  f'<td class="l dim">{got:,.0f} filled</td>'
-                 f'<td class="faint">on {capital:,.0f}</td></tr>')
+                 f'<td class="faint">on {capital:,.0f}</td>'
+                 f'<td style="color:{ink};font-weight:700">'
+                 f'{pl.get("fees", 0):,.0f}</td></tr>')
 
     def statrow(label, d, strong, note_=""):
         if not d:
@@ -566,15 +570,18 @@ def portfolio(res: dict, per: str, pl: dict = None,
                    "actually carries, so the two columns disagree wherever "
                    "one leg moves more than another. "
                    + _sizing_note(pl, vol_target, res)
-                   + " Fill is whole contracts, standards and smalls mixed, "
-                   "with the miss from the target beside it. Searched, not "
+                   + " Fill is whole contracts, standards and smalls "
+                   "mixed, chosen as the cheapest way to land within 2% of "
+                   "the leg — <b>Fees</b> is one round turn at the tier "
+                   "picked above, and it is what stops a 400-ticket micro "
+                   "fill from winning on precision alone. Searched, not "
                    "solved, and fitted on this window with no holdout — read "
                    "the equal-weight row as the bar it had to clear.",
                    wide=True)
             + table('<th class="l">#</th><th class="l">Instrument</th>'
                     '<th class="l">Side</th><th>Weight</th><th class="l"></th>'
                     '<th>Risk%</th><th>Notional</th><th class="l">Fill</th>'
-                    '<th>Miss</th>', rows)
+                    '<th>Miss</th><th>Fees</th>', rows)
             + eyebrow(f"What those weights scored — held at "
                       f"{pl.get('lev', 0):.2f}×")
             + note("The statistics the Trends table carries, over the same "
@@ -601,6 +608,11 @@ def portfolio(res: dict, per: str, pl: dict = None,
                     + ([f'{len(pl["undersized"])} of {res["legs"]} legs under '
                         f'one contract at ${capital:,.0f}']
                        if pl.get("undersized") else [])
+                    + ([f'fees ${pl["fees"]:,.0f} · {pl.get("feeBps", 0):.1f} '
+                        f'bp of capital'
+                        + (f' · {pl["feeShare"]:.1f}% of the window'
+                           if pl.get("feeShare") else '')]
+                       if pl.get("fees") else [])
                     + ([fresh] if fresh else []))
             + '<div class="plot" style="margin-top:10px">'
             + CH.line_chart(curve["t"], series, None, 1100, 300, 1)
