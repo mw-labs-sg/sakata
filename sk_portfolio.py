@@ -35,6 +35,15 @@ MIN_MDD = 0.05      # same floor the Trends tab uses, and for the same reason:
                     # a drawdown of nothing is not a denominator
 MAX_ROA = 99.0
 
+# Smalls allowed on top of whole standards before the fill is called good
+# enough. Five covers half a standard where the small is a tenth of one.
+TOPUP_SMALLS = 5
+
+# How far a fill may land from its leg before it stops being that leg. The same
+# 2% the spread tickets in sk_spreads hedge to, and for the same reason: past
+# it you are holding a different position from the one that was ranked.
+HEDGE_TOL = 2.0
+
 
 def _drawdown(r: np.ndarray) -> float:
     """Worst peak-to-trough of the compounded series, anchored at 1.0."""
@@ -220,12 +229,24 @@ def optimise(closes: pd.DataFrame, fine=None, objective: str = "ROA",
     step = 0.25
     for i in range(climbs):
         cand = best_w.copy()
-        if rng.random() < 0.25:
-            held = np.flatnonzero(cand)
-            idle = np.flatnonzero(cand == 0)
-            if len(held) and len(idle):
-                out_, in_ = rng.choice(held), rng.choice(idle)
-                cand[in_], cand[out_] = cand[out_], 0.0
+        roll = rng.random()
+        held, idle = np.flatnonzero(cand), np.flatnonzero(cand == 0)
+        if roll < 0.2 and len(held) and len(idle):
+            out_, in_ = rng.choice(held), rng.choice(idle)
+            cand[in_], cand[out_] = cand[out_], 0.0
+        elif roll < 0.35 and len(idle) and len(held) < max_legs:
+            # Grow. Without this the basket can only ever be the size the
+            # random pass happened to draw — swaps trade one leg for another
+            # and the climb never learns that a seventh leg would help, which
+            # made a cap of 10 explore no more than a cap of 4.
+            cand[rng.choice(idle)] = (rng.choice([-1.0, 1.0]) if allow_short
+                                      else 1.0) * float(np.abs(cand).mean())
+        elif roll < 0.45 and len(held) > 2:
+            # And shrink. Both directions or neither: a cap of 10 that cannot
+            # drop back to six is a cap that scores WORSE than six, which is
+            # the wrong way round for a ceiling — the six-leg answer was
+            # always feasible, the search just could not reach it.
+            cand[held[np.argmin(np.abs(cand[held]))]] = 0.0
         else:
             cand += rng.normal(0, step, n) * (np.abs(cand) > 0)
         cand = _project(cand, max_legs, max_weight, allow_short)
@@ -275,19 +296,27 @@ def _fill(target: float, unit: float, small: float, small_name: str,
     if not unit or unit <= 0:
         return {"text": "—", "notional": 0.0, "err": None}
     want, sign = abs(target), (1 if target >= 0 else -1)
-    best = None
-    lots = [int(want // unit), int(want // unit) + 1]
-    for a in {max(l, 0) for l in lots} | {0}:
+    # Standards first: {floor, floor+1} of them. Zero is in that set only when
+    # the leg is smaller than one contract, which is the case where smalls ARE
+    # the position rather than a top-up.
+    lots = {max(int(want // unit), 0), max(int(want // unit) + 1, 0)}
+    cands = []
+    for a in lots:
         rest = want - a * unit
-        b = max(int(round(rest / small)), 0) if small else 0
-        got = a * unit + b * small
-        err = abs(got - want)
-        # Fewer tickets breaks a tie: two ways to be equally close is a
-        # question about commission, not about the hedge.
-        rank = (round(err, 6), a + b)
-        if best is None or rank < best[0]:
-            best = (rank, a, b, got)
-    _, a, b, got = best
+        exact = max(int(round(rest / small)), 0) if small else 0
+        # Three ways to finish: stop at whole standards, top up by a handful,
+        # or close the gap exactly however many smalls that takes.
+        for b in {0, min(exact, TOPUP_SMALLS), exact}:
+            got = a * unit + b * small
+            cands.append((abs(got - want), a + b, a, b, got))
+    # Tolerance decides, not ticket count: among fills that land within 2% of
+    # the leg, take the one with fewest tickets — 22 ETH beats 22 ETH and 5
+    # METs to shave 1.8%. Only when NOTHING is within tolerance does precision
+    # win, and then 120 micros is the right answer rather than a silly one,
+    # because the alternative is a hedge 10% away from the one ranked.
+    ok = [c for c in cands if want and c[0] / want * 100 <= HEDGE_TOL]
+    err, _lots, a, b, got = min(ok, key=lambda c: (c[1], c[0])) if ok \
+        else min(cands, key=lambda c: (round(c[0], 6), c[1]))
     if not (a or b):
         # Nothing is a legitimate answer, and on a leg whose smallest ticket
         # is four times its target it is the RIGHT one. The alternative — one
