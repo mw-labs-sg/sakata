@@ -502,6 +502,9 @@ def portfolio(res: dict, per: str, pl: dict = None,
             if leg.get("smallUnit"):
                 tip += f' · one {leg["small"]} is ${leg["smallUnit"]:,.0f}'
             tip += f' · target ${abs(leg["notional"]):,.0f}'
+            if leg.get("needs"):
+                tip += (f' · fills from about ${leg["needs"]:,.0f} of '
+                        f'capital at this weight')
         bar = (f'<span style="display:inline-block;height:8px;border-radius:2px;'
                f'background:{col};width:{abs(leg["w"]) / top * 54:.0f}px;'
                f'vertical-align:middle"></span>')

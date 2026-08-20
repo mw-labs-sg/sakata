@@ -328,8 +328,11 @@ def _fill(target: float, unit: float, small: float, small_name: str,
         # is four times its target it is the RIGHT one. The alternative — one
         # contract, 330% of the intended size — is not a rounding error, it is
         # a different position wearing this one's name.
-        return {"text": "—", "notional": 0.0, "err": None, "lots": 0,
-                "fee": 0.0}
+        # -100%, not "no answer": the leg is entirely absent from the fill,
+        # which is a miss of the whole thing and belongs in the same column as
+        # every other miss rather than hiding behind a dash.
+        return {"text": "—", "notional": 0.0, "err": -100.0, "lots": 0,
+                "fee": 0.0, "unit": unit}
     parts = []
     if a:
         parts.append(f"{sign * a:+d} {code}")
@@ -391,7 +394,14 @@ def plan(closes, fine, res: dict, capital: float, vol_target: float,
             # Fraction of CAPITAL, not of gross: that is the levered weight,
             # so stats() on it reports the position as held.
             achieved[idx[sym]] = f["notional"] / capital
-        legs.append(dict(w, notional=target, unit=unit, fill=f,
+        # What it would take to hold this leg: a fill appears once the leg
+        # passes half a contract, so the capital that gets there is that half
+        # divided by the leg's own share of gross. More useful than "no" —
+        # the answer is usually within reach.
+        needs = None
+        if unit and not f.get("lots") and w["w"] and lev:
+            needs = (unit / 2) / (abs(w["w"]) / 100) / lev
+        legs.append(dict(w, notional=target, unit=unit, fill=f, needs=needs,
                          small=(mic[0] if mic else None),
                          smallUnit=small or None))
 
