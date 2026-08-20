@@ -460,7 +460,7 @@ with t[6]:
     sc2 = st.columns([3, 2, 2, 2, 3])
     pf_cap_usd = sc2[0].number_input("Capital", min_value=1_000,
                                      max_value=1_000_000_000,
-                                     value=10_000_000,
+                                     value=1_000_000,
                                      step=100_000, key="pf_capital",
                                      help="What the weights are sized against."
                                           " Notional and contracts scale with"
@@ -482,7 +482,7 @@ with t[6]:
                                    " the target, so it changes the tickets"
                                    " rather than the weights.")
     pf_lev = sc2[2].selectbox("Max leverage", ["1×", "2×", "3×", "5×", "none"],
-                              index=2, key="pf_lev",
+                              index=0, key="pf_lev",
                               help="Ceiling on gross notional over capital. A"
                                    " quiet basket needs leverage to reach a"
                                    " vol target; this is where you say how"
