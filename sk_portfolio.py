@@ -108,6 +108,22 @@ class _Scorer:
             "win": round(float((r > 0).mean() * 100)),
         }
 
+    def risk_shares(self, w: np.ndarray) -> np.ndarray:
+        """Each leg's share of portfolio variance, summing to 1.
+
+        The weights are NOTIONAL — 20% of the risk budget in ETH is 20% of the
+        money, not 20% of the risk, and ETH moves several times as much as ZN
+        per dollar. This is the column that says which one you actually have.
+        Contribution is w_i x cov(r_i, r_p) / var(r_p), the standard
+        decomposition: it sums to one and a leg that hedges reads negative.
+        """
+        r = self.R @ w
+        var = float(r.var())
+        if var == 0:
+            return np.zeros_like(w)
+        cov = (self.R * (r - r.mean())[:, None]).mean(axis=0)
+        return w * cov / var
+
     def score(self, w: np.ndarray, objective: str) -> float:
         """One number, higher better. -inf for anything unrankable.
 
@@ -220,8 +236,10 @@ def optimise(closes: pd.DataFrame, fine=None, objective: str = "ROA",
             step *= 0.6
 
     order = np.argsort(-np.abs(best_w))
+    risk = sc.risk_shares(best_w)
     weights = [{"sym": sc.syms[i], "code": ss.name_of(sc.syms[i]),
-                "w": round(float(best_w[i]) * 100, 1)}
+                "w": round(float(best_w[i]) * 100, 1),
+                "risk": round(float(risk[i]) * 100, 1)}
                for i in order if abs(best_w[i]) > 5e-4]
 
     # Equal weight over the same legs, as the thing the search has to beat. A
@@ -240,6 +258,105 @@ def optimise(closes: pd.DataFrame, fine=None, objective: str = "ROA",
         "curve": _series(sc.index, sc.curve(best_w)),
         "equalCurve": _series(sc.index, sc.curve(eq)),
     }
+
+
+def _fill(target: float, unit: float, small: float, small_name: str,
+          code: str) -> dict:
+    """Whole contracts closest to `target` dollars, standards and smalls mixed.
+
+    A pure-standard fill on a leg worth 1.4 contracts is 40% off whichever way
+    it rounds, and a pure-small fill of the same leg is 140 tickets. The mix is
+    what a person would actually send: as many standards as fit, then smalls to
+    close the gap. Both are the same underlying, so the combination is one
+    position and not a basis trade.
+    """
+    if not unit or unit <= 0:
+        return {"text": "—", "notional": 0.0, "err": None}
+    want, sign = abs(target), (1 if target >= 0 else -1)
+    best = None
+    lots = [int(want // unit), int(want // unit) + 1]
+    for a in {max(l, 0) for l in lots} | {0}:
+        rest = want - a * unit
+        b = max(int(round(rest / small)), 0) if small else 0
+        got = a * unit + b * small
+        err = abs(got - want)
+        # Fewer tickets breaks a tie: two ways to be equally close is a
+        # question about commission, not about the hedge.
+        rank = (round(err, 6), a + b)
+        if best is None or rank < best[0]:
+            best = (rank, a, b, got)
+    _, a, b, got = best
+    if not (a or b):
+        # Nothing is a legitimate answer, and on a leg whose smallest ticket
+        # is four times its target it is the RIGHT one. The alternative — one
+        # contract, 330% of the intended size — is not a rounding error, it is
+        # a different position wearing this one's name.
+        return {"text": "—", "notional": 0.0, "err": None, "lots": 0}
+    parts = []
+    if a:
+        parts.append(f"{sign * a:+d} {code}")
+    if b:
+        parts.append(f"{'+' if sign > 0 else '-'}{b} {small_name}"
+                     if a else f"{sign * b:+d} {small_name}")
+    return {"text": " ".join(parts) if parts else "—",
+            "notional": sign * got, "lots": a + b,
+            "err": round((got / want - 1) * 100, 1) if want else None}
+
+
+def plan(closes, fine, res: dict, capital: float, vol_target: float,
+         last: dict, mult: dict, micro: dict, max_lev=None) -> dict:
+    """Turn a weight vector into money, contracts, and what those score.
+
+    Weights first, contracts second, and the difference measured rather than
+    assumed away. Searching integer contract counts directly would tie the
+    answer to today's capital and today's prices — change either and the whole
+    search is stale — where a weight vector is a shape that survives both. The
+    price of doing it in that order is rounding, so the rounding is reported:
+    every leg carries how far its fill lands from the target, and the basket is
+    rescored AS FILLED beside the ideal.
+    """
+    if not res or not res.get("weights"):
+        return {}
+    sc = _Scorer(closes, fine)
+    pvol = res["stats"].get("vol") or 0
+    want = (vol_target / pvol) if pvol > 0 else 0
+    # A vol target alone will happily ask for six times the account on a quiet
+    # basket. The cap is where that gets answered, and when it binds the
+    # portfolio simply runs below target — which is worth saying out loud
+    # rather than leaving the reader to divide two numbers.
+    lev = min(want, max_lev) if max_lev else want
+    gross = capital * lev
+
+    legs, achieved = [], np.zeros(len(sc.syms))
+    idx = {s: i for i, s in enumerate(sc.syms)}
+    for w in res["weights"]:
+        code, sym = w["code"], w["sym"]
+        target = gross * w["w"] / 100          # signed dollars
+        px, m = last.get(code), mult.get(code)
+        unit = px * m if (px and m) else None
+        mic = micro.get(code)
+        small = px * mic[1] if (mic and px) else 0.0
+        f = (_fill(target, unit, small, mic[0] if mic else "", code)
+             if unit else {"text": "—", "notional": 0.0, "err": None})
+        if sym in idx and gross:
+            achieved[idx[sym]] = f["notional"] / gross
+        legs.append(dict(w, notional=target, unit=unit, fill=f,
+                         small=(mic[0] if mic else None),
+                         smallUnit=small or None))
+
+    filled = None
+    if np.abs(achieved).sum() > 0:
+        # Rescored on the position that can actually be sent: same shape only
+        # if the rounding was kind, which is exactly what needs checking.
+        filled = sc.stats(achieved / np.abs(achieved).sum())
+        filled["gross"] = float(np.abs(achieved).sum()) * gross
+    return {"legs": legs, "lev": lev, "wantLev": want, "gross": gross,
+            "capped": bool(max_lev and want > max_lev + 1e-9),
+            "volAt": pvol * lev,
+            "target": sum(abs(l["notional"]) for l in legs),
+            "filled": filled,
+            "undersized": [l["code"] for l in legs
+                           if l["fill"]["text"] == "—" or not l["fill"].get("lots")]}
 
 
 CURVE_PTS = 220

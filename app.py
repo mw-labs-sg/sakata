@@ -118,6 +118,18 @@ PF_WINDOWS = ["Intraday", "WTD", "MTD", "QTD", "YTD", "30D", "60D",
 
 
 @st.cache_data(ttl=TTL_FAST, show_spinner=False)
+def portfolio_frames(window: str, v: str = CACHE_V):
+    """(closes, fine) for one window — the search and the sizing both need
+    them, and neither should slice its own."""
+    bb = _by_bar_closes()
+    closes, _dropped = SP.window_closes(window, bb)
+    if closes is None:
+        return None, None
+    fine, _bar = SP.fine_closes(window, bb, closes)
+    return closes, fine
+
+
+@st.cache_data(ttl=TTL_FAST, show_spinner=False)
 def portfolio_weights(window: str, objective: str, legs: int, cap: int,
                       shorts: bool, v: str = CACHE_V) -> dict:
     """One search, cached on its arguments so re-pressing the button is free.
@@ -126,11 +138,9 @@ def portfolio_weights(window: str, objective: str, legs: int, cap: int,
     its own: two answers about "the last 30 days" that disagree on which days
     those were is the bug this avoids.
     """
-    bb = _by_bar_closes()
-    closes, _dropped = SP.window_closes(window, bb)
+    closes, fine = portfolio_frames(window)
     if closes is None:
         return {}
-    fine, _bar = SP.fine_closes(window, bb, closes)
     return PF.optimise(closes, fine, objective, max_legs=legs,
                        max_weight=cap / 100, allow_short=shorts)
 
@@ -295,17 +305,21 @@ def autorefresh(stamp, ttl: int) -> None:
         st.rerun(scope="app")
 
 
-def source(label: str, *caches, key: str = "") -> None:
+def source(label: str, *caches, key: str = "", action: str = "") -> bool:
     """A refresh button, hard left, above whatever controls the tab has.
 
     The source line that used to sit here is gone. It named where the data
     came from — worth knowing once and clutter every day after — and on the
     tabs that fetch nothing it was a line announcing that there was nothing
     to announce.
+
+    `action` puts a second button beside Refresh and returns whether it was
+    pressed. Both are "go and do something", which is a different kind of
+    control from the selectors underneath and belongs on its own line.
     """
     if not caches:
-        return
-    c = st.columns([1, 9])
+        return False
+    c = st.columns([1, 1, 8] if action else [1, 9])
     # Keyed on the tab, not on a slice of the source line: two tabs whose
     # prose happened to share 24 characters would have collided into a
     # DuplicateWidgetID at import time.
@@ -314,6 +328,8 @@ def source(label: str, *caches, key: str = "") -> None:
         for fn in caches:
             fn.clear()
         st.rerun()
+    return bool(action) and c[1].button(action, key=f"go_{key}",
+                                        type="primary")
 
 # Tab order is reading order: what happened, what is being said about it, what
 # is scheduled, then the analytical tabs, with the standing reference last.
@@ -417,14 +433,18 @@ with t[5]:
 
 # ------------------------------------------------------------- Portfolio
 with t[6]:
-    source("Yahoo · 15m, 1H, 4H, 1D", *PRICE_CACHES, key="portfolio")
+    # Optimise sits on the header line with Refresh: both are "go and do
+    # something", and it was the only control on the tab that did not belong
+    # with the settings it followed.
+    go = source("Yahoo · 15m, 1H, 4H, 1D", *PRICE_CACHES, key="portfolio",
+                action="Optimise")
     pc = st.columns([3, 3, 2, 2, 2])
     pf_win = pc[0].selectbox("Time frame", PF_WINDOWS, key="pf_window")
     pf_obj = pc[1].selectbox("Objective", PF.OBJECTIVES, key="pf_obj",
                              help="What the search maximises. ROA and ER (Adj)"
                                   " depend on the order of the returns, so"
                                   " weights are searched, not solved.")
-    pf_legs = pc[2].selectbox("Max legs", [2, 3, 4, 5, 6], index=2,
+    pf_legs = pc[2].selectbox("Max legs", list(range(2, 11)), index=2,
                               key="pf_legs")
     pf_cap = pc[3].selectbox("Weight cap", ["25%", "35%", "50%", "100%"],
                              index=2, key="pf_cap",
@@ -437,24 +457,32 @@ with t[6]:
     # Capital and vol target sit on their own row because they are not search
     # arguments: the weights are a shape, and these two only decide how large
     # it is drawn. They take effect immediately, without a re-run.
-    sc2 = st.columns([3, 3, 6])
+    sc2 = st.columns([3, 3, 3, 3])
     pf_cap_usd = sc2[0].number_input("Capital", min_value=1_000,
-                                     max_value=100_000_000, value=100_000,
-                                     step=10_000, key="pf_capital",
+                                     max_value=1_000_000_000, value=1_000_000,
+                                     step=100_000, key="pf_capital",
                                      help="What the weights are sized against."
                                           " Notional and contracts scale with"
-                                          " it; the ratios do not.")
+                                          " it; the ratios do not. Below about"
+                                          " $500k these baskets stop being"
+                                          " fillable — watch the Miss column.")
     pf_vol = sc2[1].selectbox("Vol target", ["5%", "10%", "15%", "20%", "30%"],
                               index=2, key="pf_vol",
                               help="Annualised volatility to hold the basket"
                                    " at. Leverage is this over the portfolio's"
                                    " own volatility, so a quiet basket is held"
                                    " larger than a noisy one.")
+    pf_lev = sc2[2].selectbox("Max leverage", ["1×", "2×", "3×", "5×", "none"],
+                              index=2, key="pf_lev",
+                              help="Ceiling on gross notional over capital. A"
+                                   " quiet basket needs leverage to reach a"
+                                   " vol target; this is where you say how"
+                                   " much of that you will actually take.")
     # Behind a button on purpose: st.tabs runs every tab body on every rerun,
     # so an optimiser called at the top level would charge a search to anyone
     # who touched a radio on Board.
     pf_args = (pf_win, pf_obj, pf_legs, pf_cap, pf_short)
-    if st.button("Optimise", key="pf_go", type="primary"):
+    if go:
         with st.spinner("searching weights…"):
             st.session_state["pf_result"] = portfolio_weights(
                 pf_win, pf_obj, pf_legs, int(pf_cap.rstrip("%")), pf_short)
@@ -468,9 +496,17 @@ with t[6]:
     last_pf = {c: float(df["close"].iloc[-1])
                for c, df in prices("1d", "10y").items()
                if df is not None and len(df)}
-    UI.md(R.portfolio(res or {}, st.session_state.get("pf_for", pf_args)[0],
-                      capital=pf_cap_usd,
-                      vol_target=float(pf_vol.rstrip("%")), last=last_pf))
+    shown_win = st.session_state.get("pf_for", pf_args)[0]
+    plan = {}
+    if res:
+        closes_pf, fine_pf = portfolio_frames(shown_win)
+        if closes_pf is not None:
+            plan = PF.plan(closes_pf, fine_pf, res, pf_cap_usd,
+                           float(pf_vol.rstrip("%")), last_pf, U.MULT, U.MICRO,
+                           max_lev=(None if pf_lev == "none"
+                                    else float(pf_lev.rstrip("×"))))
+    UI.md(R.portfolio(res or {}, shown_win, plan, capital=pf_cap_usd,
+                      vol_target=float(pf_vol.rstrip("%"))))
 
 
 # ----------------------------------------------------------------- Curve
