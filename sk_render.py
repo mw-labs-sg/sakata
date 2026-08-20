@@ -538,6 +538,24 @@ def portfolio(res: dict, per: str, pl: dict = None,
                  f'<td class="faint">on {capital:,.0f}</td>'
                  f'<td style="color:{ink};font-weight:700">'
                  f'{pl.get("fees", 0):,.0f}</td></tr>')
+        # Net is the direction the basket leans. Gross says how much is
+        # working, net says how much of it is a bet on everything going the
+        # same way — a market-neutral pair and an outright double long can
+        # carry identical gross and could not be less alike.
+        net_d = sum(l["notional"] for l in legs if l.get("notional") is not None)
+        net_pc = net_d / capital * 100 if capital else 0
+        nfill = sum((l["fill"] or {}).get("notional") or 0 for l in legs)
+        ncol = pos if abs(net_pc) < 25 else amber
+        rows += (f'<tr><td class="l"></td><td class="l dim">Net exposure</td>'
+                 f'<td class="l dim" style="color:{ncol}">'
+                 f'{"long" if net_d >= 0 else "short"}</td>'
+                 f'<td class="dim">{res["net"]:+.1f}%</td><td></td>'
+                 f'<td class="faint">—</td>'
+                 f'<td style="color:{ncol};font-weight:700">'
+                 f'{net_d:+,.0f}</td>'
+                 f'<td class="l dim">{nfill:+,.0f} filled</td>'
+                 f'<td class="faint">{net_pc:+.0f}% of capital</td>'
+                 f'<td class="faint">—</td></tr>')
 
     def statrow(label, d, strong, note_=""):
         if not d:
@@ -1193,32 +1211,59 @@ def contracts_table(last: dict = None) -> str:
     last = last or {}
     ink = t.get("ink", "#0d1418")
     head = ('<th class="l">Instrument</th><th>Last</th><th>Multiplier</th>'
-            '<th>Notional</th><th class="l">Small</th><th>Multiplier</th>'
-            '<th>Notional</th><th>Fraction</th>')
+            '<th>Notional</th><th>Fee</th><th>bp</th>'
+            '<th class="l">Small</th><th>Multiplier</th>'
+            '<th>Notional</th><th>Fee</th><th>bp</th><th>Fraction</th>')
     body = ""
     for c in U.CODES:
         m, mic, px = U.MULT.get(c), U.MICRO.get(c), last.get(c)
+        fee_std, fee_sml = U.FEES.get(c, (None, None))
         notl = px * m if (px and m) else None
+        mnotl = px * mic[1] if (mic and px) else None
+
+        # Commission as basis points of the contract's own notional, which is
+        # the only form in which ES and ZC are comparable: $4 on a $390k index
+        # future is a tenth of a basis point, the same $4.40 on a $30k corn
+        # contract is one and a half. It is also the number that says why a
+        # micro is expensive — same fee per dollar as its standard, roughly
+        # doubled, because the fee falls by a fifth while the notional falls
+        # by a tenth.
+        def bp(fee, size):
+            return (f'{fee / size * 10_000:,.2f}'
+                    if (fee and size) else "—")
+
         body += (f'<tr><td class="l">{swatch(U.SECTOR[c])}{esc(c)} '
                  f'<span class="nm">{esc(U.NAME[c])}</span></td>'
                  + cell(px, U.DEC.get(c, 2), "dim")
                  + cell(m, 0, "dim")
                  + f'<td style="color:{ink};font-weight:600">'
                  + (f'{notl:,.0f}' if notl else "—") + "</td>"
+                 + cell(fee_std, 2, "dim")
+                 + f'<td class="dim">{bp(fee_std, notl)}</td>'
                  + (f'<td class="l" style="color:{ink}">{esc(mic[0])}</td>'
                     + cell(mic[1], 0, "dim")
-                    + cell(px * mic[1] if px else None, 0, "dim")
+                    + cell(mnotl, 0, "dim")
+                    + cell(fee_sml, 2, "dim")
+                    + f'<td class="dim">{bp(fee_sml, mnotl)}</td>'
                     + f'<td class="dim">1/{mic[2]}</td>'
                     if mic else
                     '<td class="l faint">—</td><td class="faint">—</td>'
+                    '<td class="faint">—</td><td class="faint">—</td>'
                     '<td class="faint">—</td><td class="faint">—</td>')
                  + "</tr>")
     return (eyebrow("Contract specifications")
             + note("Notional = last × multiplier, priced off the same daily "
                    "closes as the Board. The small contract is what makes a "
                    "computed ratio executable — a 1.6 : 1 spread is 8 : 1 in "
-                   "micros. Specifications are transcribed, not fetched: "
-                   "<b>check against CME before trading off them</b>.")
+                   "micros. <b>Fee</b> is one round turn, all in, and "
+                   "<b>bp</b> is that fee against the contract&#39;s own "
+                   "notional: the column that says a micro costs about twice "
+                   "as much per dollar of exposure as its standard, and that "
+                   "a corn contract costs ten times what an index one does. "
+                   "Specifications and fees are transcribed, not fetched, and "
+                   "commission is the negotiable half: <b>check both against "
+                   "CME and your broker before trading off them</b>.",
+                   wide=True)
             + table(head, body))
 
 
