@@ -468,6 +468,25 @@ def _window_field(name, by_bar, mode=MODE, chart_keys=()):
             return None
         return _num(max(min(tot / abs(mdd), 99), -99), 1)
 
+    # Every instrument's ROA on the long convention, to match out_signed: no
+    # Sharpe orientation in front of it, so a falling market reads negative and
+    # the sign carries the direction the way it does in the ER matrix. Drawdown
+    # off the fine marks, like every other drawdown on the tab.
+    out_roa = {}
+    for sym in data.columns:
+        r = data[sym].pct_change().dropna()
+        if len(r) < 5:
+            continue
+        rf = (fine[sym].pct_change().dropna()
+              if fine and sym in fine else r)
+        if len(rf) < 5:
+            rf = r
+        mdd, _ = ss.drawdowns(rf)
+        if abs(mdd) < MIN_MDD:
+            continue
+        tot = float(((1 + r).cumprod().iloc[-1] - 1) * 100)
+        out_roa[ss.name_of(sym)] = _num(max(min(tot / abs(mdd), 99), -99), 1)
+
     def leg_delta(c):
         """Pair ER against the better of its two legs, as a percentage.
 
@@ -600,6 +619,7 @@ def _window_field(name, by_bar, mode=MODE, chart_keys=()):
         "bars": n_bars, "instruments": len(data.columns),
         "thin": n_bars < MIN_DISPLAY_BARS,
         "outER": out_er, "outDir": out_dir, "outSigned": out_signed,
+        "outRoa": out_roa,
         "span": span, "ann": round(ann),
         "se": _num(ss.sharpe_se(span)), "noise": _num(ss.sharpe_se(span) * 2.8, 1),
         "start": data.index[0].strftime("%d %b %H:%M"),
@@ -713,6 +733,7 @@ def build_spreads(by_bar: dict, mode: str = MODE,
             "er": top["er"] if top else None,
             "erAdj": top["erAdj"] if top else None,
             "tot": top["tot"] if top else None,
+            "roa": top["roa"] if top else None,
             # Static-site keys, unused by the Streamlit render.
             "sharpe": top["sharpe"] if top else None,
             "outRank": r["outRank"], "bestOut": r["bestOut"],

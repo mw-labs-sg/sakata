@@ -206,8 +206,12 @@ def digest(p: dict, generated: str = "") -> str:
 # rows identically — bars is constant, so sqrt(bars) is a positive scale factor
 # — but the adjusted one is what the by-window tables compare, and offering two
 # keys that behave the same inside a table only invites the question.
-SORTS = {"ER (Adj)": "erAdj", "Win%": "win", "Tot%": "tot",
-         "Sharpe": "sharpe", "ROA": "roa"}
+# ROA first, which makes it the default selection: return per unit of the
+# worst hole is the question a spread is usually being asked, and ER (Adj)
+# answers a narrower one — how straight the path was, whatever it paid.
+SORTS = {"ROA": "roa", "ER (Adj)": "erAdj", "Win%": "win", "Tot%": "tot",
+         "Sharpe": "sharpe"}
+DEFAULT_SORT = next(iter(SORTS))
 
 # Card stats carry short labels; this is which one each ranking lights up.
 RANKED_AS = {"erAdj": "ER (Adj)", "win": "Win%", "tot": "Tot%",
@@ -241,7 +245,14 @@ def _wincols(n_windows: int) -> str:
     return '<col style="width:21%">' + "<col>" * n_windows
 
 
-def _optimal(d: dict, per: str, t: dict) -> str:
+def _pos_label(r: dict) -> str:
+    lg, sh = r.get("long"), r.get("short")
+    if lg and sh:
+        return f"{lg}/{sh}"
+    return f"long {lg}" if lg else (f"short {sh}" if sh else "—")
+
+
+def _optimal(d: dict, per: str, t: dict, sort: str = DEFAULT_SORT) -> str:
     """Best spread in each window — windows across the top, metrics down the
     left, matching the outrights matrix directly beneath it.
 
@@ -251,7 +262,21 @@ def _optimal(d: dict, per: str, t: dict) -> str:
     order whether or not each built, so the shape survives a reload.
     """
     wins = d.get("displayPeriods", d.get("periods", []))
-    by_win = {r["window"]: r for r in d.get("summary", [])}
+    # Best BY THE CHOSEN RANKING, not by the field's own order. The summary's
+    # top row is whatever ER put first, which stopped being "optimal" the
+    # moment the tab could be ranked on something else.
+    key = SORTS.get(sort, SORTS[DEFAULT_SORT])
+    by_win = {}
+    for w in wins:
+        rows = (d.get("data", {}).get(w) or {}).get("rows") or []
+        if not rows:
+            continue
+        best = max(rows, key=lambda r: (r.get(key) is not None,
+                                        r.get(key) if r.get(key) is not None
+                                        else 0))
+        by_win[w] = dict(best, label=_pos_label(best),
+                         bars=d["data"][w].get("bars"),
+                         thin=d["data"][w].get("thin"))
     wash = f'background:{t.get("teal", "#0d8f83")}1a'
     ink = t.get("ink", "#0d1418")
 
@@ -294,18 +319,22 @@ def _optimal(d: dict, per: str, t: dict) -> str:
               lambda r: (f'<span style="color:{ink};font-weight:600">'
                          f'{num(r.get("erAdj"), 2)}</span>'
                          if r.get("erAdj") is not None else "—"))
-        + row("ER", lambda r: num(r.get("er"), 3) or "—", "dim")
+        + row("ROA",
+              lambda r: (f'<span style="color:{ink};font-weight:600">'
+                         f'{num(r.get("roa"), 1)}</span>'
+                         if r.get("roa") is not None else "—"))
         + row("Tot%", lambda r: signed(r.get("tot")))
         + row("Bars", bars))
 
-    return (eyebrow("Optimal Spread by Time Window")
+    return (eyebrow(f"Optimal Spread by Time Window — best on {esc(sort)}")
             + note("ER (Adj) = ER &#215; &#8730;bars. Raw ER decays as "
                    "1/&#8730;n, so the adjusted figure is the one that "
-                   "compares across windows — 1.0 is the noise floor.")
+                   "compares across windows — 1.0 is the noise floor. ROA is "
+                   "the same window's return over its worst drawdown.")
             + table(head, body, _wincols(len(wins))))
 
 
-def _outrights(d: dict, per: str, t: dict) -> str:
+def _outrights(d: dict, per: str, t: dict, sort: str = DEFAULT_SORT) -> str:
     """ER for every instrument held alone, every window a column.
 
     Rows sort on the SELECTED window, so the picker at the top of the tab
@@ -318,8 +347,16 @@ def _outrights(d: dict, per: str, t: dict) -> str:
     # Every display window, present or not — a dropped column would knock this
     # table out of alignment with the one above it.
     wins = list(d.get("displayPeriods", []))
+    # ROA when the field is ranked on ROA, ER (Adj) otherwise. The matrix is
+    # here to answer "what would holding one of these alone have done", and
+    # that only helps if it answers it in the same currency the table above is
+    # being read in. The other three rankings have no per-instrument column of
+    # their own, so they keep the efficiency reading.
+    on_roa = SORTS.get(sort) == "roa"
+    src_key, metric, dp = (("outRoa", "ROA", 1) if on_roa
+                           else ("outSigned", "ER (Adj)", 2))
     live = [w for w in wins if w in d.get("data", {})
-            and d["data"][w].get("outER")]
+            and d["data"][w].get(src_key)]
     if not wins:
         return ""
     # ER (Adj), not raw ER. This matrix compares ACROSS windows by
@@ -331,12 +368,18 @@ def _outrights(d: dict, per: str, t: dict) -> str:
     # SIGNED ER, adjusted: sign carries direction, so a clean downtrend reads
     # negative rather than being silently flipped into a positive "short".
     # This is both what is displayed and what the rows sort on.
+    #
+    # ROA needs no such correction: it is a ratio of two window-length
+    # quantities, so it does not decay with the bar count the way raw ER does.
     mats = {}
     for w in live:
-        root = max(d["data"][w].get("bars", 0), 1) ** 0.5
-        src = d["data"][w].get("outSigned") or d["data"][w]["outER"]
-        mats[w] = {k: (None if v is None else round(v * root, 2))
-                   for k, v in src.items()}
+        src = d["data"][w].get(src_key) or {}
+        if on_roa:
+            mats[w] = dict(src)
+        else:
+            root = max(d["data"][w].get("bars", 0), 1) ** 0.5
+            mats[w] = {k: (None if v is None else round(v * root, 2))
+                       for k, v in src.items()}
     codes = [c for c in U.CODES if any(c in mats.get(w, {}) for w in live)]
     if not codes:
         return ""
@@ -377,10 +420,10 @@ def _outrights(d: dict, per: str, t: dict) -> str:
                 continue
             cells += (f'<td style="{style}">'
                       f'<span style="color:{ink};font-weight:600">'
-                      f'{v:.2f}</span></td>')
+                      f'{v:.{dp}f}</span></td>')
         body += (f'<tr><td class="l">{swatch(U.SECTOR[c])}{esc(c)} '
                  f'<span class="nm">{esc(U.NAME[c])}</span></td>{cells}</tr>')
-    return (eyebrow(f"Outrights by Time Window — ER (Adj), ranked on "
+    return (eyebrow(f"Outrights by Time Window — {esc(metric)}, ranked on "
                     f"{esc(skey)}")
             + table(head, body, _wincols(len(wins))))
 
@@ -403,21 +446,21 @@ def freshness(stamp, ttl: int) -> str:
             if left else f"computed {ago} · due to refresh")
 
 
-def spreads(d: dict, per: str, sort: str = "ER (Adj)",
+def spreads(d: dict, per: str, sort: str = DEFAULT_SORT,
             fresh: str = "") -> str:
     p = d["data"][per]
     t = _tok()
 
     # Reading order: best spread per window, then how the single instruments
     # did, then the full field for the window you picked, then the pictures.
-    out = _optimal(d, per, t) + _outrights(d, per, t)
+    out = _optimal(d, per, t, sort) + _outrights(d, per, t, sort)
 
     teal = t.get("teal", "#0d8f83")
     amber = t.get("amber", "#96701c")
     # The column follows its own selector; "Match basis" tracks the maths.
     weighting = WEIGHTINGS.get(d.get("mode", "vol"), WEIGHTINGS["vol"])
     skey, sxkey = weighting["keys"]
-    key = SORTS.get(sort, "erAdj")
+    key = SORTS.get(sort, SORTS[DEFAULT_SORT])
     rows = sorted(p["rows"], key=lambda r: -(r.get(key) if r.get(key)
                                              is not None else -9e9))
     # Tot% and MDD% adjacent: they are the same question asked twice, what you
@@ -516,7 +559,8 @@ def spreads(d: dict, per: str, sort: str = "ER (Adj)",
             + spread_charts(p, t, sort))
 
 
-def spread_charts(p: dict, t: dict = None, sort: str = "ER (Adj)") -> str:
+def spread_charts(p: dict, t: dict = None,
+                  sort: str = DEFAULT_SORT) -> str:
     """Legs rebased to 100 in the side colours, spread over them in the ink.
 
     The grid follows the table: same ranking, same order, same twelve. The
@@ -526,7 +570,7 @@ def spread_charts(p: dict, t: dict = None, sort: str = "ER (Adj)") -> str:
     """
     if not p.get("charts"):
         return ""
-    key = SORTS.get(sort, "erAdj")
+    key = SORTS.get(sort, SORTS[DEFAULT_SORT])
     ranked = sorted(p["charts"], key=lambda c: -(c.get(key) if c.get(key)
                                                  is not None else -9e9))
     picked = ranked[:p.get("chartCap", 12)]
