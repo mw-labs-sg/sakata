@@ -129,24 +129,28 @@ def portfolio_frames(window: str, v: str = CACHE_V):
     return closes, fine
 
 
-@st.cache_data(ttl=TTL_FAST, show_spinner=False)
 def portfolio_weights(window: str, objective: str, legs: int, cap: int,
-                      shorts: bool, v: str = CACHE_V, _progress=None) -> dict:
-    """One search, cached on its arguments so re-pressing the button is free.
+                      shorts: bool, progress=None) -> dict:
+    """One search. NOT cached, deliberately.
 
-    Reads the same aligned window the field is built from rather than slicing
-    its own: two answers about "the last 30 days" that disagree on which days
-    those were is the bug this avoids.
+    It was, until the progress bar arrived: `progress` calls st.progress from
+    inside the search, st.cache_data records every st.* call made inside a
+    cached function so it can replay them on a hit, and a replay cannot
+    reconstruct the closure that bar lives in. On Streamlit Cloud that landed
+    as CacheReplayClosureError the second time the button was pressed with the
+    same settings. A cached function cannot draw, so this one is not cached.
+
+    Nothing is lost by that. The search only runs on an explicit press, the
+    answer is held in session state for the sizing to read, and the window
+    data it works from is cached in portfolio_frames — which is the expensive,
+    shared part.
     """
     closes, fine = portfolio_frames(window)
     if closes is None:
         return {}
-    # `_progress` is underscored so Streamlit leaves it out of the cache key:
-    # the callback is a different object every run and would otherwise make
-    # every search a miss.
     return PF.optimise(closes, fine, objective, max_legs=legs,
                        max_weight=cap / 100, allow_short=shorts,
-                       progress=_progress)
+                       progress=progress)
 
 
 @st.cache_data(ttl=TTL_FAST, show_spinner="ranking the field…")
@@ -509,7 +513,7 @@ with t[6]:
 
         st.session_state["pf_result"] = portfolio_weights(
             pf_win, pf_obj, pf_legs, int(pf_cap.rstrip("%")), pf_short,
-            _progress=_tick)
+            progress=_tick)
         st.session_state["pf_for"] = pf_args
         bar.empty()
     res = st.session_state.get("pf_result")

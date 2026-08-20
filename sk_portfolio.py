@@ -52,6 +52,13 @@ POLISH_ROUNDS = 3
 # between seeds stopped falling on measurement.
 EXCHANGE_STARTS = 3
 
+# Swaps that survive the unclimbed screen and get a real climb. Forty of a
+# possible hundred and fifty-six: measured against twelve and twenty-four,
+# forty was the first width at which the seed the tab actually uses found the
+# best basket in all three windows rather than two of them. Climbing all
+# hundred and fifty-six found no more and took three times as long.
+SCREEN_KEEP = 40
+
 
 def _drawdown(r: np.ndarray) -> float:
     """Worst peak-to-trough of the compounded series, anchored at 1.0."""
@@ -295,7 +302,7 @@ def _grow(sc: _Scorer, w0: np.ndarray, objective: str, max_legs: int,
 
 def _exchange(sc: _Scorer, w0: np.ndarray, objective: str, max_legs: int,
               cap: float, allow_short: bool, rng, rounds: int = 4,
-              steps: int = 150) -> tuple:
+              steps: int = 150, tick=None) -> tuple:
     """Try replacing each held leg with each instrument not held.
 
     Growing a basket a leg at a time is myopic: it can never reach a set
@@ -310,7 +317,12 @@ def _exchange(sc: _Scorer, w0: np.ndarray, objective: str, max_legs: int,
     best_w, best_v = w0, sc.score(w0, objective)
     for _ in range(rounds):
         held, idle = np.flatnonzero(best_w), np.flatnonzero(best_w == 0)
-        shortlist = []
+        # Screen every swap unclimbed first. Climbing all of them cost 150
+        # steps x 13 candidates x 2 signs x 6 legs — 23,000 evaluations to
+        # rank a list, which is where the progress bar visibly stalled. The
+        # raw score is a coarse ranking but a cheap one, and only the
+        # plausible dozen need to be walked properly.
+        screened = []
         for out_ in held:
             for in_ in idle:
                 for sign in ((1.0, -1.0) if allow_short else (1.0,)):
@@ -318,9 +330,13 @@ def _exchange(sc: _Scorer, w0: np.ndarray, objective: str, max_legs: int,
                     cand[in_] = sign * abs(cand[out_])
                     cand[out_] = 0.0
                     cand = _project(cand, max_legs, cap, allow_short)
-                    cand, v = _climb(sc, cand, objective, max_legs, cap,
-                                     allow_short, rng, steps)
-                    shortlist.append((v, cand))
+                    screened.append((sc.score(cand, objective), cand))
+        screened.sort(key=lambda t: -t[0])
+        shortlist = []
+        for _v, cand in screened[:SCREEN_KEEP]:
+            cand, v = _climb(sc, cand, objective, max_legs, cap, allow_short,
+                             rng, steps)
+            shortlist.append((v, cand))
         # A swap arrives with the weights of the leg it replaced, so a short
         # climb judges it before it has had a chance to be itself. Re-climbing
         # the few best properly is what let ZN → BTC through: worse on 150
@@ -332,6 +348,8 @@ def _exchange(sc: _Scorer, w0: np.ndarray, objective: str, max_legs: int,
                              rng, steps * 4)
             if v > round_v:
                 round_w, round_v = cand, v
+        if tick:
+            tick()
         if round_w is None:
             break                      # a full pass improved nothing: stop
         best_w, best_v = round_w, round_v
@@ -367,8 +385,10 @@ def optimise(closes: pd.DataFrame, fine=None, objective: str = "ROA",
     n = len(sc.syms)
     max_legs = max(2, min(max_legs, n))
     seeds = _pairs(sc, objective, max_weight, allow_short)
+    # Four rounds apiece is the ceiling for the swap passes; they usually
+    # stop earlier, so the bar can finish before the count does.
     total = (max(1, restarts) + 2 * len(seeds) + POLISH_ROUNDS
-             + EXCHANGE_STARTS + 1)
+             + EXCHANGE_STARTS * 4 + 5)
     done = 0
 
     def tick(best):
@@ -443,11 +463,19 @@ def optimise(closes: pd.DataFrame, fine=None, objective: str = "ROA",
     pool.sort(key=lambda t: -t[0])
     for i, (_pv, pw) in enumerate(pool[:EXCHANGE_STARTS]):
         rng = np.random.default_rng(seed * 1_000 + 400 + i)
+
+        def _round():
+            # The bar moves per ROUND inside the swap pass. Between stages was
+            # fine when a stage was a second; it read as a hang once a stage
+            # became eight.
+            nonlocal done
+            done += 1
+            tick(best_v)
+
         w, v = _exchange(sc, pw, objective, max_legs, max_weight,
-                         allow_short, rng)
+                         allow_short, rng, tick=_round)
         if v > best_v:
             best_w, best_v = w, v
-        done += 1
         tick(best_v)
 
     # Polish. Restarts find the right hill; this walks the last stretch up it.
@@ -470,8 +498,14 @@ def optimise(closes: pd.DataFrame, fine=None, objective: str = "ROA",
     # polish somewhere new to go. Stopping after a single pass of each left
     # the seeds a tenth apart, and this is the cheap half of closing that.
     rng = np.random.default_rng(seed * 1_000 + 600)
+
+    def _round2():
+        nonlocal done
+        done += 1
+        tick(best_v)
+
     w, v = _exchange(sc, best_w, objective, max_legs, max_weight,
-                     allow_short, rng)
+                     allow_short, rng, tick=_round2)
     if v > best_v:
         best_w, best_v = w, v
     w, v = _climb(sc, best_w, objective, max_legs, max_weight, allow_short,
