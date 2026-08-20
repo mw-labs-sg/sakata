@@ -428,6 +428,91 @@ def _outrights(d: dict, per: str, t: dict, sort: str = DEFAULT_SORT) -> str:
             + table(head, body, _wincols(len(wins))))
 
 
+# ------------------------------------------------------------- Portfolio
+def portfolio(res: dict, per: str, fresh: str = "") -> str:
+    """Optimised weights, what they scored, and the curve they scored it on.
+
+    Two blocks and a picture: the weights themselves, then the same statistics
+    the Trends table carries, quoted twice — the searched weights against equal
+    weight over the SAME legs. That comparison is the point of the second row.
+    A search that cannot beat naive weighting on its own objective has found a
+    way to spend a click, and the only way to see that is side by side.
+    """
+    if not res or not res.get("weights"):
+        return ('<div class="skel">No portfolio yet — set the objective and '
+                "press Optimise.</div>")
+    t = _tok()
+    ink = t.get("ink", "#0d1418")
+    teal, amber = t.get("teal", "#0d8f83"), t.get("amber", "#96701c")
+    faint = t.get("faint", "#97a2ab")
+    st_, eq = res["stats"], res["equal"]
+
+    # Weight as a bar as well as a number: the sizes are the whole output, and
+    # a column of percentages makes the reader do the comparing.
+    top = max(abs(w["w"]) for w in res["weights"]) or 1
+    rows = ""
+    for i, w in enumerate(res["weights"], 1):
+        long_ = w["w"] >= 0
+        col = teal if long_ else amber
+        code = w["code"]
+        name = U.NAME.get(code, "")
+        bar = (f'<span style="display:inline-block;height:8px;border-radius:2px;'
+               f'background:{col};width:{abs(w["w"]) / top * 84:.0f}px;'
+               f'vertical-align:middle"></span>')
+        rows += (f'<tr><td class="l faint">{i}</td>'
+                 f'<td class="l">{swatch(U.SECTOR.get(code, ""))}{esc(code)} '
+                 f'<span class="nm">{esc(name)}</span></td>'
+                 f'<td class="l" style="color:{col};font-weight:600">'
+                 f'{"long" if long_ else "short"}</td>'
+                 f'<td style="color:{ink};font-weight:700">{abs(w["w"]):.1f}%</td>'
+                 f'<td class="l">{bar}</td></tr>')
+
+    def statrow(label, d, strong):
+        cells = "".join(
+            f'<td style="color:{col or ink};'
+            f'font-weight:{700 if strong else 600}">{v}</td>'
+            for v, col in (
+                (num(d.get("erAdj"), 2), None), (num(d.get("roa"), 1), None),
+                (num(d.get("sharpe"), 2), None), (f'{d.get("win", 0):.0f}',
+                                                  None),
+                (num(d.get("vol"), 1), None),
+                (f'{"+" if (d.get("tot") or 0) >= 0 else ""}'
+                 f'{num(d.get("tot"), 1)}',
+                 t.get("pos", "#0a7c66") if (d.get("tot") or 0) >= 0 else amber),
+                (num(d.get("mdd"), 1), amber)))
+        return f'<tr><td class="l">{esc(label)}</td>{cells}</tr>'
+
+    curve, eqc = res["curve"], res["equalCurve"]
+    series = [{"k": "equal weight", "v": eqc["v"], "c": faint, "w": 1.4,
+               "dash": "4 3", "o": 0.9},
+              {"k": "optimised", "v": curve["v"], "c": ink, "w": 2.6}]
+
+    return (eyebrow(f"Portfolio Weights — {esc(res['objective'])}, {esc(per)}")
+            + note("Weights are gross: they sum to 100% of the risk budget, "
+                   "with shorts carrying the same weight as longs. Searched, "
+                   "not solved — ROA and ER depend on the order of the "
+                   "returns, so there is no covariance matrix to invert and "
+                   "no proof this is the global best. Fitted on this window "
+                   "with no holdout, so read the equal-weight row as the bar "
+                   "it had to clear.")
+            + table('<th class="l">#</th><th class="l">Instrument</th>'
+                    '<th class="l">Side</th><th>Weight</th><th class="l"></th>',
+                    rows)
+            + eyebrow("What those weights scored")
+            + table('<th class="l"></th><th>ER (Adj)</th><th>ROA</th>'
+                    '<th>Sharpe</th><th>Win%</th><th>Vol%</th><th>Tot%</th>'
+                    '<th>MDD%</th>',
+                    statrow("Optimised", st_, True)
+                    + statrow("Equal weight, same legs", eq, False))
+            + chips([f'{res["legs"]} legs', f'{res["bars"]} bars',
+                     f'drawdown on {res["fineBars"]:,} marks',
+                     f'net {res["net"]:+.0f}% of gross']
+                    + ([fresh] if fresh else []))
+            + '<div class="plot" style="margin-top:10px">'
+            + CH.line_chart(curve["t"], series, None, 1100, 300, 1)
+            + "</div>")
+
+
 def freshness(stamp, ttl: int) -> str:
     """How old this field is, and how long until it refetches on its own.
 

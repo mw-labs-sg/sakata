@@ -261,23 +261,44 @@ def _curves(cand, data, mode):
 
 
 # ------------------------------------------------------------------ compute
-def _window_field(name, by_bar, mode=MODE, chart_keys=()):
+def window_closes(name, by_bar):
+    """The exact frame a window's field is built on: aligned, trimmed closes.
+
+    Public because the portfolio optimiser has to search over the same bars the
+    table ranks, and rebuilding the slice beside it is how the two drift apart.
+    Returns (closes, dropped symbols) or (None, []).
+    """
     spec = WINDOWS[name]
     frames = by_bar.get(spec["bar"])
     if not frames:
-        return None
+        return None, []
     frames = _slice(frames, spec)
     frames = {k: v for k, v in frames.items() if len(v) >= 5}
     if len(frames) < 2:
-        return None
+        return None, []
 
     data, dropped, _cov = ss.align_frames(
         frames, intraday=spec["bar"] in INTRADAY_BARS)
     if data is None:
-        return None
+        return None, dropped
     # Now that every symbol is on one index, n bars means n bars.
     if spec["kind"] == "bars":
         data = data.tail(spec["n"])
+    return data, dropped
+
+
+def fine_closes(name, by_bar, data):
+    """Finest marks covering the same span, for drawdown. See _fine_frame."""
+    fine, bar = _fine_frame(by_bar, list(data.columns), data.index[0],
+                            data.index[-1], WINDOWS[name]["bar"])
+    return (pd.concat(fine, axis=1).dropna() if fine else None), bar
+
+
+def _window_field(name, by_bar, mode=MODE, chart_keys=()):
+    spec = WINDOWS[name]
+    data, dropped = window_closes(name, by_bar)
+    if data is None:
+        return None
     # Raw levels, captured before the rebase, so leg sizing can be expressed in
     # CONTRACTS rather than in the sigma ratio. Equal risk means
     # n x notional x sigma matched on both sides, and notional needs a real

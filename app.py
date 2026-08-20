@@ -30,6 +30,7 @@ import sk_board as BOARD
 import sk_calendar as CAL
 import sk_curve as CURVE
 import sk_margins as MARGIN
+import sk_portfolio as PF
 import sk_render as R
 import sk_sources as S
 import sk_spreads as SP
@@ -98,19 +99,47 @@ def by_bar(v: str = CACHE_V) -> dict:
             "1wk": {k: S.resample_weekly(v) for k, v in daily.items()}}
 
 
+def _closes(frames: dict) -> dict:
+    """{code: OHLC frame} to {ticker: close series}, the shape sk_spreads
+    slices windows out of."""
+    return {U.TICKER[c]: df["close"].dropna()
+            for c, df in frames.items() if df is not None and len(df)}
+
+
+def _by_bar_closes() -> dict:
+    """Every bar size the windows can be built from, closes only."""
+    bb = by_bar()
+    return {"15m": _closes(prices("15m", "60d")), "1h": _closes(bb["1h"]),
+            "4h": _closes(bb["4h"]), "1d": _closes(bb["1d"])}
+
+
+PF_WINDOWS = ["Intraday", "WTD", "MTD", "QTD", "YTD", "30D", "60D",
+              "120D", "240D"]
+
+
+@st.cache_data(ttl=TTL_FAST, show_spinner=False)
+def portfolio_weights(window: str, objective: str, legs: int, cap: int,
+                      shorts: bool, v: str = CACHE_V) -> dict:
+    """One search, cached on its arguments so re-pressing the button is free.
+
+    Reads the same aligned window the field is built from rather than slicing
+    its own: two answers about "the last 30 days" that disagree on which days
+    those were is the bug this avoids.
+    """
+    bb = _by_bar_closes()
+    closes, _dropped = SP.window_closes(window, bb)
+    if closes is None:
+        return {}
+    fine, _bar = SP.fine_closes(window, bb, closes)
+    return PF.optimise(closes, fine, objective, max_legs=legs,
+                       max_weight=cap / 100, allow_short=shorts)
+
+
 @st.cache_data(ttl=TTL_FAST, show_spinner="ranking the field…")
 def spread_field(mode: str = "vol", v: str = CACHE_V) -> dict:
     """`mode` is a cache key, not a display flag: it selects the return series
     the whole field is computed from, so each basis gets its own entry."""
-    bb = by_bar()
-    m15 = prices("15m", "60d")
-
-    def closes(frames):
-        return {U.TICKER[c]: df["close"].dropna()
-                for c, df in frames.items() if df is not None and len(df)}
-
-    out = SP.build_spreads({"15m": closes(m15), "1h": closes(bb["1h"]),
-                            "4h": closes(bb["4h"]), "1d": closes(bb["1d"])},
+    out = SP.build_spreads(_by_bar_closes(),
                            mode=mode,
                            # Every ranking the Function picker offers, so the
                            # chart grid can follow the table into any of them
@@ -291,7 +320,7 @@ def source(label: str, *caches, key: str = "") -> None:
 # Uppercased here rather than in CSS: which element holds the label has moved
 # between Streamlit versions, so a selector is a thing that breaks on upgrade.
 TABS = ["Board", "News", "Calendar", "Margins", "Technical", "Trends",
-        "Curve", "Knowledge"]
+        "Portfolio", "Curve", "Knowledge"]
 t = st.tabs([x.upper() for x in TABS])
 
 # ----------------------------------------------------------------- Board
@@ -386,8 +415,42 @@ with t[5]:
         with st.expander("Digest — copy this into an LLM"):
             st.code(R.digest(field["data"][per], _utc()), language=None)
 
-# ----------------------------------------------------------------- Curve
+# ------------------------------------------------------------- Portfolio
 with t[6]:
+    source("Yahoo · 15m, 1H, 4H, 1D", *PRICE_CACHES, key="portfolio")
+    pc = st.columns([3, 3, 2, 2, 2])
+    pf_win = pc[0].selectbox("Time frame", PF_WINDOWS, key="pf_window")
+    pf_obj = pc[1].selectbox("Objective", PF.OBJECTIVES, key="pf_obj",
+                             help="What the search maximises. ROA and ER (Adj)"
+                                  " depend on the order of the returns, so"
+                                  " weights are searched, not solved.")
+    pf_legs = pc[2].selectbox("Max legs", [2, 3, 4, 5, 6], index=2,
+                              key="pf_legs")
+    pf_cap = pc[3].selectbox("Weight cap", ["25%", "35%", "50%", "100%"],
+                             index=2, key="pf_cap",
+                             help="Most any one instrument may carry. The cap "
+                                  "and the leg count are the only defence "
+                                  "against a search fitting one window.")
+    pf_short = pc[4].checkbox("Shorts", value=True, key="pf_short",
+                              help="Allow negative weights. Off makes it a "
+                                   "long-only basket.")
+    # Behind a button on purpose: st.tabs runs every tab body on every rerun,
+    # so an optimiser called at the top level would charge a search to anyone
+    # who touched a radio on Board.
+    pf_args = (pf_win, pf_obj, pf_legs, pf_cap, pf_short)
+    if st.button("Optimise", key="pf_go", type="primary"):
+        with st.spinner("searching weights…"):
+            st.session_state["pf_result"] = portfolio_weights(
+                pf_win, pf_obj, pf_legs, int(pf_cap.rstrip("%")), pf_short)
+            st.session_state["pf_for"] = pf_args
+    res = st.session_state.get("pf_result")
+    if res and st.session_state.get("pf_for") != pf_args:
+        st.caption("Controls changed since this ran — press Optimise again.")
+    UI.md(R.portfolio(res or {}, st.session_state.get("pf_for", pf_args)[0]))
+
+
+# ----------------------------------------------------------------- Curve
+with t[7]:
     source("CME settlements", curve_data, key="curve")
     cd = curve_data()
     codes = list(cd.get("curves", {}))
@@ -400,7 +463,7 @@ with t[6]:
         UI.md(R.curve(cd, code))
 
 # ------------------------------------------------------------- Knowledge
-with t[7]:
+with t[8]:
     source("Hand-maintained in sk_knowledge.py · no fetch")
     grp = st.radio("Group", ["All", "Financials", "Commodities"],
                    horizontal=True, key="kn_group", label_visibility="collapsed")
