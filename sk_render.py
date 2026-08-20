@@ -429,8 +429,32 @@ def _outrights(d: dict, per: str, t: dict, sort: str = DEFAULT_SORT) -> str:
 
 
 # ------------------------------------------------------------- Portfolio
+def _sizing_note(pl: dict, vol_target, res: dict) -> str:
+    """One sentence on why the gross exposure is what it is.
+
+    The confusion this answers: a cap of 3x sitting above a gross of 0.63x
+    reads like the cap was ignored. It was not — the vol target sets the
+    size and the cap is only a ceiling, so a basket noisier than the target
+    is held BELOW one times capital.
+    """
+    pvol = pl.get("pvol") or res["stats"].get("vol") or 0
+    lev = pl.get("lev", 0)
+    if vol_target is None:
+        return (f"Size follows leverage: gross is {lev:.2f}× capital, and the "
+                f"volatility lands wherever the basket puts it.")
+    where = "below" if lev < 1 else "above"
+    out = (f"Size follows the vol target, not the leverage cap: {lev:.2f}× is "
+           f"{vol_target:.0f}% over the portfolio&#39;s own {pvol:.1f}%, which "
+           f"is why a basket noisier than the target sits {where} 1×.")
+    if pl.get("capped"):
+        out += (f" The cap binds here — {pl.get('wantLev', 0):.2f}× wanted, "
+                f"{lev:.2f}× taken, so it runs at "
+                f"{pvol * lev:.1f}% rather than {vol_target:.0f}%.")
+    return out
+
+
 def portfolio(res: dict, per: str, pl: dict = None,
-              capital: float = 100_000, vol_target: float = 15.0,
+              capital: float = 1_000_000, vol_target=15.0,
               fresh: str = "") -> str:
     """Weights, the size they imply, and what that size actually fills.
 
@@ -448,7 +472,12 @@ def portfolio(res: dict, per: str, pl: dict = None,
     teal, amber = t.get("teal", "#0d8f83"), t.get("amber", "#96701c")
     faint, mute = t.get("faint", "#97a2ab"), t.get("mute", "#66727b")
     pos = t.get("pos", "#0a7c66")
-    st_, eq, filled = res["stats"], res["equal"], pl.get("filled")
+    # Everything quoted AT THE SIZE HELD. The unit-gross basket is a shape,
+    # not a position: its Vol% is whatever the legs happen to make, which is
+    # why a 20% target used to sit beside a 31.5% volatility.
+    st_ = pl.get("sized") or res["stats"]
+    eq = pl.get("sizedEqual") or res["equal"]
+    filled = pl.get("filled")
     legs = pl.get("legs") or [dict(w, notional=None, fill=None)
                               for w in res["weights"]]
     lev, gross = pl.get("lev", 0), pl.get("gross", 0)
@@ -535,28 +564,27 @@ def portfolio(res: dict, per: str, pl: dict = None,
             + note("Weight is notional — a share of the money, not of the "
                    "risk; <b>Risk%</b> is the share of variance the leg "
                    "actually carries, so the two columns disagree wherever "
-                   "one leg moves more than another. Size follows the vol "
-                   f"target: leverage is {vol_target:.0f}% over the "
-                   f"portfolio&#39;s own {st_.get('vol', 0):.1f}%"
-                   + (f", capped at {pl['lev']:.2f}× so it runs at "
-                      f"{pl.get('volAt', 0):.1f}% instead"
-                      if pl.get("capped") else "")
-                   + ". Fill is "
-                   "whole contracts, standards and smalls mixed, with the "
-                   "miss from the target beside it. Searched, not solved, and "
-                   "fitted on this window with no holdout — read the "
-                   "equal-weight row as the bar it had to clear.", wide=True)
+                   "one leg moves more than another. "
+                   + _sizing_note(pl, vol_target, res)
+                   + " Fill is whole contracts, standards and smalls mixed, "
+                   "with the miss from the target beside it. Searched, not "
+                   "solved, and fitted on this window with no holdout — read "
+                   "the equal-weight row as the bar it had to clear.",
+                   wide=True)
             + table('<th class="l">#</th><th class="l">Instrument</th>'
                     '<th class="l">Side</th><th>Weight</th><th class="l"></th>'
                     '<th>Risk%</th><th>Notional</th><th class="l">Fill</th>'
                     '<th>Miss</th>', rows)
-            + eyebrow("What those weights scored")
+            + eyebrow(f"What those weights scored — held at "
+                      f"{pl.get('lev', 0):.2f}×")
             + note("The statistics the Trends table carries, over the same "
-                   "window. <b>As filled</b> is the same basket in whole "
-                   "contracts: it is the row that says whether rounding cost "
-                   "anything. Sizing itself cannot — scaling every leg by one "
-                   "factor moves Tot% and MDD% together and leaves the ratios "
-                   "where they were.", wide=True)
+                   "window, <b>at the size held</b>: Vol%, Tot% and MDD% are "
+                   "all after leverage, which is why Vol% lands on the "
+                   "target. <b>As filled</b> is the same basket in whole "
+                   "contracts — the row that says whether rounding cost "
+                   "anything. The ratios are indifferent to sizing: scaling "
+                   "every leg by one factor moves Tot% and MDD% together.",
+                   wide=True)
             + table('<th class="l"></th><th>ER (Adj)</th><th>ROA</th>'
                     '<th>Sharpe</th><th>Win%</th><th>Vol%</th><th>Tot%</th>'
                     '<th>MDD%</th>',

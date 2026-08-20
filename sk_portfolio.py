@@ -251,6 +251,8 @@ def optimise(closes: pd.DataFrame, fine=None, objective: str = "ROA",
 
     return {
         "objective": objective, "weights": weights,
+        "w": [float(x) for x in best_w], "equalW": [float(x) for x in eq],
+        "syms": sc.syms,
         "stats": sc.stats(best_w), "equal": sc.stats(eq),
         "bars": sc.bars, "fineBars": sc.fine_bars,
         "legs": len(weights), "gross": round(float(np.abs(best_w).sum()), 3),
@@ -319,7 +321,14 @@ def plan(closes, fine, res: dict, capital: float, vol_target: float,
         return {}
     sc = _Scorer(closes, fine)
     pvol = res["stats"].get("vol") or 0
-    want = (vol_target / pvol) if pvol > 0 else 0
+    # vol_target None means "size on leverage instead": hold the cap and let
+    # the volatility land where the basket puts it. The two rules answer
+    # different questions — how much risk do I want, versus how much of the
+    # account do I want working — and neither is wrong.
+    if vol_target is None:
+        want = max_lev or 1.0
+    else:
+        want = (vol_target / pvol) if pvol > 0 else 0
     # A vol target alone will happily ask for six times the account on a quiet
     # basket. The cap is where that gets answered, and when it binds the
     # portfolio simply runs below target — which is worth saying out loud
@@ -338,19 +347,33 @@ def plan(closes, fine, res: dict, capital: float, vol_target: float,
         small = px * mic[1] if (mic and px) else 0.0
         f = (_fill(target, unit, small, mic[0] if mic else "", code)
              if unit else {"text": "—", "notional": 0.0, "err": None})
-        if sym in idx and gross:
-            achieved[idx[sym]] = f["notional"] / gross
+        if sym in idx and capital:
+            # Fraction of CAPITAL, not of gross: that is the levered weight,
+            # so stats() on it reports the position as held.
+            achieved[idx[sym]] = f["notional"] / capital
         legs.append(dict(w, notional=target, unit=unit, fill=f,
                          small=(mic[0] if mic else None),
                          smallUnit=small or None))
 
+    # Every statistic AT THE SIZE HELD. Ratios do not move with leverage but
+    # Vol%, Tot% and MDD% do, and reporting the unit-gross basket next to a
+    # 0.63x sizing was quietly showing a 31% volatility for a portfolio held
+    # at 20% — the one number the vol target exists to set.
+    w = np.array(res.get("w") or [])
+    eqw = np.array(res.get("equalW") or [])
+    sized = sc.stats(w * lev) if w.size else None
+    sized_eq = sc.stats(eqw * lev) if eqw.size else None
     filled = None
     if np.abs(achieved).sum() > 0:
         # Rescored on the position that can actually be sent: same shape only
         # if the rounding was kind, which is exactly what needs checking.
-        filled = sc.stats(achieved / np.abs(achieved).sum())
-        filled["gross"] = float(np.abs(achieved).sum()) * gross
+        filled = sc.stats(achieved)
+        # achieved is a fraction of CAPITAL, so the gross it implies is
+        # against capital too. Multiplying by `gross` counted the
+        # leverage twice and reported a fill 1.7x its own target.
+        filled["gross"] = float(np.abs(achieved).sum()) * capital
     return {"legs": legs, "lev": lev, "wantLev": want, "gross": gross,
+            "sized": sized, "sizedEqual": sized_eq, "pvol": pvol,
             "capped": bool(max_lev and want > max_lev + 1e-9),
             "volAt": pvol * lev,
             "target": sum(abs(l["notional"]) for l in legs),

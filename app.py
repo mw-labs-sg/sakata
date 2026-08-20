@@ -466,12 +466,14 @@ with t[6]:
                                           " it; the ratios do not. Below about"
                                           " $500k these baskets stop being"
                                           " fillable — watch the Miss column.")
-    pf_vol = sc2[1].selectbox("Vol target", ["5%", "10%", "15%", "20%", "30%"],
+    pf_vol = sc2[1].selectbox("Vol target",
+                              ["5%", "10%", "15%", "20%", "30%", "none"],
                               index=2, key="pf_vol",
                               help="Annualised volatility to hold the basket"
-                                   " at. Leverage is this over the portfolio's"
-                                   " own volatility, so a quiet basket is held"
-                                   " larger than a noisy one.")
+                                   " at; leverage is this over the portfolio's"
+                                   " own volatility, so a noisy basket is held"
+                                   " below 1×. Pick none to size on leverage"
+                                   " instead and hold the cap.")
     pf_lev = sc2[2].selectbox("Max leverage", ["1×", "2×", "3×", "5×", "none"],
                               index=2, key="pf_lev",
                               help="Ceiling on gross notional over capital. A"
@@ -502,11 +504,14 @@ with t[6]:
         closes_pf, fine_pf = portfolio_frames(shown_win)
         if closes_pf is not None:
             plan = PF.plan(closes_pf, fine_pf, res, pf_cap_usd,
-                           float(pf_vol.rstrip("%")), last_pf, U.MULT, U.MICRO,
+                           None if pf_vol == "none"
+                           else float(pf_vol.rstrip("%")),
+                           last_pf, U.MULT, U.MICRO,
                            max_lev=(None if pf_lev == "none"
                                     else float(pf_lev.rstrip("×"))))
     UI.md(R.portfolio(res or {}, shown_win, plan, capital=pf_cap_usd,
-                      vol_target=float(pf_vol.rstrip("%"))))
+                      vol_target=(None if pf_vol == "none"
+                                  else float(pf_vol.rstrip("%")))))
 
 
 # ----------------------------------------------------------------- Curve
