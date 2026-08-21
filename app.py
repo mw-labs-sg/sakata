@@ -445,8 +445,11 @@ t = st.tabs([x.upper() for x in TABS])
 # ----------------------------------------------------------------- Board
 with t[0]:
     source("Yahoo · daily closes", *PRICE_CACHES, key="board")
-    hz = st.radio("Horizon", R.HZ, horizontal=True, key="board_hz",
-                  label_visibility="collapsed")
+    bc = st.columns(5)
+    hz = bc[0].selectbox("Horizon", R.HZ, key="board_hz",
+                         help="Which return column the board is read on. Every"
+                              " other column is unchanged by it — only the"
+                              " move and the ranking follow the horizon.")
     daily = prices("1d", "10y")
     if not daily:
         st.error("No daily prices — Yahoo returned nothing.")
@@ -509,13 +512,15 @@ with t[4]:
     if not codes:
         st.error("No technical grid — not enough price history.")
     else:
-        cc = st.columns([3, 5])
-        code = cc[0].selectbox("Instrument", codes, key="tech_code",
+        tc = st.columns(5)
+        code = tc[0].selectbox("Instrument", codes, key="tech_code",
                                format_func=lambda c: f"{c}  {U.NAME[c]}",
-                               label_visibility="collapsed")
+                               help="Which contract the grid is drawn for.")
         avail = [h for h in grid["order"] if h in grid["grid"][code]]
-        hzt = cc[1].radio("Horizon", avail, horizontal=True, key="tech_hz",
-                          label_visibility="collapsed")
+        hzt = tc[1].selectbox("Horizon", avail, key="tech_hz",
+                              help="Bar size the indicators are computed on."
+                                   " A horizon is only listed when this"
+                                   " instrument has the history to fill it.")
         UI.md(R.technical(grid, code, hzt, U.DEC[code]))
 
 # --------------------------------------------------------------- Spreads
@@ -723,8 +728,12 @@ with t[7]:
 # ------------------------------------------------------------- Knowledge
 with t[8]:
     source("Hand-maintained in sk_knowledge.py · no fetch")
-    grp = st.radio("Group", ["All", "Financials", "Commodities"],
-                   horizontal=True, key="kn_group", label_visibility="collapsed")
+    kc = st.columns(5)
+    grp = kc[0].selectbox("Group", ["All", "Financials", "Commodities"],
+                          key="kn_group",
+                          help="Which half of the board to read about."
+                               " Contract specifications above are always the"
+                               " full nineteen.")
     # Priced off the same cached daily closes the Board reads, so the
     # notionals on this tab and the prices on that one cannot disagree.
     daily_kn = prices("1d", "10y")
