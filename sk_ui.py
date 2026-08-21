@@ -262,6 +262,11 @@ pre, pre *, code {{ color: {t.get('ink')} !important; }}
    goes. .warn is the same colour by intent: an elevated percentile and a
    negative number are both "look here", not "you lost money". */
 .warn, td.neg, .neg {{ color: {t.get('amber')} !important; }}
+/* Group rule inside a wide table. Margins runs twelve columns in three
+   blocks; a hairline at each block edge does what a gap cannot, since a
+   table cannot be given one without breaking the row borders. Lighter than
+   the row hair on purpose — it separates, it does not underline. */
+th.sep, td.sep {{ border-left: 1px solid {t.get('line')}; }}
 /* Charts keep their own up/down tokens — a candle body is a mark, not a
    number — so this deliberately does not reach inside svg. */
 svg .neg {{ color: inherit !important; }}

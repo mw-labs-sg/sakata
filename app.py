@@ -493,10 +493,11 @@ with t[3]:
     source("AMP margins + CME margin file · Yahoo OHLC for vol", margin_data, key="margins")
     mc = st.columns(5)
     msort = mc[0].selectbox("Sort", list(R.MARGIN_SORTS), key="mg_sort",
-                            help="Which column the table ranks on. Margin over"
-                                 " vol and days of ATR are the two that say"
-                                 " whether a contract is expensive to hold"
-                                 " relative to how much it actually moves.")
+                            help="Which column the table ranks on. Leverage"
+                                 " (notional ÷ maintenance) and days of ATR"
+                                 " are the two that say whether a contract is"
+                                 " expensive to hold relative to how much it"
+                                 " actually moves.")
     UI.md(R.margins(margin_data(), msort))
 
 # ------------------------------------------------------------- Technical

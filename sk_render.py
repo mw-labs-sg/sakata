@@ -947,35 +947,33 @@ def curve(d: dict, code: str) -> str:
 
 # ---------------------------------------------------------------- Margins
 MARGIN_SORTS = {
-    "RV %ile": ("volPct", True),
-    "RV z": ("volZ", True),
+    "HV %ile": ("volPct", True),
     "ATR %ile": ("atrPct", True),
-    "ATR z": ("atrZ", True),
-    "Marg/Vol": ("margVol", False),
+    "Leverage": ("lev", True),
     "Days ATR": ("daysATR", False),
-    "RV 20d": ("annVol", True),
+    "HV 20d": ("annVol", True),
     "ATR $": ("atr", True),
-    "Margin %": ("marginPct", True),
     "Notional": ("notional", True),
+    "Maint $": ("maint", True),
 }
 
-# Two lines per header. Fifteen columns of one-line labels forces the table
-# wider than the page; stacking the qualifier under the measure buys the width
-# back without abbreviating anything into guesswork.
+# Two lines per header, and a hairline before each new block. Twelve columns
+# in three groups — what it costs, what that costs against risk, and the risk
+# itself — read as three tables the eye can take one at a time; the same
+# twelve as an unbroken run read as a wall.
 _H = [("", "Instrument", "l"), ("", "Last", ""),
       ("Notional", "$", ""), ("Maint", "$", ""),
-      ("Marg", "%", ""), ("Marg", "/Vol", ""), ("Days", "ATR", ""),
-      ("RV", "20d", ""), ("RV", "100d", ""), ("RV", "%ile", ""),
-      ("RV", "z", ""),
-      ("ATR $", "20d", ""), ("ATR $", "100d", ""), ("ATR", "%ile", ""),
-      ("ATR", "z", "")]
+      ("", "Lev", "sep"), ("Days", "ATR", ""),
+      ("HV", "20d", "sep"), ("HV", "100d", ""),
+      ("ATR $", "20d", ""), ("ATR $", "100d", ""),
+      ("HV", "%ile", "sep"), ("ATR", "%ile", "")]
 
 
 def _head() -> str:
     """Two lines per header cell, both in the reading ink.
 
     The qualifier was set at 9px on 0.65 opacity and read as damage rather
-    than as hierarchy — at that size the eye cannot resolve whether RV/20d is
+    than as hierarchy — at that size the eye cannot resolve whether HV/20d is
     two words or one smudged one.
     """
     t = _tok()
@@ -990,41 +988,47 @@ def _head() -> str:
     return out
 
 
-def margins(d: dict, sort: str = "RV %ile") -> str:
+def margins(d: dict, sort: str = "HV %ile") -> str:
     """Financials above, Commodities below.
 
-    Stacked rather than side by side: this table is fifteen columns wide, and
+    Stacked rather than side by side: this table is twelve columns wide, and
     two of them across a laptop would wrap every number. The Board can sit
     side by side because it carries six narrow columns; this one cannot.
 
     Column order reads as one sentence: what the contract costs (last,
-    notional, maintenance), what that costs relative to risk (margin %,
-    margin over vol, days of ATR), and then the risk itself (RV, ATR). The
-    earlier arrangement led with vol and buried the dollar figures on the far
-    right, which meant the two numbers a position is actually sized from were
-    the last things read.
+    notional, maintenance), what that costs against risk (leverage, days of
+    ATR), and then the risk itself (HV, ATR). Margin % and margin-over-vol are
+    gone: leverage is the same fact as margin % inverted and in the unit the
+    decision is actually made in, and margin-over-vol restated it against
+    annualised vol while days-of-ATR already says it against the move the
+    contract makes in a day. The z-scores are gone with them — the percentile
+    ranks the same series against the same year and needs no explaining.
     """
     t = _tok()
-    key, desc = MARGIN_SORTS.get(sort, MARGIN_SORTS["RV %ile"])
+    key, desc = MARGIN_SORTS.get(sort, MARGIN_SORTS["HV %ile"])
     flag = f'<div class="flag">{esc(d["warn"])}</div>' if d.get("warn") else ""
 
-    def pcell(p):
+    def pcell(p, sep=""):
         if p is None:
-            return '<td class="faint">—</td>'
+            return f'<td class="faint {sep}">—</td>'
         cls = "warn" if p >= 80 else "pos" if p <= 20 else "dim"
-        return f'<td class="{cls}">{p:.0f}</td>'
+        return f'<td class="{cls} {sep}">{p:.0f}</td>'
 
-    def zcell(z):
-        # ±2σ is the threshold, not ±1. On log-vol over a year a reading
-        # beyond one sigma happens roughly a third of the time and colouring
-        # it would light most of the table; beyond two is genuinely unusual.
-        if z is None:
-            return '<td class="faint">—</td>'
-        cls = "warn" if z >= 2 else "pos" if z <= -2 else "dim"
-        return f'<td class="{cls}">{z:+.1f}</td>'
+    def levcell(v):
+        # Notional over maintenance, carrying its unit. "29.8x" is a sentence;
+        # 3.35 in a column headed Marg % is a number you have to invert in
+        # your head before it means anything.
+        if v is None:
+            return '<td class="faint sep">—</td>'
+        return f'<td class="sep" style="color:{t.get("ink")}">{v:,.1f}x</td>'
 
     def panel(group):
-        rows = [r for r in d["rows"] if r.get("group") == group]
+        # Leverage is computed here rather than in sk_margins: it is notional
+        # over maintenance, both already on the row, and a copy keeps the
+        # cached payload the data layer handed us untouched.
+        rows = [dict(r, lev=(r["notional"] / r["maint"])
+                     if (r.get("notional") and r.get("maint")) else None)
+                for r in d["rows"] if r.get("group") == group]
         if not rows:
             return ""
         rows.sort(key=lambda r: (r.get(key) is None,
@@ -1032,7 +1036,7 @@ def margins(d: dict, sort: str = "RV %ile") -> str:
         body = ""
         for r in rows:
             vp = r.get("volPct")
-            # The wash keys off RV, not ATR. They agree most of the time, and
+            # The wash keys off HV, not ATR. They agree most of the time, and
             # tinting on both would give two rows the same colour for
             # different reasons — which is worse than tinting on one.
             tint = ""
@@ -1055,12 +1059,16 @@ def margins(d: dict, sort: str = "RV %ile") -> str:
                      # statistics derived from it.
                      + f'<td style="color:{t.get("ink")}">'
                        f'{num(r.get("maint"), 0) or "—"}</td>'
-                     + cell(r.get("marginPct"), 2, "dim")
-                     + cell(r.get("margVol"), 2) + cell(r.get("daysATR"), 1, "dim")
-                     + cell(r.get("annVol"), 1) + cell(r.get("vol100"), 1, "dim")
-                     + pcell(vp) + zcell(r.get("volZ"))
+                     + levcell(r.get("lev")) + cell(r.get("daysATR"), 1)
+                     + cell(r.get("annVol"), 1, "sep")
+                     + cell(r.get("vol100"), 1, "dim")
                      + cell(r.get("atr"), 0) + cell(r.get("atr100"), 0, "dim")
-                     + pcell(r.get("atrPct")) + zcell(r.get("atrZ")) + "</tr>")
+                     # The two percentiles adjacent: one asks how wide the
+                     # closes have been, the other how wide the days have
+                     # been, and the pair only says something when they
+                     # disagree — which you cannot see with four columns
+                     # of levels sitting between them.
+                     + pcell(vp, "sep") + pcell(r.get("atrPct")) + "</tr>")
         return eyebrow(group) + table(_head(), body)
 
     return flag + panel("Financials") + panel("Commodities")
