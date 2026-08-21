@@ -951,7 +951,6 @@ MARGIN_SORTS = {
     "RV z": ("volZ", True),
     "ATR %ile": ("atrPct", True),
     "ATR z": ("atrZ", True),
-    "RSI": ("rsi", True),
     "Marg/Vol": ("margVol", False),
     "Days ATR": ("daysATR", False),
     "RV 20d": ("annVol", True),
@@ -960,17 +959,16 @@ MARGIN_SORTS = {
     "Notional": ("notional", True),
 }
 
-# Two lines per header. Sixteen columns of one-line labels forces the table
+# Two lines per header. Fifteen columns of one-line labels forces the table
 # wider than the page; stacking the qualifier under the measure buys the width
 # back without abbreviating anything into guesswork.
 _H = [("", "Instrument", "l"), ("", "Last", ""),
+      ("Notional", "$", ""), ("Maint", "$", ""),
+      ("Marg", "%", ""), ("Marg", "/Vol", ""), ("Days", "ATR", ""),
       ("RV", "20d", ""), ("RV", "100d", ""), ("RV", "%ile", ""),
       ("RV", "z", ""),
       ("ATR $", "20d", ""), ("ATR $", "100d", ""), ("ATR", "%ile", ""),
-      ("ATR", "z", ""),
-      ("RSI", "14d", ""),
-      ("Marg", "/Vol", ""), ("Days", "ATR", ""),
-      ("Marg", "%", ""), ("Maint", "$", ""), ("Notional", "$", "")]
+      ("ATR", "z", "")]
 
 
 def _head() -> str:
@@ -995,13 +993,16 @@ def _head() -> str:
 def margins(d: dict, sort: str = "RV %ile") -> str:
     """Financials above, Commodities below.
 
-    Stacked rather than side by side: this table is fourteen columns wide, and
+    Stacked rather than side by side: this table is fifteen columns wide, and
     two of them across a laptop would wrap every number. The Board can sit
     side by side because it carries six narrow columns; this one cannot.
 
-    Column order is live-first. Everything through RSI moves daily; margin and
-    notional are reference, kept so the arithmetic is checkable but no longer
-    occupying the position the eye reaches first.
+    Column order reads as one sentence: what the contract costs (last,
+    notional, maintenance), what that costs relative to risk (margin %,
+    margin over vol, days of ATR), and then the risk itself (RV, ATR). The
+    earlier arrangement led with vol and buried the dollar figures on the far
+    right, which meant the two numbers a position is actually sized from were
+    the last things read.
     """
     t = _tok()
     key, desc = MARGIN_SORTS.get(sort, MARGIN_SORTS["RV %ile"])
@@ -1012,16 +1013,6 @@ def margins(d: dict, sort: str = "RV %ile") -> str:
             return '<td class="faint">—</td>'
         cls = "warn" if p >= 80 else "pos" if p <= 20 else "dim"
         return f'<td class="{cls}">{p:.0f}</td>'
-
-    def rsicell(v):
-        # Wilder's own thresholds. Coloured opposite to the vol columns on
-        # purpose: a high RV percentile is a risk warning, a high RSI is a
-        # directional reading, and using the same colour for both would
-        # invite reading them as the same kind of statement.
-        if v is None:
-            return '<td class="faint">—</td>'
-        cls = "warn" if v >= 70 else "pos" if v <= 30 else "dim"
-        return f'<td class="{cls}">{v:.0f}</td>'
 
     def zcell(z):
         # ±2σ is the threshold, not ±1. On log-vol over a year a reading
@@ -1057,15 +1048,19 @@ def margins(d: dict, sort: str = "RV %ile") -> str:
                      # faintest thing on the row.
                      f'<td style="color:{t.get("ink")}">'
                      f'{num(r.get("last"), r.get("dec", 2)) or "—"}</td>'
+                     + cell(r.get("notional"), 0, "dim")
+                     # Maintenance in the reading ink alongside last: it is the
+                     # cash the contract actually ties up, and dimming it put
+                     # the one number a size decision starts from behind the
+                     # statistics derived from it.
+                     + f'<td style="color:{t.get("ink")}">'
+                       f'{num(r.get("maint"), 0) or "—"}</td>'
+                     + cell(r.get("marginPct"), 2, "dim")
+                     + cell(r.get("margVol"), 2) + cell(r.get("daysATR"), 1, "dim")
                      + cell(r.get("annVol"), 1) + cell(r.get("vol100"), 1, "dim")
                      + pcell(vp) + zcell(r.get("volZ"))
                      + cell(r.get("atr"), 0) + cell(r.get("atr100"), 0, "dim")
-                     + pcell(r.get("atrPct")) + zcell(r.get("atrZ"))
-                     + rsicell(r.get("rsi"))
-                     + cell(r.get("margVol"), 2) + cell(r.get("daysATR"), 1, "dim")
-                     + cell(r.get("marginPct"), 2, "dim")
-                     + cell(r.get("maint"), 0, "dim")
-                     + cell(r.get("notional"), 0, "dim") + "</tr>")
+                     + pcell(r.get("atrPct")) + zcell(r.get("atrZ")) + "</tr>")
         return eyebrow(group) + table(_head(), body)
 
     return flag + panel("Financials") + panel("Commodities")
