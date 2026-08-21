@@ -540,7 +540,7 @@ with t[6]:
                              help="Most any one instrument may carry. The cap "
                                   "and the leg count are the only defence "
                                   "against a search fitting one window.")
-    pf_risk = r1[3].selectbox("Risk cap", ["none", "60%", "50%", "40%", "30%"],
+    pf_risk = r1[3].selectbox("Risk cap", ["None", "60%", "50%", "40%", "30%"],
                               key="pf_risk",
                               help="Most of the portfolio's VARIANCE any one"
                                    " leg may carry. The weight cap limits the"
@@ -567,14 +567,14 @@ with t[6]:
              " with it; the ratios do not. Below about $500k these baskets"
              " stop being fillable — watch the Miss column."))
     pf_vol = r2[2].selectbox("Vol target",
-                             ["5%", "10%", "15%", "20%", "30%", "none"],
+                             ["5%", "10%", "15%", "20%", "30%", "None"],
                              index=4, key="pf_vol",
                              help="Annualised volatility to hold the basket"
                                   " at; leverage is this over the portfolio's"
                                   " own volatility, so a noisy basket is held"
-                                  " below 1×. Pick none to size on leverage"
+                                  " below 1×. Pick None to size on leverage"
                                   " instead and hold the cap.")
-    pf_lev = r2[3].selectbox("Max leverage", ["1×", "2×", "3×", "5×", "none"],
+    pf_lev = r2[3].selectbox("Max leverage", ["1×", "2×", "3×", "5×", "None"],
                              index=0, key="pf_lev",
                              help="Ceiling on gross notional over capital. A"
                                   " quiet basket needs leverage to reach a vol"
@@ -589,10 +589,10 @@ with t[6]:
 
     r3 = st.columns(5)
     pf_size = r3[0].selectbox("Contracts",
-                              ["Standard + small", "Standard only"],
+                              ["Standard + Small", "Standard Only"],
                               key="pf_size",
                               help="Whether micros and minis may be used to"
-                                   " close the gap on a leg. Standard only is"
+                                   " close the gap on a leg. Standard Only is"
                                    " fewer tickets and cheaper commission, at"
                                    " the price of a coarser fill — watch the"
                                    " Miss column when you switch.")
@@ -610,7 +610,7 @@ with t[6]:
             bar.progress(min(done / max(total, 1), 1.0),
                          text=f"searching weights… {done}/{total}{got}")
 
-        rc = 0.0 if pf_risk == "none" else int(pf_risk.rstrip("%")) / 100
+        rc = 0.0 if pf_risk == "None" else int(pf_risk.rstrip("%")) / 100
         fresh_res = portfolio_weights(
             pf_win, pf_obj, pf_legs, int(pf_cap.rstrip("%")), pf_side,
             risk_cap=rc, progress=_tick)
@@ -648,14 +648,14 @@ with t[6]:
         closes_pf, fine_pf = portfolio_frames(shown_win)
         if closes_pf is not None:
             plan = PF.plan(closes_pf, fine_pf, res, pf_cap_usd,
-                           None if pf_vol == "none"
+                           None if pf_vol == "None"
                            else float(pf_vol.rstrip("%")),
                            last_pf, U.MULT, U.MICRO,
-                           max_lev=(None if pf_lev == "none"
+                           max_lev=(None if pf_lev == "None"
                                     else float(pf_lev.rstrip("×"))),
                            fees=U.FEES, fee_tier=U.FEE_TIERS[pf_fee],
                            margins=_maint(),
-                           smalls=(pf_size == "Standard + small"))
+                           smalls=(pf_size == "Standard + Small"))
             # Requoted at the leverage on screen, so the held-forward row is
             # in the same units as the three above it. Cheap — one scorer over
             # the tail of the window — and it has to happen here rather than
@@ -669,7 +669,7 @@ with t[6]:
     # answering a question about a different portfolio.
     same = st.session_state.get("pf_for") == pf_args
     UI.md(R.portfolio(res or {}, shown_win, plan, capital=pf_cap_usd,
-                      vol_target=(None if pf_vol == "none"
+                      vol_target=(None if pf_vol == "None"
                                   else float(pf_vol.rstrip("%"))),
                       hold=hold if same else None,
                       turn=st.session_state.get("pf_turn") if same else None))

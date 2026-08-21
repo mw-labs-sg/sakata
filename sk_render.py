@@ -431,8 +431,7 @@ def _outrights(d: dict, per: str, t: dict, sort: str = DEFAULT_SORT) -> str:
 # ------------------------------------------------------------- Portfolio
 def portfolio(res: dict, per: str, pl: dict = None,
               capital: float = 1_000_000, vol_target=15.0,
-              hold: dict = None, turn: dict = None,
-              fresh: str = "") -> str:
+              hold: dict = None, turn: dict = None) -> str:
     """Weights, the size they imply, and what that size actually fills.
 
     All the arithmetic arrives done: sk_portfolio.plan holds the weights,
@@ -586,8 +585,17 @@ def portfolio(res: dict, per: str, pl: dict = None,
     # stopped after the conclusion. Its caption is gone with it — three rows
     # of seven numbers under a heading that names the leverage do not need a
     # paragraph explaining that they are numbers.
-    return (eyebrow(f"What this portfolio scored — held at "
-                    f"{pl.get('lev', 0):.2f}×")
+    # Two facts outlived the chip row they used to live in, and both belong on
+    # this line rather than in a block of their own: the size the table is
+    # quoted at, and whether it is still the same basket as last time.
+    held = f"held at {pl.get('lev', 0):.2f}×"
+    if pl.get("capped"):
+        held += f", capped from {pl.get('wantLev', 0):.2f}×"
+    return (eyebrow(f"What this portfolio scored — {held}",
+                    (f'<span style="margin-left:auto;color:{mute};'
+                     f'font-size:11.5px;font-weight:500">{turn["kept"]} of '
+                     f'{turn["of"]} legs held · {turn["turnover"]:.0f}% '
+                     f'turnover since the last run</span>') if turn else "")
             + table('<th class="l"></th><th>ER (Adj)</th><th>ROA</th>'
                     '<th>Sharpe</th><th>Win%</th><th>Vol%</th><th>Tot%</th>'
                     '<th>MDD%</th>',
@@ -615,27 +623,6 @@ def portfolio(res: dict, per: str, pl: dict = None,
                     '<th class="l">Side</th><th>Weight</th><th class="l"></th>'
                     '<th>Risk%</th><th>Notional</th><th class="l">Fill</th>'
                     '<th>Miss</th><th>Fees</th><th>Margin</th>', rows)
-            + chips([f'{res["legs"]} legs', f'{res["bars"]} bars',
-                     f'drawdown on {res["fineBars"]:,} marks',
-                     f'net {res["net"]:+.0f}% of gross',
-                     (f'{lev:.2f}× leverage, capped from '
-                      f'{pl.get("wantLev", lev):.2f}×' if pl.get("capped")
-                      else f'{lev:.2f}× leverage')]
-                    + ([f'{len(pl["undersized"])} of {res["legs"]} legs under '
-                        f'one contract at ${capital:,.0f}']
-                       if pl.get("undersized") else [])
-                    + ([f'{turn["kept"]} of {turn["of"]} legs held · '
-                        f'{turn["turnover"]:.0f}% turnover since the last run']
-                       if turn else [])
-                    + ([f'margin ${pl["margin"]:,.0f} · '
-                        f'{pl.get("marginPct", 0):.0f}% of capital']
-                       if pl.get("margin") else [])
-                    + ([f'fees ${pl["fees"]:,.0f} · {pl.get("feeBps", 0):.1f} '
-                        f'bp of capital'
-                        + (f' · {pl["feeShare"]:.1f}% of the window'
-                           if pl.get("feeShare") else '')]
-                       if pl.get("fees") else [])
-                    + ([fresh] if fresh else []))
             + '<div class="plot" style="margin-top:10px">'
             + f'<div class="clegend">{legend}</div>'
             + CH.line_chart(curve["t"], series, None, 1100, 300, 1)
