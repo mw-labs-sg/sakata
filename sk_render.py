@@ -455,6 +455,7 @@ def _sizing_note(pl: dict, vol_target, res: dict) -> str:
 
 def portfolio(res: dict, per: str, pl: dict = None,
               capital: float = 1_000_000, vol_target=15.0,
+              hold: dict = None, turn: dict = None,
               fresh: str = "") -> str:
     """Weights, the size they imply, and what that size actually fills.
 
@@ -620,7 +621,16 @@ def portfolio(res: dict, per: str, pl: dict = None,
                     # true. The ideal above it is the argument for it.
                     + statrow("Executable", filled, True, "whole contracts",
                               wash=f"background:{pos}1f;")
-                    + statrow("Equal weight", eq, False, "same legs"))
+                    + statrow("Equal weight", eq, False, "same legs")
+                    # The row that says how fast a fit like this decays: the
+                    # weights never saw these bars. Amber when the tail is too
+                    # short to carry an opinion.
+                    + statrow("Held forward",
+                              (hold or {}).get("stats"), False,
+                              f'fit on {hold["trainBars"]} bars, held through '
+                              f'{hold["testBars"]}' if hold else "",
+                              wash=(f"background:{amber}14;"
+                                    if (hold or {}).get("thin") else "")))
             + eyebrow(f"Portfolio Weights — {esc(res['objective'])}, "
                       f"{esc(per)}",
                       f'<span style="margin-left:auto;color:{mute};'
@@ -650,6 +660,9 @@ def portfolio(res: dict, per: str, pl: dict = None,
                     + ([f'{len(pl["undersized"])} of {res["legs"]} legs under '
                         f'one contract at ${capital:,.0f}']
                        if pl.get("undersized") else [])
+                    + ([f'{turn["kept"]} of {turn["of"]} legs held · '
+                        f'{turn["turnover"]:.0f}% turnover since the last run']
+                       if turn else [])
                     + ([f'margin ${pl["margin"]:,.0f} · '
                         f'{pl.get("marginPct", 0):.0f}% of capital']
                        if pl.get("margin") else [])

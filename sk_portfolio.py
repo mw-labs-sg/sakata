@@ -625,6 +625,71 @@ def _fill(target: float, unit: float, small: float, small_name: str,
             "err": round((got / want - 1) * 100, 1) if want else None}
 
 
+HOLD_FRAC = 0.3         # of the window kept back from the search
+HOLD_MIN_TEST = 8       # bars below which the held-forward row means nothing
+
+
+def held_forward(closes, fine, objective: str = "ROA", frac: float = HOLD_FRAC,
+                 progress=None, **kw) -> dict:
+    """Fit on the front of the window, then hold those weights through the end.
+
+    Not a forecast and not a backtest. The tab is used live — weights are
+    fitted on what just happened and held for the hours after — so the honest
+    question is not "would this have worked in 2019" but "how fast does a fit
+    like this decay". Fitting on the first 70% and holding fixed through the
+    last 30% answers exactly that, in the same units the top row is quoted in.
+
+    A second search, so it costs what the first one did. There is no shortcut:
+    scoring the full-window weights on the tail would be scoring them on data
+    they were fitted to, which is the mistake this exists to avoid.
+    """
+    if closes is None or len(closes) < 20:
+        return {}
+    cut = int(len(closes) * (1 - frac))
+    if cut < 12 or len(closes) - cut < HOLD_MIN_TEST:
+        return {}
+    train, test = closes.iloc[:cut], closes.iloc[cut - 1:]
+    tf_train = tf_test = None
+    if fine is not None and len(fine):
+        tf_train = fine[fine.index <= train.index[-1]]
+        tf_test = fine[fine.index >= test.index[0]]
+        if len(tf_train) < 5:
+            tf_train = None
+        if len(tf_test) < 5:
+            tf_test = None
+
+    res = optimise(train, tf_train, objective, progress=progress, **kw)
+    if not res or not res.get("w"):
+        return {}
+    sc = _Scorer(test, tf_test)
+    w = np.array(res["w"])
+    if len(w) != len(sc.syms):
+        return {}
+    return {"stats": sc.stats(w), "testBars": sc.bars, "trainBars": len(train),
+            "thin": sc.bars < 20,
+            "weights": [{"code": x["code"], "w": x["w"]}
+                        for x in res["weights"]]}
+
+
+def turnover(now: list, before: list) -> dict:
+    """How much of the basket changed since the last run.
+
+    For a portfolio tracked through a week this is the question that matters
+    more than any single window's ROA: a basket that is unrecognisable every
+    morning is a window too short for its objective, and that is worth
+    knowing whatever the score says.
+    """
+    if not now or not before:
+        return {}
+    a = {x["code"]: x["w"] for x in now}
+    b = {x["code"]: x["w"] for x in before}
+    kept = len(set(a) & set(b))
+    # Half the sum of absolute weight changes: the standard convention, so a
+    # complete replacement reads 100% rather than 200%.
+    moved = sum(abs(a.get(k, 0) - b.get(k, 0)) for k in set(a) | set(b)) / 2
+    return {"kept": kept, "of": len(a), "turnover": round(moved, 1)}
+
+
 def plan(closes, fine, res: dict, capital: float, vol_target: float,
          last: dict, mult: dict, micro: dict, max_lev=None,
          fees: dict = None, fee_tier: float = 1.0,

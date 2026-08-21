@@ -549,12 +549,28 @@ with t[6]:
             bar.progress(min(done / max(total, 1), 1.0),
                          text=f"searching weights… {done}/{total}{got}")
 
-        st.session_state["pf_result"] = portfolio_weights(
+        rc = 0.0 if pf_risk == "none" else int(pf_risk.rstrip("%")) / 100
+        fresh_res = portfolio_weights(
             pf_win, pf_obj, pf_legs, int(pf_cap.rstrip("%")), pf_short,
-            risk_cap=(0.0 if pf_risk == "none"
-                      else int(pf_risk.rstrip("%")) / 100),
-            progress=_tick)
+            risk_cap=rc, progress=_tick)
+        # Turnover against the PREVIOUS answer, captured before it is
+        # overwritten. For a book tracked through a week, "is it still saying
+        # the same thing" is a more useful question than any single ROA.
+        st.session_state["pf_turn"] = PF.turnover(
+            fresh_res.get("weights") if fresh_res else None,
+            (st.session_state.get("pf_result") or {}).get("weights"))
+        st.session_state["pf_result"] = fresh_res
         st.session_state["pf_for"] = pf_args
+
+        bar.progress(0.0, text="holding the fit forward…")
+        closes_h, fine_h = portfolio_frames(pf_win)
+        st.session_state["pf_hold"] = PF.held_forward(
+            closes_h, fine_h, pf_obj, max_legs=pf_legs,
+            max_weight=int(pf_cap.rstrip("%")) / 100, allow_short=pf_short,
+            risk_cap=rc,
+            progress=lambda d, t, b: bar.progress(
+                min(d / max(t, 1), 1.0),
+                text=f"holding the fit forward… {d}/{t}"))
         bar.empty()
     res = st.session_state.get("pf_result")
     if res and st.session_state.get("pf_for") != pf_args:
@@ -580,7 +596,9 @@ with t[6]:
                            margins=_maint())
     UI.md(R.portfolio(res or {}, shown_win, plan, capital=pf_cap_usd,
                       vol_target=(None if pf_vol == "none"
-                                  else float(pf_vol.rstrip("%")))))
+                                  else float(pf_vol.rstrip("%"))),
+                      hold=st.session_state.get("pf_hold"),
+                      turn=st.session_state.get("pf_turn")))
 
 
 # ----------------------------------------------------------------- Curve
