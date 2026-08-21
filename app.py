@@ -166,6 +166,21 @@ PF_WINDOWS = ["Intraday", "WTD", "MTD", "QTD", "YTD", "30D", "60D",
 CAPITAL_MIN, CAPITAL_MAX = 1_000, 1_000_000_000
 
 
+CAL_SPANS = {"2 weeks": 14, "4 weeks": 28, "8 weeks": 56, "Quarter": 92,
+             "Half year": 183, "Year": 365}
+
+
+def _cal_span() -> None:
+    """Push the chosen preset into the day box.
+
+    Streamlit honours a widget's `value` only until that widget has state of
+    its own, so without this the dropdown would move and the number beside it
+    would sit there holding the previous answer. A callback is the one place
+    another widget's state may still be written.
+    """
+    st.session_state["cal_days"] = CAL_SPANS[st.session_state["cal_span"]]
+
+
 def _maint() -> dict:
     """{code: maintenance margin} off the Margins tab's own cached pull.
 
@@ -451,17 +466,34 @@ with t[2]:
     # the tab is already as current as it can be. No symbol filter either —
     # the Symbol column is scannable and a dropdown to hide rows on a
     # two-week view removed more than it added.
-    span = st.radio("Horizon", ["2 weeks", "4 weeks", "8 weeks", "Quarter"],
-                    horizontal=True, index=0, key="cal_span",
-                    label_visibility="collapsed")
-    days = {"2 weeks": 14, "4 weeks": 28, "8 weeks": 56, "Quarter": 92}[span]
-    UI.md(R.calendar(CAL.build(days), days, CAL.exhausted()))
+    cc = st.columns(5)
+    cc[0].selectbox("Horizon", list(CAL_SPANS), key="cal_span",
+                    on_change=_cal_span,
+                    help="How far ahead to list. Rolls and expiries are"
+                         " evaluated from calendar rules rather than fetched,"
+                         " so a longer horizon costs nothing to compute.")
+    # Seeded once, never passed as `value` again. A widget's identity includes
+    # its construction arguments, so recomputing `value` on every run left the
+    # box holding one number and this variable holding another — the box said
+    # 120 days while the table below it listed a fortnight.
+    st.session_state.setdefault("cal_days", CAL_SPANS["2 weeks"])
+    days = cc[1].number_input("Days", min_value=1, max_value=400,
+                              step=1, key="cal_days",
+                              help="The same horizon in days, for when none of"
+                                   " the presets is the window you want."
+                                   " Editing it overrides the dropdown until"
+                                   " the dropdown moves again.")
+    UI.md(R.calendar(CAL.build(int(days)), int(days), CAL.exhausted()))
 
 # --------------------------------------------------------------- Margins
 with t[3]:
     source("AMP margins + CME margin file · Yahoo OHLC for vol", margin_data, key="margins")
-    msort = st.radio("Sort", list(R.MARGIN_SORTS), horizontal=True,
-                     key="mg_sort", label_visibility="collapsed")
+    mc = st.columns(5)
+    msort = mc[0].selectbox("Sort", list(R.MARGIN_SORTS), key="mg_sort",
+                            help="Which column the table ranks on. Margin over"
+                                 " vol and days of ATR are the two that say"
+                                 " whether a contract is expensive to hold"
+                                 " relative to how much it actually moves.")
     UI.md(R.margins(margin_data(), msort))
 
 # ------------------------------------------------------------- Technical
