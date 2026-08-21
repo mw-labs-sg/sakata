@@ -116,6 +116,25 @@ def _by_bar_closes() -> dict:
 PF_WINDOWS = ["Intraday", "WTD", "MTD", "QTD", "YTD", "30D", "60D",
               "120D", "240D"]
 
+CAPITAL_MIN, CAPITAL_MAX = 1_000, 1_000_000_000
+
+
+def _dollars(text: str) -> int:
+    """Digits out of whatever was typed, clamped to something sizeable.
+
+    A text box rather than st.number_input because number_input cannot group
+    thousands — its format string is printf, which has no separator flag — and
+    1000000 is a number you have to count digits on.
+    """
+    digits = "".join(c for c in str(text) if c.isdigit())
+    return max(CAPITAL_MIN, min(int(digits or CAPITAL_MIN), CAPITAL_MAX))
+
+
+def _capital() -> None:
+    """Rewrite the box with separators, on change. Runs as a callback, which
+    is the only point at which a widget's own state may still be set."""
+    st.session_state["pf_capital_txt"] = f"{_dollars(st.session_state.get('pf_capital_txt', '')):,}"
+
 
 @st.cache_data(ttl=TTL_FAST, show_spinner=False)
 def portfolio_frames(window: str, v: str = CACHE_V):
@@ -466,15 +485,12 @@ with t[6]:
     # arguments: the weights are a shape, and these two only decide how large
     # it is drawn. They take effect immediately, without a re-run.
     sc2 = st.columns([3, 2, 2, 2, 3])
-    pf_cap_usd = sc2[0].number_input("Capital", min_value=1_000,
-                                     max_value=1_000_000_000,
-                                     value=1_000_000,
-                                     step=100_000, key="pf_capital",
-                                     help="What the weights are sized against."
-                                          " Notional and contracts scale with"
-                                          " it; the ratios do not. Below about"
-                                          " $500k these baskets stop being"
-                                          " fillable — watch the Miss column.")
+    pf_cap_usd = sc2[0].text_input(
+        "Capital", value="1,000,000", key="pf_capital_txt", on_change=_capital,
+        help="What the weights are sized against. Notional and contracts scale"
+             " with it; the ratios do not. Below about $500k these baskets"
+             " stop being fillable — watch the Miss column.")
+    pf_cap_usd = _dollars(pf_cap_usd)
     pf_vol = sc2[1].selectbox("Vol target",
                               ["5%", "10%", "15%", "20%", "30%", "none"],
                               index=4, key="pf_vol",
