@@ -665,10 +665,41 @@ def held_forward(closes, fine, objective: str = "ROA", frac: float = HOLD_FRAC,
     w = np.array(res["w"])
     if len(w) != len(sc.syms):
         return {}
-    return {"stats": sc.stats(w), "testBars": sc.bars, "trainBars": len(train),
+    # The weight vector travels with the result, not just its statistics: the
+    # row has to be requotable at whatever leverage is on screen, and that
+    # changes with capital and vol target long after this search has run.
+    return {"stats": sc.stats(w), "w": [float(x) for x in w],
+            "testBars": sc.bars, "trainBars": len(train),
             "thin": sc.bars < 20,
             "weights": [{"code": x["code"], "w": x["w"]}
                         for x in res["weights"]]}
+
+
+def hold_stats(closes, fine, w, lev: float = 1.0,
+               frac: float = HOLD_FRAC) -> dict:
+    """Re-score held-forward weights at the size actually held.
+
+    Held forward was the one row quoted at unit gross while the three above it
+    were quoted after leverage — in a table headed "held at 2.00x". The ratios
+    were right, being scale-free, but Vol%, Tot% and MDD% were all a factor of
+    two light, which is the half of the row a reader compares first.
+    """
+    if closes is None or not w or len(closes) < 20:
+        return {}
+    cut = int(len(closes) * (1 - frac))
+    if cut < 12 or len(closes) - cut < HOLD_MIN_TEST:
+        return {}
+    test = closes.iloc[cut - 1:]
+    tf = None
+    if fine is not None and len(fine):
+        tf = fine[fine.index >= test.index[0]]
+        if len(tf) < 5:
+            tf = None
+    sc = _Scorer(test, tf)
+    arr = np.array(w)
+    if len(arr) != len(sc.syms):
+        return {}
+    return sc.stats(arr * lev)
 
 
 def turnover(now: list, before: list) -> dict:

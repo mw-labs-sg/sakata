@@ -637,7 +637,7 @@ with t[6]:
                for c, df in prices("1d", "10y").items()
                if df is not None and len(df)}
     shown_win = st.session_state.get("pf_for", pf_args)[0]
-    plan = {}
+    plan, hold = {}, None
     if res:
         closes_pf, fine_pf = portfolio_frames(shown_win)
         if closes_pf is not None:
@@ -650,11 +650,23 @@ with t[6]:
                            fees=U.FEES, fee_tier=U.FEE_TIERS[pf_fee],
                            margins=_maint(),
                            smalls=(pf_size == "Standard + small"))
+            # Requoted at the leverage on screen, so the held-forward row is
+            # in the same units as the three above it. Cheap — one scorer over
+            # the tail of the window — and it has to happen here rather than
+            # in the search, because capital and vol target move afterwards.
+            hold = st.session_state.get("pf_hold")
+            if hold and hold.get("w"):
+                hold = dict(hold, stats=PF.hold_stats(
+                    closes_pf, fine_pf, hold["w"], plan.get("lev", 1.0)))
+    # Held forward and turnover belong to the run that produced them. Showing
+    # yesterday's holdout beside today's window would be the tab quietly
+    # answering a question about a different portfolio.
+    same = st.session_state.get("pf_for") == pf_args
     UI.md(R.portfolio(res or {}, shown_win, plan, capital=pf_cap_usd,
                       vol_target=(None if pf_vol == "none"
                                   else float(pf_vol.rstrip("%"))),
-                      hold=st.session_state.get("pf_hold"),
-                      turn=st.session_state.get("pf_turn")))
+                      hold=hold if same else None,
+                      turn=st.session_state.get("pf_turn") if same else None))
 
 
 # ----------------------------------------------------------------- Curve
