@@ -441,11 +441,11 @@ with t[5]:
 
 # ------------------------------------------------------------- Portfolio
 with t[6]:
-    # Optimise sits on the header line with Refresh: both are "go and do
+    # Optimize sits on the header line with Refresh: both are "go and do
     # something", and it was the only control on the tab that did not belong
     # with the settings it followed.
     go = source("Yahoo · 15m, 1H, 4H, 1D", *PRICE_CACHES, key="portfolio",
-                action="Optimise")
+                action="Optimize")
     pc = st.columns([3, 3, 2, 2, 2])
     pf_win = pc[0].selectbox("Time frame", PF_WINDOWS, key="pf_window")
     pf_obj = pc[1].selectbox("Objective", PF.OBJECTIVES, key="pf_obj",
@@ -518,7 +518,7 @@ with t[6]:
         bar.empty()
     res = st.session_state.get("pf_result")
     if res and st.session_state.get("pf_for") != pf_args:
-        st.caption("Controls changed since this ran — press Optimise again.")
+        st.caption("Controls changed since this ran — press Optimize again.")
     # Priced off the same cached daily closes as the Board and the contract
     # specs on Knowledge, so three tabs cannot disagree about what one
     # contract costs.

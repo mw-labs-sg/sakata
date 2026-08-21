@@ -465,7 +465,7 @@ def portfolio(res: dict, per: str, pl: dict = None,
     """
     if not res or not res.get("weights"):
         return ('<div class="skel">No portfolio yet — set the objective and '
-                "press Optimise.</div>")
+                "press Optimize.</div>")
     t = _tok()
     pl = pl or {}
     ink = t.get("ink", "#0d1418")
@@ -560,11 +560,11 @@ def portfolio(res: dict, per: str, pl: dict = None,
                  f'<td class="faint">{net_pc:+.0f}% of capital</td>'
                  f'<td class="faint">—</td></tr>')
 
-    def statrow(label, d, strong, note_=""):
+    def statrow(label, d, strong, note_="", wash=""):
         if not d:
             return ""
         cells = "".join(
-            f'<td style="color:{col or ink};'
+            f'<td style="{wash}color:{col or ink};'
             f'font-weight:{700 if strong else 600}">{v}</td>'
             for v, col in (
                 (num(d.get("erAdj"), 2), None), (num(d.get("roa"), 1), None),
@@ -576,16 +576,44 @@ def portfolio(res: dict, per: str, pl: dict = None,
                 (num(d.get("mdd"), 1), amber)))
         tail = (f'<span class="nm" style="color:{mute}"> {esc(note_)}</span>'
                 if note_ else "")
-        return f'<tr><td class="l">{esc(label)}{tail}</td>{cells}</tr>'
+        return (f'<tr><td class="l" style="{wash}">{esc(label)}{tail}</td>'
+                f'{cells}</tr>')
 
     curve, eqc = res["curve"], res["equalCurve"]
-    series = [{"k": "equal weight", "v": eqc["v"], "c": faint, "w": 1.4,
-               "dash": "4 3", "o": 0.9},
-              {"k": "optimised", "v": curve["v"], "c": ink, "w": 2.6}]
+    # Ink and faint at chart weight is grey against grey: the picture could
+    # not say which line was the answer. Teal is the basket, dashed grey is
+    # the benchmark, and the key says so.
+    series = [{"k": "equal weight, same legs", "v": eqc["v"], "c": faint,
+               "w": 1.4, "dash": "5 4", "o": 0.85},
+              {"k": "this portfolio", "v": curve["v"], "c": teal, "w": 2.6}]
+    legend = "".join(
+        f'<span class="key" style="display:inline-flex;align-items:center;'
+        f'gap:6px"><i style="display:inline-block;width:18px;height:0;'
+        f'border-top:{"2px dashed" if sr.get("dash") else "3px solid"} '
+        f'{sr["c"]}"></i><span style="color:{sr["c"]};font-weight:600">'
+        f'{esc(sr["k"])}</span></span>' for sr in reversed(series))
 
-    return (eyebrow(f"Portfolio Weights — {esc(res['objective'])}, {esc(per)}",
-                    f'<span style="margin-left:auto;color:{mute};'
-                    f'font-size:11.5px;font-weight:500">{esc(line)}</span>')
+    # The scored table goes FIRST. The weights are the argument and the score
+    # is the conclusion; a reader who stops after one table should have
+    # stopped after the conclusion. Its caption is gone with it — three rows
+    # of seven numbers under a heading that names the leverage do not need a
+    # paragraph explaining that they are numbers.
+    return (eyebrow(f"What this portfolio scored — held at "
+                    f"{pl.get('lev', 0):.2f}×")
+            + table('<th class="l"></th><th>ER (Adj)</th><th>ROA</th>'
+                    '<th>Sharpe</th><th>Win%</th><th>Vol%</th><th>Tot%</th>'
+                    '<th>MDD%</th>',
+                    statrow("Optimized", st_, False, "ideal weights")
+                    # Executable, not "as filled": it is the row you can send,
+                    # and it is washed green because it is the one that is
+                    # true. The ideal above it is the argument for it.
+                    + statrow("Executable", filled, True, "whole contracts",
+                              wash=f"background:{pos}1f;")
+                    + statrow("Equal weight", eq, False, "same legs"))
+            + eyebrow(f"Portfolio Weights — {esc(res['objective'])}, "
+                      f"{esc(per)}",
+                      f'<span style="margin-left:auto;color:{mute};'
+                      f'font-size:11.5px;font-weight:500">{esc(line)}</span>')
             + note("Weight is notional — a share of the money, not of the "
                    "risk; <b>Risk%</b> is the share of variance the leg "
                    "actually carries, so the two columns disagree wherever "
@@ -596,30 +624,12 @@ def portfolio(res: dict, per: str, pl: dict = None,
                    "the leg — <b>Fees</b> is one round turn at the tier "
                    "picked above, and it is what stops a 400-ticket micro "
                    "fill from winning on precision alone. Searched, not "
-                   "solved, and fitted on this window with no holdout — read "
-                   "the equal-weight row as the bar it had to clear.",
+                   "solved, and fitted on this window with no holdout.",
                    wide=True)
             + table('<th class="l">#</th><th class="l">Instrument</th>'
                     '<th class="l">Side</th><th>Weight</th><th class="l"></th>'
                     '<th>Risk%</th><th>Notional</th><th class="l">Fill</th>'
                     '<th>Miss</th><th>Fees</th>', rows)
-            + eyebrow(f"What those weights scored — held at "
-                      f"{pl.get('lev', 0):.2f}×")
-            + note("The statistics the Trends table carries, over the same "
-                   "window, <b>at the size held</b>: Vol%, Tot% and MDD% are "
-                   "all after leverage, which is why Vol% lands on the "
-                   "target. <b>As filled</b> is the same basket in whole "
-                   "contracts — the row that says whether rounding cost "
-                   "anything. The ratios are indifferent to sizing: scaling "
-                   "every leg by one factor moves Tot% and MDD% together.",
-                   wide=True)
-            + table('<th class="l"></th><th>ER (Adj)</th><th>ROA</th>'
-                    '<th>Sharpe</th><th>Win%</th><th>Vol%</th><th>Tot%</th>'
-                    '<th>MDD%</th>',
-                    statrow("Optimised", st_, True)
-                    + statrow("As filled", filled, False,
-                              "whole contracts")
-                    + statrow("Equal weight", eq, False, "same legs"))
             + chips([f'{res["legs"]} legs', f'{res["bars"]} bars',
                      f'drawdown on {res["fineBars"]:,} marks',
                      f'net {res["net"]:+.0f}% of gross',
@@ -636,6 +646,7 @@ def portfolio(res: dict, per: str, pl: dict = None,
                        if pl.get("fees") else [])
                     + ([fresh] if fresh else []))
             + '<div class="plot" style="margin-top:10px">'
+            + f'<div class="clegend">{legend}</div>'
             + CH.line_chart(curve["t"], series, None, 1100, 300, 1)
             + "</div>")
 
