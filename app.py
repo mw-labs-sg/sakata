@@ -40,6 +40,53 @@ import sk_universe as U
 
 st.set_page_config(page_title="Sakata · futures terminal", layout="wide",
                    initial_sidebar_state="collapsed")
+
+
+def _stale() -> list:
+    """Imported modules older than the code in this file that calls them.
+
+    Streamlit reruns app.py on every interaction but keeps the modules it
+    imported in the same process, so a deploy that changes sk_render can leave
+    a new app.py calling an old function. It has surfaced twice: once as
+    AttributeError on a constant that did exist, and once as a TypeError about
+    keyword arguments that were right there in the source. Both times the
+    traceback pointed at the call and said nothing about the cause, and both
+    times the fix was to restart the process.
+
+    Checking the signatures of what this file actually calls turns that into a
+    sentence with the fix in it. Cheap, and only wrong in the safe direction:
+    a missing parameter always means the module is behind.
+    """
+    import inspect
+    want = (("sk_render.portfolio", R.portfolio, ("hold", "turn", "pl")),
+            ("sk_render.spreads", R.spreads, ("sort",)),
+            ("sk_portfolio.optimise", PF.optimise, ("risk_cap", "progress")),
+            ("sk_portfolio.plan", PF.plan, ("margins", "fees", "max_lev")),
+            ("sk_portfolio.held_forward", PF.held_forward, ("frac",)),
+            ("sk_spreads.build_spreads", SP.build_spreads, ("chart_keys",)),
+            ("sk_spreads.window_closes", SP.window_closes, ("by_bar",)),
+            ("sk_ui.note", UI.note, ("wide",)))
+    behind = []
+    for name, fn, params in want:
+        try:
+            have = set(inspect.signature(fn).parameters)
+        except (TypeError, ValueError):        # builtins, C functions
+            continue
+        missing = [x for x in params if x not in have]
+        if missing:
+            behind.append(f"{name} has no {', '.join(missing)}")
+    return behind
+
+
+_behind = _stale()
+if _behind:
+    st.error("Sakata is running stale modules, so this page is newer than the "
+             "code it is calling: " + "; ".join(_behind) + ". Nothing is "
+             "wrong with the data — the process needs restarting. On "
+             "Streamlit Cloud: Manage app → Reboot. Locally: stop and rerun "
+             "`streamlit run app.py`.")
+    st.stop()
+
 S.DRY = False
 TTL_FAST, TTL_SLOW = 900, 3600
 
