@@ -597,13 +597,26 @@ def _fill(target: float, unit: float, small: float, small_name: str,
     cands = []
     for a in lots:
         rest = want - a * unit
-        exact = max(int(round(rest / small)), 0) if small else 0
+        exact = int(round(rest / small)) if small else 0
         # Three ways to finish: stop at whole standards, top up by a handful,
         # or close the gap exactly however many smalls that takes.
-        for b in {0, min(exact, TOPUP_SMALLS), exact}:
+        #
+        # `exact` is SIGNED, and that is the point. Taking the standard above
+        # the target and selling smalls back is the same position as taking
+        # the one below and buying smalls, and past half a contract it is far
+        # the cheaper of the two: 1.7 ether filled upwards is 2 ETH against
+        # 150 METs, filled downwards it is 1 ETH against 350 of them. Same
+        # exposure, a third of the tickets, a third of the commission.
+        capped = max(min(exact, TOPUP_SMALLS), -TOPUP_SMALLS)
+        for b in {0, capped, exact}:
+            if a == 0 and b < 0:
+                continue                  # selling smalls against nothing
             got = a * unit + b * small
-            cands.append((abs(got - want), a * fee_std + b * fee_small,
-                          a + b, a, b, got))
+            if got <= 0 and (a or b):
+                continue                  # overshot past zero: wrong side
+            cands.append((abs(got - want),
+                          abs(a) * fee_std + abs(b) * fee_small,
+                          abs(a) + abs(b), a, b, got))
     # Tolerance decides which fills are candidates; COMMISSION decides between
     # them. Among fills landing within 2% of the leg, take the cheapest to
     # send — 22 ETH beats 22 ETH and 5 METs to shave 1.8%, and now for a
@@ -627,15 +640,16 @@ def _fill(target: float, unit: float, small: float, small_name: str,
         # every other miss rather than hiding behind a dash.
         return {"text": "—", "notional": 0.0, "err": -100.0, "lots": 0,
                 "fee": 0.0, "std": 0, "small": 0, "unit": unit}
+    # Each leg carries its own sign, so a short position that overshoots reads
+    # "-2 ETH +150 MET" — short the standards, long the smalls back.
     parts = []
     if a:
         parts.append(f"{sign * a:+d} {code}")
     if b:
-        parts.append(f"{'+' if sign > 0 else '-'}{b} {small_name}"
-                     if a else f"{sign * b:+d} {small_name}")
+        parts.append(f"{sign * b:+d} {small_name}")
     return {"text": " ".join(parts) if parts else "—",
-            "notional": sign * got, "lots": a + b, "fee": round(fee, 2),
-            "std": a, "small": b,
+            "notional": sign * got, "lots": abs(a) + abs(b),
+            "fee": round(fee, 2), "std": a, "small": b,
             "err": round((got / want - 1) * 100, 1) if want else None}
 
 
@@ -804,9 +818,12 @@ def plan(closes, fine, res: dict, capital: float, vol_target: float,
         maint = (margins or {}).get(code)
         marg = None
         if maint:
-            marg = f.get("std", 0) * maint
+            marg = abs(f.get("std", 0)) * maint
             if mic and f.get("small"):
-                marg += f["small"] * maint / mic[2]
+                # Both legs are margined, and gross rather than net: a broker
+                # may credit the offset, but assuming it does is the wrong way
+                # to be wrong about whether a basket fits.
+                marg += abs(f["small"]) * maint / mic[2]
         legs.append(dict(w, notional=target, unit=unit, fill=f, needs=needs,
                          margin=marg,
                          small=(mic[0] if mic else None),
