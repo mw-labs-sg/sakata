@@ -485,6 +485,10 @@ def portfolio(res: dict, per: str, pl: dict = None,
     line = " · ".join(f'{w["code"]} {w["w"]:+.0f}%' for w in res["weights"])
     top = max(abs(w["w"]) for w in res["weights"]) or 1
 
+    # Under half the account in margin is room to be wrong; past three
+    # quarters there is no room left for a bad day, let alone another trade.
+    mpc = pl.get("marginPct", 0)
+    mcol = ink if mpc < 50 else (amber if mpc < 75 else t.get("neg", amber))
     rows = ""
     for i, leg in enumerate(legs, 1):
         long_ = leg["w"] >= 0
@@ -526,8 +530,11 @@ def portfolio(res: dict, per: str, pl: dict = None,
                     f'{"—" if err is None else f"{err:+.1f}%"}</td>'
                     + (f'<td class="dim">{f["fee"]:,.0f}</td>'
                        if f.get("fee") else '<td class="faint">—</td>')
+                    + (f'<td class="dim">{leg["margin"]:,.0f}</td>'
+                       if leg.get("margin") else '<td class="faint">—</td>')
                     if f else '<td class="l faint">—</td>'
-                              '<td class="faint">—</td><td class="faint">—</td>')
+                              '<td class="faint">—</td><td class="faint">—</td>'
+                              '<td class="faint">—</td>')
                  + "</tr>")
     if pl:
         got = (pl.get("filled") or {}).get("gross") or 0
@@ -540,7 +547,9 @@ def portfolio(res: dict, per: str, pl: dict = None,
                  f'<td class="l dim">{got:,.0f} filled</td>'
                  f'<td class="faint">on {capital:,.0f}</td>'
                  f'<td style="color:{ink};font-weight:700">'
-                 f'{pl.get("fees", 0):,.0f}</td></tr>')
+                 f'{pl.get("fees", 0):,.0f}</td>'
+                 f'<td style="color:{mcol};font-weight:700">'
+                 f'{pl.get("margin", 0):,.0f}</td></tr>')
         # Net is the direction the basket leans. Gross says how much is
         # working, net says how much of it is a bet on everything going the
         # same way — a market-neutral pair and an outright double long can
@@ -558,7 +567,9 @@ def portfolio(res: dict, per: str, pl: dict = None,
                  f'{net_d:+,.0f}</td>'
                  f'<td class="l dim">{nfill:+,.0f} filled</td>'
                  f'<td class="faint">{net_pc:+.0f}% of capital</td>'
-                 f'<td class="faint">—</td></tr>')
+                 f'<td class="faint">—</td>'
+                 f'<td style="color:{mcol}">{pl.get("marginPct", 0):.0f}% '
+                 f'of capital</td></tr>')
 
     def statrow(label, d, strong, note_="", wash=""):
         if not d:
@@ -629,7 +640,7 @@ def portfolio(res: dict, per: str, pl: dict = None,
             + table('<th class="l">#</th><th class="l">Instrument</th>'
                     '<th class="l">Side</th><th>Weight</th><th class="l"></th>'
                     '<th>Risk%</th><th>Notional</th><th class="l">Fill</th>'
-                    '<th>Miss</th><th>Fees</th>', rows)
+                    '<th>Miss</th><th>Fees</th><th>Margin</th>', rows)
             + chips([f'{res["legs"]} legs', f'{res["bars"]} bars',
                      f'drawdown on {res["fineBars"]:,} marks',
                      f'net {res["net"]:+.0f}% of gross',
@@ -639,6 +650,9 @@ def portfolio(res: dict, per: str, pl: dict = None,
                     + ([f'{len(pl["undersized"])} of {res["legs"]} legs under '
                         f'one contract at ${capital:,.0f}']
                        if pl.get("undersized") else [])
+                    + ([f'margin ${pl["margin"]:,.0f} · '
+                        f'{pl.get("marginPct", 0):.0f}% of capital']
+                       if pl.get("margin") else [])
                     + ([f'fees ${pl["fees"]:,.0f} · {pl.get("feeBps", 0):.1f} '
                         f'bp of capital'
                         + (f' · {pl["feeShare"]:.1f}% of the window'

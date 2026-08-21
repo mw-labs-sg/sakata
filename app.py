@@ -119,6 +119,19 @@ PF_WINDOWS = ["Intraday", "WTD", "MTD", "QTD", "YTD", "30D", "60D",
 CAPITAL_MIN, CAPITAL_MAX = 1_000, 1_000_000_000
 
 
+def _maint() -> dict:
+    """{code: maintenance margin} off the Margins tab's own cached pull.
+
+    Same numbers, one source. A portfolio tab that scraped its own margins
+    would eventually disagree with the tab whose whole job is margins.
+    """
+    try:
+        return {r["code"]: r["maint"] for r in margin_data().get("rows", [])
+                if r.get("maint")}
+    except Exception:
+        return {}
+
+
 def _dollars(text: str) -> int:
     """Digits out of whatever was typed, clamped to something sizeable.
 
@@ -149,7 +162,8 @@ def portfolio_frames(window: str, v: str = CACHE_V):
 
 
 def portfolio_weights(window: str, objective: str, legs: int, cap: int,
-                      shorts: bool, progress=None) -> dict:
+                      shorts: bool, risk_cap: float = 0.0,
+                      progress=None) -> dict:
     """One search. NOT cached, deliberately.
 
     It was, until the progress bar arrived: `progress` calls st.progress from
@@ -169,7 +183,7 @@ def portfolio_weights(window: str, objective: str, legs: int, cap: int,
         return {}
     return PF.optimise(closes, fine, objective, max_legs=legs,
                        max_weight=cap / 100, allow_short=shorts,
-                       progress=progress)
+                       risk_cap=risk_cap, progress=progress)
 
 
 @st.cache_data(ttl=TTL_FAST, show_spinner="ranking the field…")
@@ -465,19 +479,27 @@ with t[6]:
     # with the settings it followed.
     go = source("Yahoo · 15m, 1H, 4H, 1D", *PRICE_CACHES, key="portfolio",
                 action="Optimize")
-    pc = st.columns([3, 3, 2, 2, 2])
+    pc = st.columns([3, 2, 2, 2, 2, 3])
     pf_win = pc[0].selectbox("Time frame", PF_WINDOWS, key="pf_window")
-    pf_obj = pc[1].selectbox("Objective", PF.OBJECTIVES, key="pf_obj",
+    pf_obj = pc[5].selectbox("Objective", PF.OBJECTIVES, key="pf_obj",
                              help="What the search maximises. ROA and ER (Adj)"
                                   " depend on the order of the returns, so"
                                   " weights are searched, not solved.")
-    pf_legs = pc[2].selectbox("Max legs", list(range(2, 11)), index=4,
+    pf_legs = pc[1].selectbox("Max legs", list(range(2, 11)), index=4,
                               key="pf_legs")
-    pf_cap = pc[3].selectbox("Weight cap", ["25%", "35%", "50%", "100%"],
+    pf_cap = pc[2].selectbox("Weight cap", ["25%", "35%", "50%", "100%"],
                              index=2, key="pf_cap",
                              help="Most any one instrument may carry. The cap "
                                   "and the leg count are the only defence "
                                   "against a search fitting one window.")
+    pf_risk = pc[3].selectbox("Risk cap", ["none", "60%", "50%", "40%", "30%"],
+                              key="pf_risk",
+                              help="Most of the portfolio's VARIANCE any one"
+                                   " leg may carry. The weight cap limits the"
+                                   " money in a leg; this limits the risk,"
+                                   " which is a different thing — a basket can"
+                                   " hold a tenth of its money in ether and"
+                                   " half its variance there.")
     pf_short = pc[4].checkbox("Shorts", value=True, key="pf_short",
                               help="Allow negative weights. Off makes it a "
                                    "long-only basket.")
@@ -514,7 +536,7 @@ with t[6]:
     # Behind a button on purpose: st.tabs runs every tab body on every rerun,
     # so an optimiser called at the top level would charge a search to anyone
     # who touched a radio on Board.
-    pf_args = (pf_win, pf_obj, pf_legs, pf_cap, pf_short)
+    pf_args = (pf_win, pf_obj, pf_legs, pf_cap, pf_short, pf_risk)
     if go:
         # A bar rather than a spinner: the search runs tens of seconds now
         # that it restarts, grows and swaps legs, and a spinner that long
@@ -529,6 +551,8 @@ with t[6]:
 
         st.session_state["pf_result"] = portfolio_weights(
             pf_win, pf_obj, pf_legs, int(pf_cap.rstrip("%")), pf_short,
+            risk_cap=(0.0 if pf_risk == "none"
+                      else int(pf_risk.rstrip("%")) / 100),
             progress=_tick)
         st.session_state["pf_for"] = pf_args
         bar.empty()
@@ -552,7 +576,8 @@ with t[6]:
                            last_pf, U.MULT, U.MICRO,
                            max_lev=(None if pf_lev == "none"
                                     else float(pf_lev.rstrip("×"))),
-                           fees=U.FEES, fee_tier=U.FEE_TIERS[pf_fee])
+                           fees=U.FEES, fee_tier=U.FEE_TIERS[pf_fee],
+                           margins=_maint())
     UI.md(R.portfolio(res or {}, shown_win, plan, capital=pf_cap_usd,
                       vol_target=(None if pf_vol == "none"
                                   else float(pf_vol.rstrip("%")))))

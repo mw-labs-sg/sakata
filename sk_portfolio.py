@@ -148,7 +148,21 @@ class _Scorer:
         cov = (self.R * (r - r.mean())[:, None]).mean(axis=0)
         return w * cov / var
 
-    def score(self, w: np.ndarray, objective: str) -> float:
+    def risk_ok(self, w: np.ndarray, cap: float) -> bool:
+        """True if no leg carries more than `cap` of the variance.
+
+        A cap on WEIGHT does not cap risk: a basket can hold 10% of its money
+        in ether and 52% of its variance there, because ether moves several
+        times as much per dollar as a bond future. Capping the share of
+        variance is the constraint that actually produces a diversified
+        basket rather than one bet wearing five hedges.
+        """
+        if not cap:
+            return True
+        return float(np.abs(self.risk_shares(w)).max()) <= cap
+
+    def score(self, w: np.ndarray, objective: str,
+              risk_cap: float = 0.0) -> float:
         """One number, higher better. -inf for anything unrankable.
 
         Scored on the same definitions the stats report, with one extra
@@ -159,6 +173,8 @@ class _Scorer:
         than one typical bar of its own movement is not scored: it did not
         avoid a drawdown, it was measured too coarsely to have had one.
         """
+        if risk_cap and not self.risk_ok(w, risk_cap):
+            return -np.inf
         r = self.R @ w
         if objective == "Sharpe":
             sd = float(r.std())
@@ -206,7 +222,7 @@ def _project(w: np.ndarray, max_legs: int, cap: float,
 
 
 def _pairs(sc: _Scorer, objective: str, cap: float, allow_short: bool,
-           keep: int = 6) -> list:
+           keep: int = 6, risk_cap: float = 0.0) -> list:
     """Every two-instrument basket at the weight cap, best first.
 
     Exhaustive where exhaustive is cheap — 171 pairs by four sign combinations
@@ -224,7 +240,7 @@ def _pairs(sc: _Scorer, objective: str, cap: float, allow_short: bool,
                 w = np.zeros(n)
                 w[i], w[j] = si * 0.5, sj * 0.5
                 w = _project(w, 2, cap, allow_short)
-                v = sc.score(w, objective)
+                v = sc.score(w, objective, risk_cap)
                 if np.isfinite(v):
                     out.append((v, w))
     out.sort(key=lambda t: -t[0])
@@ -232,7 +248,8 @@ def _pairs(sc: _Scorer, objective: str, cap: float, allow_short: bool,
 
 
 def _climb(sc: _Scorer, w0: np.ndarray, objective: str, max_legs: int,
-           cap: float, allow_short: bool, rng, steps: int) -> tuple:
+           cap: float, allow_short: bool, rng, steps: int,
+           risk_cap: float = 0.0) -> tuple:
     """Hill climb from w0: perturb, swap a leg, grow one, drop one.
 
     All four moves matter. Perturbation alone fixes the basket at whatever
@@ -240,7 +257,7 @@ def _climb(sc: _Scorer, w0: np.ndarray, objective: str, max_legs: int,
     shrinking makes a ceiling of ten score worse than a ceiling of six.
     """
     n = len(sc.syms)
-    best_w, best_v = w0, sc.score(w0, objective)
+    best_w, best_v = w0, sc.score(w0, objective, risk_cap)
     step = 0.25
     for i in range(steps):
         cand = best_w.copy()
@@ -257,7 +274,7 @@ def _climb(sc: _Scorer, w0: np.ndarray, objective: str, max_legs: int,
         else:
             cand += rng.normal(0, step, n) * (np.abs(cand) > 0)
         cand = _project(cand, max_legs, cap, allow_short)
-        v = sc.score(cand, objective)
+        v = sc.score(cand, objective, risk_cap)
         if v > best_v:
             best_w, best_v = cand, v
         if i % 60 == 59:
@@ -266,7 +283,8 @@ def _climb(sc: _Scorer, w0: np.ndarray, objective: str, max_legs: int,
 
 
 def _grow(sc: _Scorer, w0: np.ndarray, objective: str, max_legs: int,
-          cap: float, allow_short: bool, rng, steps: int = 150) -> tuple:
+          cap: float, allow_short: bool, rng, steps: int = 150,
+          risk_cap: float = 0.0) -> tuple:
     """Add legs one at a time, keeping whichever addition helps most.
 
     The restarts kept finding DIFFERENT leg sets — one seed built on NQ and
@@ -281,7 +299,7 @@ def _grow(sc: _Scorer, w0: np.ndarray, objective: str, max_legs: int,
     cheap, and not optional: it is the difference between the tab returning
     the best basket it can find and returning one of them.
     """
-    best_w, best_v = w0, sc.score(w0, objective)
+    best_w, best_v = w0, sc.score(w0, objective, risk_cap)
     while np.count_nonzero(best_w) < max_legs:
         level_w, level_v = None, best_v
         base = float(np.abs(best_w[np.flatnonzero(best_w)]).mean())
@@ -291,7 +309,7 @@ def _grow(sc: _Scorer, w0: np.ndarray, objective: str, max_legs: int,
                 cand[idx] = sign * base
                 cand = _project(cand, max_legs, cap, allow_short)
                 cand, v = _climb(sc, cand, objective, max_legs, cap,
-                                 allow_short, rng, steps)
+                                 allow_short, rng, steps, risk_cap)
                 if v > level_v:
                     level_w, level_v = cand, v
         if level_w is None:      # nothing left to add that pays for itself
@@ -302,7 +320,7 @@ def _grow(sc: _Scorer, w0: np.ndarray, objective: str, max_legs: int,
 
 def _exchange(sc: _Scorer, w0: np.ndarray, objective: str, max_legs: int,
               cap: float, allow_short: bool, rng, rounds: int = 4,
-              steps: int = 150, tick=None) -> tuple:
+              steps: int = 150, tick=None, risk_cap: float = 0.0) -> tuple:
     """Try replacing each held leg with each instrument not held.
 
     Growing a basket a leg at a time is myopic: it can never reach a set
@@ -314,7 +332,7 @@ def _exchange(sc: _Scorer, w0: np.ndarray, objective: str, max_legs: int,
     Deterministic and exhaustive at that radius, which is what makes the
     answer stop being a property of the seed.
     """
-    best_w, best_v = w0, sc.score(w0, objective)
+    best_w, best_v = w0, sc.score(w0, objective, risk_cap)
     for _ in range(rounds):
         held, idle = np.flatnonzero(best_w), np.flatnonzero(best_w == 0)
         # Screen every swap unclimbed first. Climbing all of them cost 150
@@ -330,12 +348,12 @@ def _exchange(sc: _Scorer, w0: np.ndarray, objective: str, max_legs: int,
                     cand[in_] = sign * abs(cand[out_])
                     cand[out_] = 0.0
                     cand = _project(cand, max_legs, cap, allow_short)
-                    screened.append((sc.score(cand, objective), cand))
+                    screened.append((sc.score(cand, objective, risk_cap), cand))
         screened.sort(key=lambda t: -t[0])
         shortlist = []
         for _v, cand in screened[:SCREEN_KEEP]:
             cand, v = _climb(sc, cand, objective, max_legs, cap, allow_short,
-                             rng, steps)
+                             rng, steps, risk_cap)
             shortlist.append((v, cand))
         # A swap arrives with the weights of the leg it replaced, so a short
         # climb judges it before it has had a chance to be itself. Re-climbing
@@ -345,7 +363,7 @@ def _exchange(sc: _Scorer, w0: np.ndarray, objective: str, max_legs: int,
         round_w, round_v = None, best_v
         for _v, cand in shortlist[:3]:
             cand, v = _climb(sc, cand, objective, max_legs, cap, allow_short,
-                             rng, steps * 4)
+                             rng, steps * 4, risk_cap)
             if v > round_v:
                 round_w, round_v = cand, v
         if tick:
@@ -360,7 +378,7 @@ def optimise(closes: pd.DataFrame, fine=None, objective: str = "ROA",
              max_legs: int = 4, max_weight: float = 0.5,
              allow_short: bool = True, tries: int = 1200,
              climbs: int = 900, restarts: int = 8, seed: int = 0,
-             progress=None) -> dict:
+             progress=None, risk_cap: float = 0.0) -> dict:
     """Search weights maximising `objective` over the window in `closes`.
 
     Restarts, then climbs, then the best pairs climbed as well.
@@ -384,7 +402,8 @@ def optimise(closes: pd.DataFrame, fine=None, objective: str = "ROA",
     sc = _Scorer(closes, fine)
     n = len(sc.syms)
     max_legs = max(2, min(max_legs, n))
-    seeds = _pairs(sc, objective, max_weight, allow_short)
+    seeds = _pairs(sc, objective, max_weight, allow_short,
+                   risk_cap=risk_cap)
     # Four rounds apiece is the ceiling for the swap passes; they usually
     # stop earlier, so the bar can finish before the count does.
     total = (max(1, restarts) + 2 * len(seeds) + POLISH_ROUNDS
@@ -411,12 +430,12 @@ def optimise(closes: pd.DataFrame, fine=None, objective: str = "ROA",
             w[legs] = mag * (rng.choice([-1.0, 1.0], size=k)
                              if allow_short else 1.0)
             w = _project(w, max_legs, max_weight, allow_short)
-            v = sc.score(w, objective)
+            v = sc.score(w, objective, risk_cap)
             if v > start_v:
                 start_w, start_v = w, v
         if start_w is not None:
             w, v = _climb(sc, start_w, objective, max_legs, max_weight,
-                          allow_short, rng, climbs)
+                          allow_short, rng, climbs, risk_cap)
             pool.append((v, w))
             if v > best_v:
                 best_w, best_v = w, v
@@ -429,7 +448,7 @@ def optimise(closes: pd.DataFrame, fine=None, objective: str = "ROA",
     for i, (_v0, pw) in enumerate(seeds):
         rng = np.random.default_rng(seed * 1_000 + 900 + i)
         w, v = _climb(sc, pw, objective, max_legs, max_weight, allow_short,
-                      rng, climbs)
+                      rng, climbs, risk_cap)
         pool.append((v, w))
         if v > best_v:
             best_w, best_v = w, v
@@ -441,7 +460,8 @@ def optimise(closes: pd.DataFrame, fine=None, objective: str = "ROA",
     # them, and the part that made the answer stop depending on the seed.
     for i, (_v0, pw) in enumerate(seeds):
         rng = np.random.default_rng(seed * 1_000 + 700 + i)
-        w, v = _grow(sc, pw, objective, max_legs, max_weight, allow_short, rng)
+        w, v = _grow(sc, pw, objective, max_legs, max_weight, allow_short, rng,
+                 risk_cap=risk_cap)
         pool.append((v, w))
         if v > best_v:
             best_w, best_v = w, v
@@ -473,7 +493,7 @@ def optimise(closes: pd.DataFrame, fine=None, objective: str = "ROA",
             tick(best_v)
 
         w, v = _exchange(sc, pw, objective, max_legs, max_weight,
-                         allow_short, rng, tick=_round)
+                         allow_short, rng, tick=_round, risk_cap=risk_cap)
         if v > best_v:
             best_w, best_v = w, v
         tick(best_v)
@@ -487,7 +507,7 @@ def optimise(closes: pd.DataFrame, fine=None, objective: str = "ROA",
     for i in range(POLISH_ROUNDS):
         rng = np.random.default_rng(seed * 1_000 + 500 + i)
         w, v = _climb(sc, best_w, objective, max_legs, max_weight, allow_short,
-                      rng, climbs * 3)
+                      rng, climbs * 3, risk_cap)
         if v > best_v:
             best_w, best_v = w, v
         done += 1
@@ -505,11 +525,11 @@ def optimise(closes: pd.DataFrame, fine=None, objective: str = "ROA",
         tick(best_v)
 
     w, v = _exchange(sc, best_w, objective, max_legs, max_weight,
-                     allow_short, rng, tick=_round2)
+                     allow_short, rng, tick=_round2, risk_cap=risk_cap)
     if v > best_v:
         best_w, best_v = w, v
     w, v = _climb(sc, best_w, objective, max_legs, max_weight, allow_short,
-                  rng, climbs * 3)
+                  rng, climbs * 3, risk_cap)
     if v > best_v:
         best_w, best_v = w, v
     done += 1
@@ -592,7 +612,7 @@ def _fill(target: float, unit: float, small: float, small_name: str,
         # which is a miss of the whole thing and belongs in the same column as
         # every other miss rather than hiding behind a dash.
         return {"text": "—", "notional": 0.0, "err": -100.0, "lots": 0,
-                "fee": 0.0, "unit": unit}
+                "fee": 0.0, "std": 0, "small": 0, "unit": unit}
     parts = []
     if a:
         parts.append(f"{sign * a:+d} {code}")
@@ -601,12 +621,14 @@ def _fill(target: float, unit: float, small: float, small_name: str,
                      if a else f"{sign * b:+d} {small_name}")
     return {"text": " ".join(parts) if parts else "—",
             "notional": sign * got, "lots": a + b, "fee": round(fee, 2),
+            "std": a, "small": b,
             "err": round((got / want - 1) * 100, 1) if want else None}
 
 
 def plan(closes, fine, res: dict, capital: float, vol_target: float,
          last: dict, mult: dict, micro: dict, max_lev=None,
-         fees: dict = None, fee_tier: float = 1.0) -> dict:
+         fees: dict = None, fee_tier: float = 1.0,
+         margins: dict = None) -> dict:
     """Turn a weight vector into money, contracts, and what those score.
 
     Weights first, contracts second, and the difference measured rather than
@@ -661,7 +683,19 @@ def plan(closes, fine, res: dict, capital: float, vol_target: float,
         needs = None
         if unit and not f.get("lots") and w["w"] and lev:
             needs = (unit / 2) / (abs(w["w"]) / 100) / lev
+        # Margin on the position that can actually be sent, not on the ideal.
+        # A small contract's margin is not published here, but margin tracks
+        # notional closely enough that dividing the standard's by the same
+        # divisor is right to a few percent — and a few percent of a margin
+        # estimate is not what decides whether a basket fits.
+        maint = (margins or {}).get(code)
+        marg = None
+        if maint:
+            marg = f.get("std", 0) * maint
+            if mic and f.get("small"):
+                marg += f["small"] * maint / mic[2]
         legs.append(dict(w, notional=target, unit=unit, fill=f, needs=needs,
+                         margin=marg,
                          small=(mic[0] if mic else None),
                          smallUnit=small or None))
 
@@ -686,9 +720,12 @@ def plan(closes, fine, res: dict, capital: float, vol_target: float,
     # noise; against 11,000 micro tickets it was not, which is the whole
     # reason the fill chooser now spends in dollars.
     fee_total = sum((l["fill"].get("fee") or 0.0) for l in legs)
+    marg_total = sum((l.get("margin") or 0.0) for l in legs)
     tot = (res["stats"].get("tot") or 0) * lev
     return {"legs": legs, "lev": lev, "wantLev": want, "gross": gross,
             "fees": fee_total,
+            "margin": marg_total,
+            "marginPct": (marg_total / capital * 100) if capital else 0,
             "feeBps": (fee_total / capital * 10_000) if capital else 0,
             "feeShare": (fee_total / capital * 100 / abs(tot) * 100)
             if capital and tot else None,
