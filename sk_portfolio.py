@@ -693,7 +693,7 @@ def turnover(now: list, before: list) -> dict:
 def plan(closes, fine, res: dict, capital: float, vol_target: float,
          last: dict, mult: dict, micro: dict, max_lev=None,
          fees: dict = None, fee_tier: float = 1.0,
-         margins: dict = None) -> dict:
+         margins: dict = None, smalls: bool = True) -> dict:
     """Turn a weight vector into money, contracts, and what those score.
 
     Weights first, contracts second, and the difference measured rather than
@@ -730,7 +730,10 @@ def plan(closes, fine, res: dict, capital: float, vol_target: float,
         target = gross * w["w"] / 100          # signed dollars
         px, m = last.get(code), mult.get(code)
         unit = px * m if (px and m) else None
-        mic = micro.get(code)
+        # Smalls off means smalls off everywhere: a zero unit price takes them
+        # out of the candidate list in _fill without a second code path, and
+        # out of the margin and fee sums with it.
+        mic = micro.get(code) if smalls else None
         small = px * mic[1] if (mic and px) else 0.0
         fee_std, fee_small = (fees or {}).get(code, (0.0, 0.0))
         f = (_fill(target, unit, small, mic[0] if mic else "", code,
