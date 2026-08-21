@@ -94,10 +94,19 @@ MICRO = {
 # fill worth its tickets — and that answer is robust to being 30% out. It is
 # not robust to a fee being ten times wrong, so check the ones you trade.
 #
-# The pattern worth knowing: a micro costs roughly a fifth of its standard
-# while carrying a tenth of the notional, so filling in micros costs about
-# twice as much per dollar of exposure. That is what makes 400 METs to close a
-# 3% gap expensive rather than merely untidy.
+# The pattern worth knowing is not the dollar fee, it is the fee against the
+# contract's own notional — and the index micros and the crypto micros are not
+# the same story at all:
+#
+#   MES  $1.00 on $38,349   0.26bp    2x its standard
+#   MBT  $0.60 on  $7,368   0.81bp    5x its standard
+#   MET  $0.60 on    $234  25.63bp   50x its standard, 250x an ES
+#
+# MES is a TENTH of an ES, so a fee a quarter the size costs about twice as
+# much per dollar. MET is a FIVE-HUNDREDTH of an ETH — 0.1 ether, a couple of
+# hundred dollars — so any per-contract fee at all is enormous against it.
+# That is why closing an ether leg to the last percent in micros costs real
+# money while doing the same in MES costs almost nothing.
 FEES = {
     "ES":  (4.00, 1.00), "NQ":  (4.00, 1.00), "NKD": (4.50, None),
     "ZB":  (3.20, None), "ZN":  (3.20, None),
