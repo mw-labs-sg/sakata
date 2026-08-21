@@ -429,30 +429,6 @@ def _outrights(d: dict, per: str, t: dict, sort: str = DEFAULT_SORT) -> str:
 
 
 # ------------------------------------------------------------- Portfolio
-def _sizing_note(pl: dict, vol_target, res: dict) -> str:
-    """One sentence on why the gross exposure is what it is.
-
-    The confusion this answers: a cap of 3x sitting above a gross of 0.63x
-    reads like the cap was ignored. It was not — the vol target sets the
-    size and the cap is only a ceiling, so a basket noisier than the target
-    is held BELOW one times capital.
-    """
-    pvol = pl.get("pvol") or res["stats"].get("vol") or 0
-    lev = pl.get("lev", 0)
-    if vol_target is None:
-        return (f"Size follows leverage: gross is {lev:.2f}× capital, and the "
-                f"volatility lands wherever the basket puts it.")
-    where = "below" if lev < 1 else "above"
-    out = (f"Size follows the vol target, not the leverage cap: {lev:.2f}× is "
-           f"{vol_target:.0f}% over the portfolio&#39;s own {pvol:.1f}%, which "
-           f"is why a basket noisier than the target sits {where} 1×.")
-    if pl.get("capped"):
-        out += (f" The cap binds here — {pl.get('wantLev', 0):.2f}× wanted, "
-                f"{lev:.2f}× taken, so it runs at "
-                f"{pvol * lev:.1f}% rather than {vol_target:.0f}%.")
-    return out
-
-
 def portfolio(res: dict, per: str, pl: dict = None,
               capital: float = 1_000_000, vol_target=15.0,
               hold: dict = None, turn: dict = None,
@@ -635,18 +611,6 @@ def portfolio(res: dict, per: str, pl: dict = None,
                       f"{esc(per)}",
                       f'<span style="margin-left:auto;color:{mute};'
                       f'font-size:11.5px;font-weight:500">{esc(line)}</span>')
-            + note("Weight is notional — a share of the money, not of the "
-                   "risk; <b>Risk%</b> is the share of variance the leg "
-                   "actually carries, so the two columns disagree wherever "
-                   "one leg moves more than another. "
-                   + _sizing_note(pl, vol_target, res)
-                   + " Fill is whole contracts, standards and smalls "
-                   "mixed, chosen as the cheapest way to land within 2% of "
-                   "the leg — <b>Fees</b> is one round turn at the tier "
-                   "picked above, and it is what stops a 400-ticket micro "
-                   "fill from winning on precision alone. Searched, not "
-                   "solved, and fitted on this window with no holdout.",
-                   wide=True)
             + table('<th class="l">#</th><th class="l">Instrument</th>'
                     '<th class="l">Side</th><th>Weight</th><th class="l"></th>'
                     '<th>Risk%</th><th>Notional</th><th class="l">Fill</th>'

@@ -209,7 +209,7 @@ def portfolio_frames(window: str, v: str = CACHE_V):
 
 
 def portfolio_weights(window: str, objective: str, legs: int, cap: int,
-                      shorts: bool, risk_cap: float = 0.0,
+                      side: str, risk_cap: float = 0.0,
                       progress=None) -> dict:
     """One search. NOT cached, deliberately.
 
@@ -229,7 +229,7 @@ def portfolio_weights(window: str, objective: str, legs: int, cap: int,
     if closes is None:
         return {}
     return PF.optimise(closes, fine, objective, max_legs=legs,
-                       max_weight=cap / 100, allow_short=shorts,
+                       max_weight=cap / 100, side=side,
                        risk_cap=risk_cap, progress=progress)
 
 
@@ -526,20 +526,21 @@ with t[6]:
     # with the settings it followed.
     go = source("Yahoo · 15m, 1H, 4H, 1D", *PRICE_CACHES, key="portfolio",
                 action="Optimize")
-    pc = st.columns([3, 2, 2, 2, 2, 3])
-    pf_win = pc[0].selectbox("Time frame", PF_WINDOWS, key="pf_window")
-    pf_obj = pc[5].selectbox("Objective", PF.OBJECTIVES, key="pf_obj",
-                             help="What the search maximises. ROA and ER (Adj)"
-                                  " depend on the order of the returns, so"
-                                  " weights are searched, not solved.")
-    pf_legs = pc[1].selectbox("Max legs", list(range(2, 11)), index=4,
+    # Two rows of five, equal widths, every control the same shape of box.
+    # The Shorts checkbox used to sit mid-row with no box around it, which
+    # pulled its label half a line up and left the rows out of register. A
+    # direction belongs in a dropdown anyway: long-and-short, long-only and
+    # short-only are three answers, not a yes and a no.
+    r1 = st.columns(5)
+    pf_win = r1[0].selectbox("Time frame", PF_WINDOWS, key="pf_window")
+    pf_legs = r1[1].selectbox("Max legs", list(range(2, 11)), index=4,
                               key="pf_legs")
-    pf_cap = pc[2].selectbox("Weight cap", ["25%", "35%", "50%", "100%"],
+    pf_cap = r1[2].selectbox("Weight cap", ["25%", "35%", "50%", "100%"],
                              index=2, key="pf_cap",
                              help="Most any one instrument may carry. The cap "
                                   "and the leg count are the only defence "
                                   "against a search fitting one window.")
-    pf_risk = pc[3].selectbox("Risk cap", ["none", "60%", "50%", "40%", "30%"],
+    pf_risk = r1[3].selectbox("Risk cap", ["none", "60%", "50%", "40%", "30%"],
                               key="pf_risk",
                               help="Most of the portfolio's VARIANCE any one"
                                    " leg may carry. The weight cap limits the"
@@ -547,51 +548,56 @@ with t[6]:
                                    " which is a different thing — a basket can"
                                    " hold a tenth of its money in ether and"
                                    " half its variance there.")
-    pf_short = pc[4].checkbox("Shorts", value=True, key="pf_short",
-                              help="Allow negative weights. Off makes it a "
-                                   "long-only basket.")
-    # Capital and vol target sit on their own row because they are not search
-    # arguments: the weights are a shape, and these two only decide how large
-    # it is drawn. They take effect immediately, without a re-run.
-    sc2 = st.columns([3, 2, 2, 2, 3, 3])
-    pf_cap_usd = sc2[0].text_input(
+    pf_side = r1[4].selectbox("Direction", PF.SIDES, key="pf_side",
+                              help="Which way the legs may point. Long only"
+                                   " and short only are one-sided books; long"
+                                   " and short lets the search hedge.")
+
+    r2 = st.columns(5)
+    pf_obj = r2[0].selectbox("Objective", PF.OBJECTIVES, key="pf_obj",
+                             help="What the search maximises. ROA and ER (Adj)"
+                                  " depend on the order of the returns, so"
+                                  " weights are searched, not solved.")
+    # Capital, vol target and leverage are not search arguments: the weights
+    # are a shape and these only decide how large it is drawn, so they take
+    # effect without a re-run.
+    pf_cap_usd = _dollars(r2[1].text_input(
         "Capital", value="1,000,000", key="pf_capital_txt", on_change=_capital,
         help="What the weights are sized against. Notional and contracts scale"
              " with it; the ratios do not. Below about $500k these baskets"
-             " stop being fillable — watch the Miss column.")
-    pf_cap_usd = _dollars(pf_cap_usd)
-    pf_vol = sc2[1].selectbox("Vol target",
-                              ["5%", "10%", "15%", "20%", "30%", "none"],
-                              index=4, key="pf_vol",
-                              help="Annualised volatility to hold the basket"
-                                   " at; leverage is this over the portfolio's"
-                                   " own volatility, so a noisy basket is held"
-                                   " below 1×. Pick none to size on leverage"
-                                   " instead and hold the cap.")
-    pf_size = sc2[4].selectbox("Contracts",
-                               ["Standard + small", "Standard only"],
-                               key="pf_size",
-                               help="Whether micros and minis may be used to"
-                                    " close the gap on a leg. Standard only is"
-                                    " fewer tickets and cheaper commission, at"
-                                    " the price of a coarser fill — watch the"
-                                    " Miss column when you switch.")
-    pf_fee = sc2[3].selectbox("Fees", list(U.FEE_TIERS), key="pf_fee",
-                              help="Round-turn commission per contract,"
-                                   " scaled from a retail schedule. It decides"
-                                   " between fills that are equally close to"
-                                   " the target, so it changes the tickets"
-                                   " rather than the weights.")
-    pf_lev = sc2[2].selectbox("Max leverage", ["1×", "2×", "3×", "5×", "none"],
-                              index=0, key="pf_lev",
-                              help="Ceiling on gross notional over capital. A"
-                                   " quiet basket needs leverage to reach a"
-                                   " vol target; this is where you say how"
-                                   " much of that you will actually take.")
-    # Behind a button on purpose: st.tabs runs every tab body on every rerun,
-    # so an optimiser called at the top level would charge a search to anyone
-    # who touched a radio on Board.
-    pf_args = (pf_win, pf_obj, pf_legs, pf_cap, pf_short, pf_risk)
+             " stop being fillable — watch the Miss column."))
+    pf_vol = r2[2].selectbox("Vol target",
+                             ["5%", "10%", "15%", "20%", "30%", "none"],
+                             index=4, key="pf_vol",
+                             help="Annualised volatility to hold the basket"
+                                  " at; leverage is this over the portfolio's"
+                                  " own volatility, so a noisy basket is held"
+                                  " below 1×. Pick none to size on leverage"
+                                  " instead and hold the cap.")
+    pf_lev = r2[3].selectbox("Max leverage", ["1×", "2×", "3×", "5×", "none"],
+                             index=0, key="pf_lev",
+                             help="Ceiling on gross notional over capital. A"
+                                  " quiet basket needs leverage to reach a vol"
+                                  " target; this is where you say how much of"
+                                  " that you will actually take.")
+    pf_fee = r2[4].selectbox("Fees", list(U.FEE_TIERS), key="pf_fee",
+                             help="Round-turn commission per contract, scaled"
+                                  " from a retail schedule. It decides between"
+                                  " fills that are equally close to the"
+                                  " target, so it changes the tickets rather"
+                                  " than the weights.")
+
+    r3 = st.columns(5)
+    pf_size = r3[0].selectbox("Contracts",
+                              ["Standard + small", "Standard only"],
+                              key="pf_size",
+                              help="Whether micros and minis may be used to"
+                                   " close the gap on a leg. Standard only is"
+                                   " fewer tickets and cheaper commission, at"
+                                   " the price of a coarser fill — watch the"
+                                   " Miss column when you switch.")
+
+    pf_args = (pf_win, pf_obj, pf_legs, pf_cap, pf_side, pf_risk)
     if go:
         # A bar rather than a spinner: the search runs tens of seconds now
         # that it restarts, grows and swaps legs, and a spinner that long
@@ -606,7 +612,7 @@ with t[6]:
 
         rc = 0.0 if pf_risk == "none" else int(pf_risk.rstrip("%")) / 100
         fresh_res = portfolio_weights(
-            pf_win, pf_obj, pf_legs, int(pf_cap.rstrip("%")), pf_short,
+            pf_win, pf_obj, pf_legs, int(pf_cap.rstrip("%")), pf_side,
             risk_cap=rc, progress=_tick)
         # Turnover against the PREVIOUS answer, captured before it is
         # overwritten. For a book tracked through a week, "is it still saying
@@ -621,7 +627,7 @@ with t[6]:
         closes_h, fine_h = portfolio_frames(pf_win)
         st.session_state["pf_hold"] = PF.held_forward(
             closes_h, fine_h, pf_obj, max_legs=pf_legs,
-            max_weight=int(pf_cap.rstrip("%")) / 100, allow_short=pf_short,
+            max_weight=int(pf_cap.rstrip("%")) / 100, side=pf_side,
             risk_cap=rc,
             progress=lambda d, t, b: bar.progress(
                 min(d / max(t, 1), 1.0),

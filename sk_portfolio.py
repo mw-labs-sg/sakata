@@ -190,16 +190,30 @@ class _Scorer:
                              -MAX_ROA, MAX_ROA))
 
 
+SIDES = ("Long and short", "Long only", "Short only")
+
+
+def _signs(side: str) -> tuple:
+    """The signs a leg may take, given the direction the book is allowed."""
+    if side == "Long only":
+        return (1.0,)
+    if side == "Short only":
+        return (-1.0,)
+    return (1.0, -1.0)
+
+
 def _project(w: np.ndarray, max_legs: int, cap: float,
-             allow_short: bool) -> np.ndarray:
+             side: str) -> np.ndarray:
     """Nearest weight vector obeying the constraints: legs, cap, gross of 1.
 
     Order matters. Trim to the largest legs first, then cap, then normalise —
     capping before trimming lets a leg that is about to be dropped absorb
     weight that the survivors then have to give back.
     """
-    if not allow_short:
+    if side == "Long only":
         w = np.clip(w, 0, None)
+    elif side == "Short only":
+        w = np.clip(w, None, 0)
     if max_legs and np.count_nonzero(w) > max_legs:
         keep = np.argsort(-np.abs(w))[:max_legs]
         trimmed = np.zeros_like(w)
@@ -221,7 +235,7 @@ def _project(w: np.ndarray, max_legs: int, cap: float,
     return w
 
 
-def _pairs(sc: _Scorer, objective: str, cap: float, allow_short: bool,
+def _pairs(sc: _Scorer, objective: str, cap: float, side: str,
            keep: int = 6, risk_cap: float = 0.0) -> list:
     """Every two-instrument basket at the weight cap, best first.
 
@@ -232,14 +246,15 @@ def _pairs(sc: _Scorer, objective: str, cap: float, allow_short: bool,
     pair" from a hope into a floor.
     """
     n = len(sc.syms)
-    signs = ((1, 1), (1, -1), (-1, 1), (-1, -1)) if allow_short else ((1, 1),)
+    one = _signs(side)
+    signs = [(a, b) for a in one for b in one]
     out = []
     for i in range(n):
         for j in range(i + 1, n):
             for si, sj in signs:
                 w = np.zeros(n)
                 w[i], w[j] = si * 0.5, sj * 0.5
-                w = _project(w, 2, cap, allow_short)
+                w = _project(w, 2, cap, side)
                 v = sc.score(w, objective, risk_cap)
                 if np.isfinite(v):
                     out.append((v, w))
@@ -248,7 +263,7 @@ def _pairs(sc: _Scorer, objective: str, cap: float, allow_short: bool,
 
 
 def _climb(sc: _Scorer, w0: np.ndarray, objective: str, max_legs: int,
-           cap: float, allow_short: bool, rng, steps: int,
+           cap: float, side: str, rng, steps: int,
            risk_cap: float = 0.0) -> tuple:
     """Hill climb from w0: perturb, swap a leg, grow one, drop one.
 
@@ -267,13 +282,13 @@ def _climb(sc: _Scorer, w0: np.ndarray, objective: str, max_legs: int,
             out_, in_ = rng.choice(held), rng.choice(idle)
             cand[in_], cand[out_] = cand[out_], 0.0
         elif roll < 0.35 and len(idle) and len(held) < max_legs:
-            cand[rng.choice(idle)] = (rng.choice([-1.0, 1.0]) if allow_short
-                                      else 1.0) * float(np.abs(cand).mean())
+            cand[rng.choice(idle)] = (rng.choice(_signs(side))
+                                      * float(np.abs(cand).mean()))
         elif roll < 0.45 and len(held) > 2:
             cand[held[np.argmin(np.abs(cand[held]))]] = 0.0
         else:
             cand += rng.normal(0, step, n) * (np.abs(cand) > 0)
-        cand = _project(cand, max_legs, cap, allow_short)
+        cand = _project(cand, max_legs, cap, side)
         v = sc.score(cand, objective, risk_cap)
         if v > best_v:
             best_w, best_v = cand, v
@@ -283,7 +298,7 @@ def _climb(sc: _Scorer, w0: np.ndarray, objective: str, max_legs: int,
 
 
 def _grow(sc: _Scorer, w0: np.ndarray, objective: str, max_legs: int,
-          cap: float, allow_short: bool, rng, steps: int = 150,
+          cap: float, side: str, rng, steps: int = 150,
           risk_cap: float = 0.0) -> tuple:
     """Add legs one at a time, keeping whichever addition helps most.
 
@@ -304,12 +319,12 @@ def _grow(sc: _Scorer, w0: np.ndarray, objective: str, max_legs: int,
         level_w, level_v = None, best_v
         base = float(np.abs(best_w[np.flatnonzero(best_w)]).mean())
         for idx in np.flatnonzero(best_w == 0):
-            for sign in ((1.0, -1.0) if allow_short else (1.0,)):
+            for sign in _signs(side):
                 cand = best_w.copy()
                 cand[idx] = sign * base
-                cand = _project(cand, max_legs, cap, allow_short)
+                cand = _project(cand, max_legs, cap, side)
                 cand, v = _climb(sc, cand, objective, max_legs, cap,
-                                 allow_short, rng, steps, risk_cap)
+                                 side, rng, steps, risk_cap)
                 if v > level_v:
                     level_w, level_v = cand, v
         if level_w is None:      # nothing left to add that pays for itself
@@ -319,7 +334,7 @@ def _grow(sc: _Scorer, w0: np.ndarray, objective: str, max_legs: int,
 
 
 def _exchange(sc: _Scorer, w0: np.ndarray, objective: str, max_legs: int,
-              cap: float, allow_short: bool, rng, rounds: int = 4,
+              cap: float, side: str, rng, rounds: int = 4,
               steps: int = 150, tick=None, risk_cap: float = 0.0) -> tuple:
     """Try replacing each held leg with each instrument not held.
 
@@ -343,16 +358,16 @@ def _exchange(sc: _Scorer, w0: np.ndarray, objective: str, max_legs: int,
         screened = []
         for out_ in held:
             for in_ in idle:
-                for sign in ((1.0, -1.0) if allow_short else (1.0,)):
+                for sign in _signs(side):
                     cand = best_w.copy()
                     cand[in_] = sign * abs(cand[out_])
                     cand[out_] = 0.0
-                    cand = _project(cand, max_legs, cap, allow_short)
+                    cand = _project(cand, max_legs, cap, side)
                     screened.append((sc.score(cand, objective, risk_cap), cand))
         screened.sort(key=lambda t: -t[0])
         shortlist = []
         for _v, cand in screened[:SCREEN_KEEP]:
-            cand, v = _climb(sc, cand, objective, max_legs, cap, allow_short,
+            cand, v = _climb(sc, cand, objective, max_legs, cap, side,
                              rng, steps, risk_cap)
             shortlist.append((v, cand))
         # A swap arrives with the weights of the leg it replaced, so a short
@@ -362,7 +377,7 @@ def _exchange(sc: _Scorer, w0: np.ndarray, objective: str, max_legs: int,
         shortlist.sort(key=lambda t: -t[0])
         round_w, round_v = None, best_v
         for _v, cand in shortlist[:3]:
-            cand, v = _climb(sc, cand, objective, max_legs, cap, allow_short,
+            cand, v = _climb(sc, cand, objective, max_legs, cap, side,
                              rng, steps * 4, risk_cap)
             if v > round_v:
                 round_w, round_v = cand, v
@@ -376,7 +391,7 @@ def _exchange(sc: _Scorer, w0: np.ndarray, objective: str, max_legs: int,
 
 def optimise(closes: pd.DataFrame, fine=None, objective: str = "ROA",
              max_legs: int = 4, max_weight: float = 0.5,
-             allow_short: bool = True, tries: int = 1200,
+             side: str = "Long and short", tries: int = 1200,
              climbs: int = 900, restarts: int = 8, seed: int = 0,
              progress=None, risk_cap: float = 0.0) -> dict:
     """Search weights maximising `objective` over the window in `closes`.
@@ -402,7 +417,7 @@ def optimise(closes: pd.DataFrame, fine=None, objective: str = "ROA",
     sc = _Scorer(closes, fine)
     n = len(sc.syms)
     max_legs = max(2, min(max_legs, n))
-    seeds = _pairs(sc, objective, max_weight, allow_short,
+    seeds = _pairs(sc, objective, max_weight, side,
                    risk_cap=risk_cap)
     # Four rounds apiece is the ceiling for the swap passes; they usually
     # stop earlier, so the bar can finish before the count does.
@@ -427,15 +442,14 @@ def optimise(closes: pd.DataFrame, fine=None, objective: str = "ROA",
             legs = rng.choice(n, size=k, replace=False)
             w = np.zeros(n)
             mag = rng.dirichlet(np.ones(k))
-            w[legs] = mag * (rng.choice([-1.0, 1.0], size=k)
-                             if allow_short else 1.0)
-            w = _project(w, max_legs, max_weight, allow_short)
+            w[legs] = mag * rng.choice(_signs(side), size=k)
+            w = _project(w, max_legs, max_weight, side)
             v = sc.score(w, objective, risk_cap)
             if v > start_v:
                 start_w, start_v = w, v
         if start_w is not None:
             w, v = _climb(sc, start_w, objective, max_legs, max_weight,
-                          allow_short, rng, climbs, risk_cap)
+                          side, rng, climbs, risk_cap)
             pool.append((v, w))
             if v > best_v:
                 best_w, best_v = w, v
@@ -447,7 +461,7 @@ def optimise(closes: pd.DataFrame, fine=None, objective: str = "ROA",
     # on the board — the floor a random pass could only reach by luck.
     for i, (_v0, pw) in enumerate(seeds):
         rng = np.random.default_rng(seed * 1_000 + 900 + i)
-        w, v = _climb(sc, pw, objective, max_legs, max_weight, allow_short,
+        w, v = _climb(sc, pw, objective, max_legs, max_weight, side,
                       rng, climbs, risk_cap)
         pool.append((v, w))
         if v > best_v:
@@ -460,7 +474,7 @@ def optimise(closes: pd.DataFrame, fine=None, objective: str = "ROA",
     # them, and the part that made the answer stop depending on the seed.
     for i, (_v0, pw) in enumerate(seeds):
         rng = np.random.default_rng(seed * 1_000 + 700 + i)
-        w, v = _grow(sc, pw, objective, max_legs, max_weight, allow_short, rng,
+        w, v = _grow(sc, pw, objective, max_legs, max_weight, side, rng,
                  risk_cap=risk_cap)
         pool.append((v, w))
         if v > best_v:
@@ -493,7 +507,7 @@ def optimise(closes: pd.DataFrame, fine=None, objective: str = "ROA",
             tick(best_v)
 
         w, v = _exchange(sc, pw, objective, max_legs, max_weight,
-                         allow_short, rng, tick=_round, risk_cap=risk_cap)
+                         side, rng, tick=_round, risk_cap=risk_cap)
         if v > best_v:
             best_w, best_v = w, v
         tick(best_v)
@@ -506,7 +520,7 @@ def optimise(closes: pd.DataFrame, fine=None, objective: str = "ROA",
     # random draw, is what closes that: same answer whichever start reached it.
     for i in range(POLISH_ROUNDS):
         rng = np.random.default_rng(seed * 1_000 + 500 + i)
-        w, v = _climb(sc, best_w, objective, max_legs, max_weight, allow_short,
+        w, v = _climb(sc, best_w, objective, max_legs, max_weight, side,
                       rng, climbs * 3, risk_cap)
         if v > best_v:
             best_w, best_v = w, v
@@ -525,10 +539,10 @@ def optimise(closes: pd.DataFrame, fine=None, objective: str = "ROA",
         tick(best_v)
 
     w, v = _exchange(sc, best_w, objective, max_legs, max_weight,
-                     allow_short, rng, tick=_round2, risk_cap=risk_cap)
+                     side, rng, tick=_round2, risk_cap=risk_cap)
     if v > best_v:
         best_w, best_v = w, v
-    w, v = _climb(sc, best_w, objective, max_legs, max_weight, allow_short,
+    w, v = _climb(sc, best_w, objective, max_legs, max_weight, side,
                   rng, climbs * 3, risk_cap)
     if v > best_v:
         best_w, best_v = w, v
@@ -547,7 +561,7 @@ def optimise(closes: pd.DataFrame, fine=None, objective: str = "ROA",
     # nothing but a way to spend a click.
     eq = np.zeros(n)
     eq[np.flatnonzero(best_w)] = np.sign(best_w[np.flatnonzero(best_w)])
-    eq = _project(eq, max_legs, 1.0, allow_short)
+    eq = _project(eq, max_legs, 1.0, side)
 
     return {
         "objective": objective, "weights": weights,
