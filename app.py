@@ -490,7 +490,7 @@ def source(label: str, *caches, key: str = "", action: str = "") -> bool:
 # is scheduled, then the analytical tabs, with the standing reference last.
 # Uppercased here rather than in CSS: which element holds the label has moved
 # between Streamlit versions, so a selector is a thing that breaks on upgrade.
-TABS = ["Board", "News", "Calendar", "Margins", "Technical", "Trends",
+TABS = ["Board", "News", "Calendar", "Margins", "Trends", "Technical",
         "Portfolio", "Curve", "Knowledge"]
 t = st.tabs([x.upper() for x in TABS])
 
@@ -571,32 +571,8 @@ with t[3]:
                                  " of: annualised vol, and ATR in dollars.")
     UI.md(R.vol_levels(vol_grid_data(), lsort))
 
-# ------------------------------------------------------------- Technical
-with t[4]:
-    # by_bar belongs in this list. Without it, clearing technical_grid and
-    # prices left by_bar's 15-minute entry intact, so the grid was rebuilt from
-    # byte-identical bars and Refresh fetched nothing — while Board's Refresh
-    # DID clear prices, so the two tabs could then read different fetches of the
-    # same daily series.
-    source("Yahoo · 1H, 4H, 1D, 1W", *PRICE_CACHES, key="technical")
-    grid = technical_grid()
-    codes = [c for c in U.CODES if c in grid["grid"]]
-    if not codes:
-        st.error("No technical grid — not enough price history.")
-    else:
-        tc = st.columns(5)
-        code = tc[0].selectbox("Instrument", codes, key="tech_code",
-                               format_func=lambda c: f"{c}  {U.NAME[c]}",
-                               help="Which contract the grid is drawn for.")
-        avail = [h for h in grid["order"] if h in grid["grid"][code]]
-        hzt = tc[1].selectbox("Horizon", avail, key="tech_hz",
-                              help="Bar size the indicators are computed on."
-                                   " A horizon is only listed when this"
-                                   " instrument has the history to fill it.")
-        UI.md(R.technical(grid, code, hzt, U.DEC[code]))
-
 # --------------------------------------------------------------- Spreads
-with t[5]:
+with t[4]:
     source("Yahoo · 15m, 1H, 4H, 1D", *PRICE_CACHES, key="spreads")
     # Basis is read BEFORE the field is built, because it decides what gets
     # built. Writing into sc[2] first still lands it in the third column —
@@ -625,8 +601,30 @@ with t[5]:
         UI.md(R.spreads(field, per, spsort, R.freshness(stamp, TTL_FAST)))
         if st.session_state.get("sp_auto"):
             autorefresh(stamp, TTL_FAST)
-        with st.expander("Digest — copy this into an LLM"):
-            st.code(R.digest(field["data"][per], _utc()), language=None)
+
+# ------------------------------------------------------------- Technical
+with t[5]:
+    # by_bar belongs in this list. Without it, clearing technical_grid and
+    # prices left by_bar's 15-minute entry intact, so the grid was rebuilt from
+    # byte-identical bars and Refresh fetched nothing — while Board's Refresh
+    # DID clear prices, so the two tabs could then read different fetches of the
+    # same daily series.
+    source("Yahoo · 1H, 4H, 1D, 1W", *PRICE_CACHES, key="technical")
+    grid = technical_grid()
+    codes = [c for c in U.CODES if c in grid["grid"]]
+    if not codes:
+        st.error("No technical grid — not enough price history.")
+    else:
+        tc = st.columns(5)
+        code = tc[0].selectbox("Instrument", codes, key="tech_code",
+                               format_func=lambda c: f"{c}  {U.NAME[c]}",
+                               help="Which contract the grid is drawn for.")
+        avail = [h for h in grid["order"] if h in grid["grid"][code]]
+        hzt = tc[1].selectbox("Horizon", avail, key="tech_hz",
+                              help="Bar size the indicators are computed on."
+                                   " A horizon is only listed when this"
+                                   " instrument has the history to fill it.")
+        UI.md(R.technical(grid, code, hzt, U.DEC[code]))
 
 # ------------------------------------------------------------- Portfolio
 with t[6]:

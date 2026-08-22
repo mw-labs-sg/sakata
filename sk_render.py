@@ -147,63 +147,6 @@ def technical(d: dict, code: str, hz: str, dec: int) -> str:
 
 
 # ---------------------------------------------------------------- Spreads
-def _pad(s, n):
-    s = str(s)
-    return s + " " * max(n - len(s), 0)
-
-
-def _rpad(s, n):
-    s = str(s)
-    return " " * max(n - len(s), 0) + s
-
-
-def _fx(v, d):
-    return "-" if v is None else f"{float(v):.{d}f}"
-
-
-def _sfx(v, d):
-    return "-" if v is None else f'{"+" if v >= 0 else ""}{float(v):.{d}f}'
-
-
-def digest(p: dict, generated: str = "") -> str:
-    L = [f'SAKATA · {p["window"]} · {p["note"]}',
-         f"generated    {generated} UTC",
-         f'window       {p["window"]}, {p["start"]} to {p["end"]} '
-         f'({p["span"]} calendar days)',
-         f'sample       {p["bars"]} bars, {p["instruments"]} instruments, '
-         f'annualised x{p["ann"]}',
-         f'Sharpe SE    +/-{p["se"]} over this span',
-         f'field        {p["nOut"]} outrights + {p["nPair"]} pairs' +
-         (f', {p["nCapped"]} hidden by the 5:1 leg cap' if p["nCapped"] else ""),
-         f'medians      pair Sharpe {p["medPair"]} vs outright {p["medOut"]}'
-         f"   <- like-for-like",
-         f'noise floor  expected best-of-{p["nField"]} Sharpe from pure noise '
-         f'~{round(p["noise"])}. Treat anything below that as unproven.', "",
-         "ranked on ER = Kaufman efficiency: |net move| / path length.",
-         "ER (Adj) = ER * sqrt(bars), for comparing ACROSS windows only.",
-         "vs leg   = spread ER against the better leg held alone, per cent.", "",
-         _pad("#", 3) + " " + _pad("LONG", 6) + _pad("SHORT", 6) +
-         _pad("SECTOR", 9) + _rpad("ER", 7) + _rpad("ERADJ", 7) +
-         _rpad("SHRP", 7) + _rpad("WIN%", 6) + _rpad("TOT%", 8) +
-         _rpad("VOL%", 7) + _rpad("MDD%", 7) + _rpad("VSLEG", 7)]
-    for r in p["rows"]:
-        L.append(_rpad(r["n"], 3) + " " + _pad(r["long"] or "cash", 6) +
-                 _pad(r["short"] or "cash", 6) +
-                 _pad(str(r["sector"])[:8], 9) +
-                 _rpad(_fx(r["er"], 3), 7) + _rpad(_fx(r.get("erAdj"), 2), 7) +
-                 _rpad(_fx(r["sharpe"], 2), 7) + _rpad(_fx(r["win"], 0), 6) +
-                 _rpad(_sfx(r["tot"], 2), 8) + _rpad(_fx(r["vol"], 1), 7) +
-                 _rpad(_fx(r["mdd"], 2), 7) +
-                 _rpad(_sfx(r.get("legDelta"), 0), 7))
-    L += ["", "leg concentration in the top 20 — one ticker dominating the "
-              "short", "column means the field is one macro bet replicated",
-          "  short: " + "  ".join(f"{a}x{b}" for a, b in p["legShort"]),
-          "  long:  " + "  ".join(f"{a}x{b}" for a, b in p["legLong"])]
-    if p.get("dropped"):
-        L += ["", "dropped for thin coverage: " + ", ".join(p["dropped"])]
-    return "\n".join(L)
-
-
 # Default is the normalised measure. Within one window ER and ER (Adj) order
 # rows identically — bars is constant, so sqrt(bars) is a positive scale factor
 # — but the adjusted one is what the by-window tables compare, and offering two
@@ -329,10 +272,6 @@ def _optimal(d: dict, per: str, t: dict, sort: str = DEFAULT_SORT) -> str:
         + row("Bars", bars))
 
     return (eyebrow(f"Optimal Spread by Time Window — best on {esc(sort)}")
-            + note("ER (Adj) = ER &#215; &#8730;bars. Raw ER decays as "
-                   "1/&#8730;n, so the adjusted figure is the one that "
-                   "compares across windows — 1.0 is the noise floor. ROA is "
-                   "the same window's return over its worst drawdown.")
             + table(head, body, _wincols(len(wins))))
 
 
@@ -731,20 +670,6 @@ def spreads(d: dict, per: str, sort: str = DEFAULT_SORT,
                       f"{esc(sort)}, "
                       + ("vol-adjusted legs" if d.get("mode") == "vol"
                          else "equal-notional legs"))
-            + note("ROA is return over maximum drawdown: Tot% divided by the "
-                   "worst hole it took, unannualised, so 10 means it made ten "
-                   "times what that hole cost — measured on the finest marks "
-                   "the window reaches back over, not on its own bar, so a "
-                   "daily window cannot step over an intraday trough. "
-                   "Ratio is how much of the short leg "
-                   "one long leg needs; hover for a whole-contract fill. "
-                   "Sizing: "
-                   + ("matching dollar risk, n × notional × σ."
-                      if d.get("mode") == "vol" else
-                      "matching dollar exposure, n × notional, ignoring vol.")
-                   + " vs leg is the spread's ER against the better of its two "
-                     "legs held alone; negative means it did not pay for itself. "
-                     "Top 10 counts the other windows it also ranks in.")
             + table(head, body)
             # The last two chips follow the basis. They were hardcoded, so
             # notional mode still claimed vol-adjusted legs and advertised a
@@ -855,15 +780,6 @@ def spread_charts(p: dict, t: dict = None,
                   f'<div class="cstats">{stats}</div>'
                   + CH.line_chart(c["t"], series, None, 560, 220, 1) + "</div>")
     return (eyebrow("Why they ranked")
-            + note("Legs rebased to 100 — turquoise long, orange short — so "
-                   "they sit at equal notional. "
-                   + ("The spread over them is <b>vol-adjusted</b>, so it is "
-                      "not the gap between the two lines."
-                      if mode == "vol" else
-                      "The spread over them is <b>equal-notional</b>, which is "
-                      "the gap between the two lines.")
-                   + f" The table's top twelve on {esc(sort)}, in its"
-                     " order — card 3 is row 3.")
             + f'<div class="cgrid">{cards}</div>')
 
 # ------------------------------------------------------------------ Curve
