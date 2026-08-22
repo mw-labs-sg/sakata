@@ -62,3 +62,12 @@ Spreads and portfolio: sakata_stats.py, sk_spreads.py, sk_portfolio.py, sk_rende
 Data fetching: sk_sources.py, sk_amp.py, sk_curve.py, pull.py, build.py, diag_margins.py
 Tab wiring: app.py, sk_render.py
 Static site: build.py, sk_knowledge.py, site/
+Board tab: sk_board.py, sk_render.py, app.py
+Technical tab: sk_technical.py, sk_render.py, app.py
+Calendar tab: sk_calendar.py, sk_render.py, app.py
+Number formatting: sk_fmt.py, sk_board.py, sk_curve.py, sk_margins.py, sk_technical.py
+
+## WARNINGS
+
+app.py:106 reloads sakata_stats and sk_fmt by string name — not an import edge.
+Update that list when module names change.
