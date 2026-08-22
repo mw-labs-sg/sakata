@@ -497,7 +497,8 @@ with t[3]:
                                  " (notional ÷ maintenance) and days of ATR"
                                  " are the two that say whether a contract is"
                                  " expensive to hold relative to how much it"
-                                 " actually moves.")
+                                 " actually moves. Sector groups the book by"
+                                 " class instead of ranking it.")
     UI.md(R.margins(margin_data(), msort))
 
 # ------------------------------------------------------------- Technical

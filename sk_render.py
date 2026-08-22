@@ -946,6 +946,12 @@ def curve(d: dict, code: str) -> str:
 
 
 # ---------------------------------------------------------------- Margins
+# "Sector" is the odd one out: it ranks on a string, so it sorts on the
+# universe's own order rather than alphabetically — Indices, Bonds,
+# Currencies, Crypto, then Energy, Metals, Grains, Softs — and breaks ties
+# inside a sector on HV percentile. It is the one sort that gives back the
+# Financials/Commodities grouping the merge took away, for the times you want
+# to read the book by class rather than by extreme.
 MARGIN_SORTS = {
     "HV %ile": ("volPct", True),
     "ATR %ile": ("atrPct", True),
@@ -955,43 +961,64 @@ MARGIN_SORTS = {
     "ATR $": ("atr", True),
     "Notional": ("notional", True),
     "Maint $": ("maint", True),
+    "Sector": ("sector", False),
 }
 
+SECTOR_ORDER = {s: i for i, s in enumerate(
+    U.GROUPS["Financials"] + U.GROUPS["Commodities"])}
+
 # Two lines per header, and a hairline before each new block. Twelve columns
-# in three groups — what it costs, what that costs against risk, and the risk
-# itself — read as three tables the eye can take one at a time; the same
-# twelve as an unbroken run read as a wall.
+# in three groups of four — where the contract sits in its own year, what it
+# costs, and the levels those two came from — read as three tables the eye
+# can take one at a time; the same twelve as an unbroken run read as a wall.
+#
+# The percentiles sit beside Last because they are the verdict: every other
+# column is a level you have to already know the usual range of before it
+# says anything, and these two are that range, already taken. They were last
+# on the row, four columns of levels away from the name they belong to.
 _H = [("", "Instrument", "l"), ("", "Last", ""),
-      ("Notional", "$", ""), ("Maint", "$", ""),
-      ("", "Lev", "sep"), ("Days", "ATR", ""),
-      ("HV", "20d", "sep"), ("HV", "100d", ""),
-      ("ATR $", "20d", ""), ("ATR $", "100d", ""),
-      ("HV", "%ile", "sep"), ("ATR", "%ile", "")]
+      ("HV", "%", ""), ("ATR", "%", ""),
+      ("Notional", "$", "sep"), ("Maint", "$", ""),
+      ("", "Lev", ""), ("Days", "ATR", ""),
+      ("HV", "20", "sep"), ("HV", "100", ""),
+      ("ATR $", "20", ""), ("ATR $", "100", "")]
 
 
 def _head() -> str:
-    """Two lines per header cell, both in the reading ink, both centred.
+    """Two lines per header cell, centred, on a shared top and bottom line.
 
     The qualifier was set at 9px on 0.65 opacity and read as damage rather
-    than as hierarchy — at that size the eye cannot resolve whether HV/20d is
+    than as hierarchy — at that size the eye cannot resolve whether HV/20 is
     two words or one smudged one.
 
     Centred rather than right-aligned to the figures: a two-line header hung
-    off the right edge puts "HV" and "20d" on different left margins whenever
+    off the right edge puts "HV" and "20" on different left margins whenever
     the words differ in width, so the stack reads as two stray labels instead
-    of one. Centring gives every cell a shared axis, and `vertical-align:
-    bottom` drops the one-line headers (Last, Lev) onto the same baseline as
-    the second line of the stacked ones, so the row has a single floor.
+    of one.
+
+    The one-word headers — Instrument, Last, Lev — take the top line and an
+    empty second, so they sit level with Notional, Maint, Days, HV and ATR
+    rather than sinking to the qualifier line. Every head-word on one line,
+    every qualifier on the other. Emitting the blank line rather than
+    aligning the cell to the top keeps the line boxes identical: a 10px
+    qualifier and a 10.5px label do not land on the same pixel by themselves.
     """
     t = _tok()
     out = ""
     for top, bot, cls in _H:
         c = f' class="{cls}"' if cls else ""
-        lead = (f'<span style="display:block;font-size:10px;font-weight:600;'
-                f'color:{t.get("body")};letter-spacing:.07em;'
-                f'margin-bottom:1px">{top}</span>' if top else "")
+        if top:
+            l1 = (f'<span style="display:block;font-size:10px;font-weight:600;'
+                  f'color:{t.get("body")};letter-spacing:.07em;'
+                  f'margin-bottom:1px">{top}</span>')
+            l2 = bot
+        else:
+            l1 = (f'<span style="display:block;font-size:10.5px;'
+                  f'font-weight:600;color:{t.get("ink")};letter-spacing:.08em;'
+                  f'margin-bottom:1px">{bot}</span>')
+            l2 = "&nbsp;"
         out += (f'<th{c} style="color:{t.get("ink")};font-weight:600;'
-                f'text-align:center;vertical-align:bottom">{lead}{bot}</th>')
+                f'text-align:center;vertical-align:bottom">{l1}{l2}</th>')
     return out
 
 
@@ -1004,7 +1031,8 @@ def margins(d: dict, sort: str = "HV %ile") -> str:
     the only question the dropdown exists to ask. Nineteen rows is a short
     table. The sector swatch already carries the class the two eyebrows were
     spelling out, and the legend now names all eight sectors rather than the
-    two groups, so the merge returns more than it takes.
+    two groups, so the merge returns more than it takes. Sorting on Sector
+    puts the old grouping back for the times you want it.
 
     The level columns — notional, maintenance, ATR $ — are not comparable
     across classes, and sorting the merged list on one of them clumps the
@@ -1012,14 +1040,15 @@ def margins(d: dict, sort: str = "HV %ile") -> str:
     already (6J notional against NKD); the sorts actually reached for are the
     percentiles and leverage, and those are unit-free.
 
-    Column order reads as one sentence: what the contract costs (last,
-    notional, maintenance), what that costs against risk (leverage, days of
-    ATR), and then the risk itself (HV, ATR). Margin % and margin-over-vol are
-    gone: leverage is the same fact as margin % inverted and in the unit the
-    decision is actually made in, and margin-over-vol restated it against
-    annualised vol while days-of-ATR already says it against the move the
-    contract makes in a day. The z-scores are gone with them — the percentile
-    ranks the same series against the same year and needs no explaining.
+    Column order reads as one sentence: who it is and where it sits in its
+    own year (last, HV %, ATR %), what it costs (notional, maintenance,
+    leverage, days of ATR), and then the levels those came from (HV, ATR).
+    Margin % and margin-over-vol are gone: leverage is the same fact as
+    margin % inverted and in the unit the decision is actually made in, and
+    margin-over-vol restated it against annualised vol while days-of-ATR
+    already says it against the move the contract makes in a day. The
+    z-scores are gone with them — the percentile ranks the same series
+    against the same year and needs no explaining.
     """
     t = _tok()
     key, desc = MARGIN_SORTS.get(sort, MARGIN_SORTS["HV %ile"])
@@ -1031,13 +1060,20 @@ def margins(d: dict, sort: str = "HV %ile") -> str:
         cls = "warn" if p >= 80 else "pos" if p <= 20 else "dim"
         return f'<td class="{cls} {sep}">{p:.0f}</td>'
 
+    def scell(v, dec, cls=""):
+        # cell() drops its class when the value is missing, which on a block
+        # edge would take the hairline with it and leave a gap in the rule.
+        n = num(v, dec)
+        return (f'<td class="faint {cls}">—</td>' if n is None
+                else f'<td class="{cls}">{n}</td>')
+
     def levcell(v):
         # Notional over maintenance, carrying its unit. "29.8x" is a sentence;
         # 3.35 in a column headed Marg % is a number you have to invert in
         # your head before it means anything.
         if v is None:
-            return '<td class="faint sep">—</td>'
-        return f'<td class="sep" style="color:{t.get("ink")}">{v:,.1f}x</td>'
+            return '<td class="faint">—</td>'
+        return f'<td style="color:{t.get("ink")}">{v:,.1f}x</td>'
 
     # Leverage is computed here rather than in sk_margins: it is notional over
     # maintenance, both already on the row, and a copy keeps the cached
@@ -1047,8 +1083,15 @@ def margins(d: dict, sort: str = "HV %ile") -> str:
             for r in d.get("rows", [])]
     if not rows:
         return flag
-    rows.sort(key=lambda r: (r.get(key) is None,
-                             -(r.get(key) or 0) if desc else (r.get(key) or 0)))
+
+    def order(r):
+        if key == "sector":
+            return (0, SECTOR_ORDER.get(r.get("sector"), 99),
+                    -(r.get("volPct") or 0))
+        v = r.get(key)
+        return (v is None, -(v or 0) if desc else (v or 0), 0)
+
+    rows.sort(key=order)
 
     body, seen = "", set()
     for r in rows:
@@ -1070,7 +1113,12 @@ def margins(d: dict, sort: str = "HV %ile") -> str:
                  # thing on the row.
                  f'<td style="color:{t.get("ink")}">'
                  f'{num(r.get("last"), r.get("dec", 2)) or "—"}</td>'
-                 + cell(r.get("notional"), 0, "dim")
+                 # The two percentiles adjacent, and both next to the name:
+                 # one asks how wide the closes have been, the other how wide
+                 # the days have been, and the pair only says something when
+                 # they disagree.
+                 + pcell(vp) + pcell(r.get("atrPct"))
+                 + scell(r.get("notional"), 0, "dim sep")
                  # Maintenance in the reading ink alongside last: it is the
                  # cash the contract actually ties up, and dimming it put the
                  # one number a size decision starts from behind the
@@ -1078,15 +1126,10 @@ def margins(d: dict, sort: str = "HV %ile") -> str:
                  + f'<td style="color:{t.get("ink")}">'
                    f'{num(r.get("maint"), 0) or "—"}</td>'
                  + levcell(r.get("lev")) + cell(r.get("daysATR"), 1)
-                 + cell(r.get("annVol"), 1, "sep")
+                 + scell(r.get("annVol"), 1, "sep")
                  + cell(r.get("vol100"), 1, "dim")
                  + cell(r.get("atr"), 0) + cell(r.get("atr100"), 0, "dim")
-                 # The two percentiles adjacent: one asks how wide the closes
-                 # have been, the other how wide the days have been, and the
-                 # pair only says something when they disagree — which you
-                 # cannot see with four columns of levels sitting between
-                 # them.
-                 + pcell(vp, "sep") + pcell(r.get("atrPct")) + "</tr>")
+                 + "</tr>")
 
     # Legend in universe order, not sort order: the key is a map of the book
     # and should not reshuffle every time the ranking column changes.
