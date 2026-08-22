@@ -190,7 +190,7 @@ class _Scorer:
                              -MAX_ROA, MAX_ROA))
 
 
-SIDES = ("Long and short", "Long only", "Short only")
+SIDES = ("Long and Short", "Long only", "Short only")
 
 
 def _signs(side: str) -> tuple:
@@ -391,7 +391,7 @@ def _exchange(sc: _Scorer, w0: np.ndarray, objective: str, max_legs: int,
 
 def optimise(closes: pd.DataFrame, fine=None, objective: str = "ROA",
              max_legs: int = 4, max_weight: float = 0.5,
-             side: str = "Long and short", tries: int = 1200,
+             side: str = "Long and Short", tries: int = 1200,
              climbs: int = 900, restarts: int = 8, seed: int = 0,
              progress=None, risk_cap: float = 0.0) -> dict:
     """Search weights maximising `objective` over the window in `closes`.

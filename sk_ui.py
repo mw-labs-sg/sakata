@@ -301,6 +301,27 @@ svg .neg {{ color: inherit !important; }}
    the 74ch measure that keeps body prose readable. */
 .note.wide {{ max-width: none; font-size: 12.5px; line-height: 1.6; }}
 .cstats {{ display: flex; flex-wrap: wrap; gap: 3px 8px; margin: 0 0 8px; font-size: 10.5px; line-height: 1.5; }}
+/* Portfolio: the weights beside the picture rather than above it. Three
+   full-width blocks stacked meant scrolling past the argument to reach the
+   outcome, and the scored table — four rows of seven numbers — spent the
+   whole page width saying very little. It moves inside the chart card, which
+   is where the Trends cards already put their stats.
+   1.4:1 because the weights table carries eleven columns and the chart
+   carries none. Both halves keep their own scroll, so a narrow laptop gets a
+   cramped table rather than a broken page. */
+.pfgrid {{ display: grid; grid-template-columns: minmax(0, 1.72fr) minmax(0, 1fr); gap: 18px; align-items: start; }}
+@media (max-width: 1000px) {{ .pfgrid {{ grid-template-columns: 1fr; }} }}
+.pfgrid .plot {{ padding: 13px 12px 10px; margin: 0; }}
+.pfgrid .plot .scroll {{ margin-bottom: 8px; }}
+/* Both halves lose the 12px cell padding the full-width tables were sized
+   for. Eleven columns at 24px of horizontal padding each spend 264px on
+   whitespace, which is most of what the chart needed. */
+.pfgrid td, .pfgrid thead th {{ padding-left: 6px; padding-right: 6px; }}
+.pfgrid table {{ font-size: 12px; }}
+.pfgrid thead th {{ font-size: 9.5px; letter-spacing: .04em; }}
+.pfgrid .nm {{ font-size: 10px; }}
+.pfgrid .plot td {{ padding: 4px; }}
+.pfgrid .plot thead th {{ padding: 5px 4px; font-size: 9px; }}
 @media (max-width: 900px) {{ .cgrid {{ grid-template-columns: 1fr !important; }} }}
 /* Icon button: square, quiet, teal on hover — the header switch from
    index.html, minus the SVG. Scoped to the theme toggle. Unscoped, this block

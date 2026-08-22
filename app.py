@@ -490,7 +490,7 @@ def source(label: str, *caches, key: str = "", action: str = "") -> bool:
 # is scheduled, then the analytical tabs, with the standing reference last.
 # Uppercased here rather than in CSS: which element holds the label has moved
 # between Streamlit versions, so a selector is a thing that breaks on upgrade.
-TABS = ["Board", "News", "Calendar", "Margins", "Trends", "Technical",
+TABS = ["Board", "News", "Calendar", "Margin Vol", "Trends", "Technical",
         "Portfolio", "Curve", "Knowledge"]
 t = st.tabs([x.upper() for x in TABS])
 

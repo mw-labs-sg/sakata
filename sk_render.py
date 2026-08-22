@@ -400,7 +400,6 @@ def portfolio(res: dict, per: str, pl: dict = None,
     lev, gross = pl.get("lev", 0), pl.get("gross", 0)
 
     line = " · ".join(f'{w["code"]} {w["w"]:+.0f}%' for w in res["weights"])
-    top = max(abs(w["w"]) for w in res["weights"]) or 1
 
     # Under half the account in margin is room to be wrong; past three
     # quarters there is no room left for a bad day, let alone another trade.
@@ -426,17 +425,17 @@ def portfolio(res: dict, per: str, pl: dict = None,
             if leg.get("needs"):
                 tip += (f' · fills from about ${leg["needs"]:,.0f} of '
                         f'capital at this weight')
-        bar = (f'<span style="display:inline-block;height:8px;border-radius:2px;'
-               f'background:{col};width:{abs(leg["w"]) / top * 54:.0f}px;'
-               f'vertical-align:middle"></span>')
-        rows += (f'<tr><td class="l faint">{i}</td>'
-                 f'<td class="l">{swatch(U.SECTOR.get(code, ""))}{esc(code)} '
+        # No ordinal and no weight bar. Beside the chart the table has 676px
+        # for eleven columns, and those two were the only ones carrying
+        # nothing a neighbour did not already say — the rows are in weight
+        # order and the bar was drawing the number next to it.
+        rows += (f'<tr><td class="l">'
+                 f'{swatch(U.SECTOR.get(code, ""))}{esc(code)} '
                  f'<span class="nm">{esc(U.NAME.get(code, ""))}</span></td>'
                  f'<td class="l" style="color:{col};font-weight:600">'
                  f'{"long" if long_ else "short"}</td>'
                  f'<td style="color:{ink};font-weight:700">'
                  f'{abs(leg["w"]):.1f}%</td>'
-                 f'<td class="l">{bar}</td>'
                  + cell(leg.get("risk"), 1, "dim")
                  + (f'<td class="dim">{abs(leg["notional"]):,.0f}</td>'
                     if leg.get("notional") is not None
@@ -455,9 +454,9 @@ def portfolio(res: dict, per: str, pl: dict = None,
                  + "</tr>")
     if pl:
         got = (pl.get("filled") or {}).get("gross") or 0
-        rows += (f'<tr><td class="l"></td><td class="l dim">Gross exposure</td>'
+        rows += (f'<tr><td class="l dim">Gross exposure</td>'
                  f'<td class="l dim">{lev:.2f}×</td>'
-                 f'<td class="dim">100.0%</td><td></td>'
+                 f'<td class="dim">100.0%</td>'
                  f'<td class="dim">100.0</td>'
                  f'<td style="color:{ink};font-weight:700">'
                  f'{pl.get("target", 0):,.0f}</td>'
@@ -475,10 +474,10 @@ def portfolio(res: dict, per: str, pl: dict = None,
         net_pc = net_d / capital * 100 if capital else 0
         nfill = sum((l["fill"] or {}).get("notional") or 0 for l in legs)
         ncol = pos if abs(net_pc) < 25 else amber
-        rows += (f'<tr><td class="l"></td><td class="l dim">Net exposure</td>'
+        rows += (f'<tr><td class="l dim">Net exposure</td>'
                  f'<td class="l dim" style="color:{ncol}">'
                  f'{"long" if net_d >= 0 else "short"}</td>'
-                 f'<td class="dim">{res["net"]:+.1f}%</td><td></td>'
+                 f'<td class="dim">{res["net"]:+.1f}%</td>'
                  f'<td class="faint">—</td>'
                  f'<td style="color:{ncol};font-weight:700">'
                  f'{net_d:+,.0f}</td>'
@@ -532,42 +531,61 @@ def portfolio(res: dict, per: str, pl: dict = None,
     held = f"held at {pl.get('lev', 0):.2f}×"
     if pl.get("capped"):
         held += f", capped from {pl.get('wantLev', 0):.2f}×"
-    return (eyebrow(f"What this portfolio scored — {held}",
-                    (f'<span style="margin-left:auto;color:{mute};'
-                     f'font-size:11.5px;font-weight:500">{turn["kept"]} of '
-                     f'{turn["of"]} legs held · {turn["turnover"]:.0f}% '
-                     f'turnover since the last run</span>') if turn else "")
-            + table('<th class="l"></th><th>ER (Adj)</th><th>ROA</th>'
-                    '<th>Sharpe</th><th>Win%</th><th>Vol%</th><th>Tot%</th>'
-                    '<th>MDD%</th>',
-                    statrow("Optimized", st_, False, "ideal weights")
-                    # Executable, not "as filled": it is the row you can send,
-                    # and it is washed green because it is the one that is
-                    # true. The ideal above it is the argument for it.
-                    + statrow("Executable", filled, True, "whole contracts",
-                              wash=f"background:{pos}1f;")
-                    + statrow("Equal weight", eq, False, "same legs")
-                    # The row that says how fast a fit like this decays: the
-                    # weights never saw these bars. Amber when the tail is too
-                    # short to carry an opinion.
-                    + statrow("Held forward",
-                              (hold or {}).get("stats"), False,
-                              f'fit on {hold["trainBars"]} bars, held through '
-                              f'{hold["testBars"]}' if hold else "",
-                              wash=(f"background:{amber}14;"
-                                    if (hold or {}).get("thin") else "")))
-            + eyebrow(f"Portfolio Weights — {esc(res['objective'])}, "
-                      f"{esc(per)}",
-                      f'<span style="margin-left:auto;color:{mute};'
-                      f'font-size:11.5px;font-weight:500">{esc(line)}</span>')
-            + table('<th class="l">#</th><th class="l">Instrument</th>'
-                    '<th class="l">Side</th><th>Weight</th><th class="l"></th>'
-                    '<th>Risk%</th><th>Notional</th><th class="l">Fill</th>'
-                    '<th>Miss</th><th>Fees</th><th>Margin</th>', rows)
-            + '<div class="plot" style="margin-top:10px">'
+    turned = (f'{turn["kept"]} of {turn["of"]} legs held · '
+              f'{turn["turnover"]:.0f}% turnover since the last run'
+              if turn else "")
+
+    scored = (statrow("Optimized", st_, False)
+              # Executable, not "as filled": it is the row you can send, and
+              # it is washed green because it is the one that is true. The
+              # ideal above it is the argument for it.
+              + statrow("Executable", filled, True,
+                        wash=f"background:{pos}1f;")
+              + statrow("Equal weight", eq, False)
+              # The row that says how fast a fit like this decays: the weights
+              # never saw these bars. Amber when the tail is too short to
+              # carry an opinion.
+              + statrow("Held forward", (hold or {}).get("stats"), False,
+                        wash=(f"background:{amber}14;"
+                              if (hold or {}).get("thin") else "")))
+    # The notes that used to trail each label are one line under the title
+    # instead. In a 400px card they were wrapping the label column to three
+    # lines and pushing the numbers off the right edge.
+    sub = " · ".join(x for x in (
+        "ideal vs whole contracts vs equal weight",
+        (f'held forward fit on {hold["trainBars"]} bars through '
+         f'{hold["testBars"]}') if hold else "", turned) if x)
+
+    # A bare table, not table(): inside the card its border would be a second
+    # rectangle drawn 14px inside the first one.
+    card = ('<div class="plot">'
+            f'<div class="ctitle"><b>What this portfolio scored</b>'
+            f'<span>{esc(held)}</span></div>'
+            + (f'<div class="cstats" style="color:{mute}">{esc(sub)}</div>'
+               if sub else "")
+            + '<div class="scroll"><table>'
+              '<thead><tr><th class="l"></th><th>ER adj</th><th>ROA</th>'
+              '<th>Sharpe</th><th>Win%</th><th>Vol%</th><th>Tot%</th>'
+              '<th>MDD%</th></tr></thead>'
+              f'<tbody>{scored}</tbody></table></div>'
             + f'<div class="clegend">{legend}</div>'
-            + CH.line_chart(curve["t"], series, None, 1100, 300, 1)
+            + CH.line_chart(curve["t"], series, None, 560, 300, 1)
             + "</div>")
+
+    weights = ('<div>'
+               + eyebrow(f"Portfolio Weights — {esc(res['objective'])}, "
+                         f"{esc(per)}",
+                         f'<span style="margin-left:auto;color:{mute};'
+                         f'font-size:11.5px;font-weight:500">{esc(line)}'
+                         f'</span>')
+               + table('<th class="l">Instrument</th>'
+                       '<th class="l">Side</th><th>Weight</th>'
+                       '<th>Risk%</th><th>Notional</th>'
+                       '<th class="l">Fill</th><th>Miss</th><th>Fees</th>'
+                       '<th>Margin</th>', rows)
+               + '</div>')
+    return f'<div class="pfgrid">{weights}{card}</div>'
+
 
 
 def freshness(stamp, ttl: int) -> str:
