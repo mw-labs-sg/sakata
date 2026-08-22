@@ -238,7 +238,9 @@ def build_margins(margins: dict, daily: dict) -> dict:
             # Last and multiplier ship alongside notional so the arithmetic is
             # checkable on screen. A notional that looks wrong is usually a
             # multiplier problem, and without the price you cannot tell.
-            "last": _r(last, 6), "mult": mult,
+            # Round to the contract's own precision — a flat 6
+            # truncated 6J's 7th digit.
+            "last": _r(last, U.DEC[code]), "mult": mult,
             "maint": _r(maint, 0), "day": _r(m.get("day"), 0),
             "notional": _r(notl, 0), "marginPct": _r(mpct, 2),
             "annVol": _r(vol, 1), "vol100": _r(vol100, 1),
