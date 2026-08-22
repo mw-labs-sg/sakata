@@ -6,3 +6,7 @@ __pycache__/
 # Local audit and review notes. Deliberately outside docs/, which is the
 # GitHub Pages root and would serve them publicly.
 audits/
+
+# Local margin history for the day-over-day column. Machine state, not
+# source: committing it would dirty the tree on every run.
+data/maint.json

@@ -249,7 +249,13 @@ def build_vol_grid(frames: dict) -> dict:
     return {"rows": rows, "spans": spans, "warn": warn}
 
 
-def build_margins(margins: dict, daily: dict) -> dict:
+def build_margins(margins: dict, daily: dict, prev: dict = None) -> dict:
+    """`prev` is {code: maintenance} from the last day it was observed.
+
+    Optional because build.py and pull.py have no history to hand it — the
+    static site ships the level, the terminal ships the level and the move.
+    """
+    prev = prev or {}
     rows = []
     for code in U.CODES:
         m = margins.get(code) or {}
@@ -289,6 +295,13 @@ def build_margins(margins: dict, daily: dict) -> dict:
             # truncated 6J's 7th digit.
             "last": _r(last, U.DEC[code]), "mult": mult,
             "maint": _r(maint, 0), "day": _r(m.get("day"), 0),
+            # The exchange raising maintenance is the one number on this row
+            # that is a decision rather than a measurement, and it is the
+            # reason the tab exists. Null when there is no earlier
+            # observation; zero is a real answer and reads differently.
+            "maintPrev": _r(prev.get(code), 0),
+            "maintChg": (_r(maint - prev[code], 0)
+                         if (maint and prev.get(code)) else None),
             "notional": _r(notl, 0), "marginPct": _r(mpct, 2),
             "annVol": _r(vol, 1), "vol100": _r(vol100, 1),
             "volPct": _r(pct, 0), "volZ": _r(volz, 1),

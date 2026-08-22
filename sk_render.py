@@ -12,6 +12,7 @@ rules, so evaluating them at render time keeps them correct regardless of how
 old the price data is.
 """
 import datetime as dt
+import os
 
 import sk_charts as CH
 import sk_knowledge as KN
@@ -985,7 +986,7 @@ _H = [("", "Instrument", "l"), ("", "Last", ""),
       ("ATR $", "20", ""), ("ATR $", "100", "")]
 
 
-def _head() -> str:
+def _head(delta: bool = False) -> str:
     """Two lines per header cell, centred, on a shared top and bottom line.
 
     The qualifier was set at 9px on 0.65 opacity and read as damage rather
@@ -1006,7 +1007,13 @@ def _head() -> str:
     """
     t = _tok()
     out = ""
-    for top, bot, cls in _H:
+    # The delta column only exists once there is an earlier day to subtract.
+    # On a first run the header would otherwise promise a comparison the
+    # payload cannot make and print nineteen dashes under it.
+    cols = list(_H)
+    if delta:
+        cols.insert(6, ("Maint", "\u0394", ""))
+    for top, bot, cls in cols:
         c = f' class="{cls}"' if cls else ""
         if top:
             l1 = (f'<span style="display:block;font-size:10px;font-weight:600;'
@@ -1054,6 +1061,20 @@ def margins(d: dict, sort: str = "HV %ile") -> str:
     t = _tok()
     key, desc = MARGIN_SORTS.get(sort, MARGIN_SORTS["HV %ile"])
     flag = f'<div class="flag">{esc(d["warn"])}</div>' if d.get("warn") else ""
+    since = d.get("prevDate")
+
+    def dcell(v):
+        # Blank, not a dash, when nothing moved. Fourteen of nineteen rows
+        # hold still on a normal day and a column of dashes would bury the
+        # five that did not. A dash still means "no earlier reading", which
+        # is a different statement from "unchanged".
+        if v is None:
+            return '<td class="faint">—</td>'
+        if not v:
+            return "<td></td>"
+        col = t.get("amber") if v > 0 else t.get("teal")
+        return (f'<td style="color:{col}">{"+" if v > 0 else "−"}'
+                f'{abs(v):,.0f}</td>')
 
     def pcell(p, sep=""):
         if p is None:
@@ -1126,6 +1147,7 @@ def margins(d: dict, sort: str = "HV %ile") -> str:
                  # statistics derived from it.
                  + f'<td style="color:{t.get("ink")}">'
                    f'{num(r.get("maint"), 0) or "—"}</td>'
+                 + (dcell(r.get("maintChg")) if since else "")
                  + levcell(r.get("lev")) + cell(r.get("daysATR"), 1)
                  + scell(r.get("annVol"), 1, "sep")
                  + cell(r.get("vol100"), 1, "dim")
@@ -1138,10 +1160,20 @@ def margins(d: dict, sort: str = "HV %ile") -> str:
         f'<span class="key">{swatch(s)}{esc(s)}</span>'
         for g in ("Financials", "Commodities") for s in U.GROUPS[g]
         if s in seen)
+    # The label carries the date it actually compared against, not the word
+    # "yesterday". The terminal is not opened every day, and a four-day gap
+    # that says yesterday is worse than no column at all.
+    when = ""
+    if since:
+        try:
+            when = " · maint vs " + dt.date.fromisoformat(since).strftime(
+                "%-d %b" if os.name != "nt" else "%#d %b")
+        except ValueError:
+            when = ""
     return (flag
-            + eyebrow(f"{len(rows)} contracts",
+            + eyebrow(f"{len(rows)} contracts{when}",
                       f'<span class="legend">{legend}</span>')
-            + table(_head(), body))
+            + table(_head(bool(since)), body))
 
 
 # ------------------------------------------------- Volatility across bars

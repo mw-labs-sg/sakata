@@ -115,6 +115,41 @@ def _cache_key() -> str:
 
 CACHE_V = _cache_key()
 DOCS = Path(__file__).parent / "docs" / "data"
+MAINT_HIST = Path(__file__).parent / "data" / "maint.json"
+
+
+def _maint_snapshot(today: dict) -> tuple:
+    """Two slots on disk: the last observation from an earlier day, and today's.
+
+    One slot does not survive the second pull of the day. The first write
+    would replace yesterday with today, and every comparison after it would
+    be against itself and read zero everywhere.
+
+    Only nineteen maintenance figures are kept — a few hundred bytes — because
+    that is the only column here that is a decision rather than a
+    measurement. Price change is the Board's job and day-over-day vol is
+    noise. An empty `today` reads the history without advancing it, which is
+    what the AMP-failed path wants: the fallback row carries last known
+    maintenance, and writing that back as today would erase the real
+    yesterday it came from.
+    """
+    stamp = dt.date.today().isoformat()
+    try:
+        h = json.loads(MAINT_HIST.read_text(encoding="utf-8"))
+    except Exception:
+        h = {}
+    curr = h.get("curr") or {}
+    if curr.get("maint") and curr.get("date") not in (None, stamp):
+        h["prev"] = curr
+    if today:
+        h["curr"] = {"date": stamp, "maint": today}
+        try:
+            MAINT_HIST.parent.mkdir(parents=True, exist_ok=True)
+            MAINT_HIST.write_text(json.dumps(h), encoding="utf-8")
+        except OSError:
+            pass
+    p = h.get("prev") or {}
+    return p.get("maint") or {}, p.get("date")
 
 
 def _utc() -> str:
@@ -330,13 +365,18 @@ def margin_data(v: str = CACHE_V) -> dict:
     except Exception as e:
         raw = {}
         warn = f"{type(e).__name__}: {str(e)[:110]}"
+    live = bool(raw)
     if not raw:
         old = _fallback("margins") or {"rows": []}
         raw = {r["code"]: {"maint": r.get("maint"), "day": r.get("day")}
                for r in old.get("rows", []) if r.get("maint")}
         warn = (warn or "AMP returned nothing") + " — showing last known "
         warn += "maintenance with live vol"
-    d = MARGIN.build_margins(raw, prices("1d", "10y"))
+    today = ({c: v.get("maint") for c, v in raw.items() if v.get("maint")}
+             if live else {})
+    prev, since = _maint_snapshot(today)
+    d = MARGIN.build_margins(raw, prices("1d", "10y"), prev)
+    d["prevDate"] = since
     d["warn"] = warn
     return d
 
