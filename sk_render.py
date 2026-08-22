@@ -15,6 +15,7 @@ import datetime as dt
 
 import sk_charts as CH
 import sk_knowledge as KN
+import sk_margins as MG
 import sk_universe as U
 from sk_ui import (BIAS_COL, C, SECTOR_COL, cell, chips, esc, eyebrow, note,
                    num, pct, swatch, table)
@@ -1141,6 +1142,121 @@ def margins(d: dict, sort: str = "HV %ile") -> str:
             + eyebrow(f"{len(rows)} contracts",
                       f'<span class="legend">{legend}</span>')
             + table(_head(), body))
+
+
+# ------------------------------------------------- Volatility across bars
+# The bar list is sk_margins' — it decides which frames get computed, and a
+# second copy here would be a grid that silently disagreed with its own data.
+MG_BARS = MG.VOL_BARS
+TF_LABEL = {"15m": "15m", "1h": "1H", "4h": "4H", "1d": "1D", "1wk": "1W"}
+
+# Rank on any one column, or group by sector. No level sorts here — every
+# figure in the table is already a rank, so there is nothing else to rank on.
+VOL_GRID_SORTS = {f"{m.upper() if m == 'atr' else 'HV'} {TF_LABEL[tf]}":
+                  (m, tf) for m in ("hv", "atr") for tf in MG_BARS}
+VOL_GRID_SORTS["Sector"] = ("sector", "")
+
+# Two blocks of five. "HV" and "ATR" repeat down each block rather than
+# spanning it: the main table already repeats a head-word across its pairs
+# (HV 20 / HV 100, ATR $ 20 / ATR $ 100), and a colspan group row would be
+# the only two-storey header in the app.
+_VH = ([("", "Instrument", "l")]
+       + [("HV", TF_LABEL[tf], "sep" if i == 0 else "")
+          for i, tf in enumerate(MG_BARS)]
+       + [("ATR", TF_LABEL[tf], "sep" if i == 0 else "")
+          for i, tf in enumerate(MG_BARS)])
+
+
+def _vhead() -> str:
+    t = _tok()
+    out = ""
+    for top, bot, cls in _VH:
+        c = f' class="{cls}"' if cls else ""
+        if top:
+            l1 = (f'<span style="display:block;font-size:10px;font-weight:600;'
+                  f'color:{t.get("body")};letter-spacing:.07em;'
+                  f'margin-bottom:1px">{top}</span>')
+            l2 = bot
+        else:
+            l1 = (f'<span style="display:block;font-size:10.5px;'
+                  f'font-weight:600;color:{t.get("ink")};letter-spacing:.08em;'
+                  f'margin-bottom:1px">{bot}</span>')
+            l2 = "&nbsp;"
+        out += (f'<th{c} style="color:{t.get("ink")};font-weight:600;'
+                f'text-align:center;vertical-align:bottom">{l1}{l2}</th>')
+    return out
+
+
+def vol_grid(d: dict, sort: str = "HV 1D") -> str:
+    """The same nineteen rows, read at five bar sizes.
+
+    The margin table answers "is this expensive for what it moves" one
+    contract at a time. This one answers "what is moving, and since when",
+    which is the question the margin table was being used for sideways. Every
+    cell is a percentile of that contract against its own history at that bar
+    size, so the whole grid is on one scale and the row reads left to right
+    as a term structure: hot at 15m and cold at 1W is something that started
+    this morning, cold at 15m and hot at 1W is something burning out.
+
+    No row wash here, unlike the margin table. Ten tinted cells a row already
+    make a heat map, and a background behind them would be a second signal
+    competing with the one the reader is meant to scan.
+    """
+    t = _tok()
+    rows = list(d.get("rows") or [])
+    if not rows:
+        return ""
+    meas, tf = VOL_GRID_SORTS.get(sort, VOL_GRID_SORTS["HV 1D"])
+
+    def order(r):
+        if meas == "sector":
+            return (0, SECTOR_ORDER.get(r.get("sector"), 99),
+                    -(r["hv"].get("1d") or 0))
+        v = r.get(meas, {}).get(tf)
+        return (v is None, -(v or 0), 0)
+
+    rows.sort(key=order)
+
+    def pcell(p, sep=""):
+        if p is None:
+            return f'<td class="faint {sep}">—</td>'
+        cls = "warn" if p >= 80 else "pos" if p <= 20 else "dim"
+        return f'<td class="{cls} {sep}">{p:.0f}</td>'
+
+    body = ""
+    for r in rows:
+        body += (f'<tr><td class="l">{swatch(r.get("sector", ""))}'
+                 f'{esc(r.get("code"))} '
+                 f'<span class="nm">{esc(r.get("name"))}</span></td>')
+        for m in ("hv", "atr"):
+            for i, b in enumerate(MG_BARS):
+                body += pcell(r.get(m, {}).get(b), "sep" if i == 0 else "")
+        body += "</tr>"
+
+    # The baselines are not equal and the table has to say so. A year of that
+    # bar size wherever a year exists; 15m gets the sixty days Yahoo serves
+    # and nothing more, so a 100 in that column means highest in two months,
+    # not highest in a year. Stated rather than hidden, because the whole
+    # value of the row is comparing across it.
+    sp = d.get("spans") or {}
+    ranked = " · ".join(f"{TF_LABEL[b]} vs {sp[b]}d" for b in MG_BARS
+                        if sp.get(b))
+    warn = f'<div class="flag">{esc(d["warn"])}</div>' if d.get("warn") else ""
+    return (warn
+            + eyebrow("Volatility percentile by bar",
+                      '<span class="legend"><span class="key">20 bars of '
+                      'lookback at every size</span></span>')
+            + table(_vhead(), body)
+            + note("Each cell ranks that contract's 20-bar volatility against "
+                   "a year of its own bars at that size, so the grid is one "
+                   "scale across and down. The baselines are not the same "
+                   f"length — {ranked} — because Yahoo serves sixty days of "
+                   "15-minute data and no more: a 100 at 15m is the highest "
+                   "in two months, not in a year. Ranks only, never levels. "
+                   "Fifteen-minute returns carry the overnight gap as though "
+                   "it were a fifteen-minute move, which lifts every "
+                   "observation in that series alike and so survives a rank "
+                   "but would not survive a level.", wide=True))
 
 
 # --------------------------------------------------------------- Calendar

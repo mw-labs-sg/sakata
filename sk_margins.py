@@ -122,6 +122,86 @@ def _zscore(series) -> float:
     return float((float(lg.iloc[-1]) - float(lg.mean())) / sd)
 
 
+# ------------------------------------------------- volatility across bars
+# The margin table is an indirect volatility scan: every column on it is
+# either what the exchange charges for risk or the risk it is charging for.
+# This makes the scan direct, and reads it at five bar sizes at once, because
+# one number cannot tell a contract that has been wild all year from one that
+# started twenty minutes ago.
+VOL_BARS = ("15m", "1h", "4h", "1d", "1wk")
+
+
+def _year_of_bars(index) -> int:
+    """How many bars of this size fill a year, measured off the index.
+
+    Measured rather than assumed, and deliberately not _bars_per_year(): that
+    one clips to 400 because it annualises a daily series, and 400 hourly
+    bars is two and a half weeks.
+    """
+    if len(index) < 30:
+        return 0
+    yrs = (index[-1] - index[0]).total_seconds() / (365.25 * 24 * 3600)
+    return int(round(len(index) / yrs)) if yrs > 0 else 0
+
+
+def _rank(series):
+    """Percentile of the latest reading, and the span it was ranked against.
+
+    The baseline is a year of that bar size, not the flat 252 observations
+    the daily table uses. 252 fifteen-minute bars is two and a half days; a
+    row whose lookback slid from two days at 15m to five years at 1W would
+    not be a term structure, it would be five unrelated numbers. Clamping to
+    what exists caps 15m at the sixty days Yahoo serves — which is why the
+    table says so underneath rather than letting the column imply a year.
+
+    Only the rank is returned, never the level, and that is what makes this
+    safe: _vol_series annualises with a factor clipped to 400 bars a year, so
+    the hourly and 15m levels it produces are badly understated. A percentile
+    is scale-invariant, so a constant wrong multiplier moves no row.
+    """
+    if series is None or len(series) < 60:
+        return None, 0
+    win = max(60, min(_year_of_bars(series.index) or PCTILE_WIN, len(series)))
+    tail = series.tail(win)
+    span = int((tail.index[-1] - tail.index[0]).total_seconds() // 86400)
+    return float((tail <= tail.iloc[-1]).mean() * 100), span
+
+
+def build_vol_grid(frames: dict) -> dict:
+    """{bar: {code: OHLC}} for the five bar sizes -> one percentile per cell.
+
+    Twenty bars of lookback at every size, the same VOL_WIN the daily table
+    uses. Twenty 15-minute bars is five hours and twenty weekly bars is five
+    months, and that gap is the point: reading across a row is reading the
+    same measure at five resolutions, so 15m hot against 1W cold is something
+    that started this morning, and the reverse is something burning out.
+
+    Fifteen-minute returns carry the overnight gap as if it were a
+    fifteen-minute move, which inflates that column's vol. It inflates every
+    observation in the series the same way, though, so the rank survives what
+    the level would not — the other reason this table shows only ranks.
+    """
+    rows, spans, missing = [], {}, 0
+    for code in U.CODES:
+        row = {"code": code, "name": U.NAME[code], "sector": U.SECTOR[code],
+               "group": U.GROUP_OF[U.SECTOR[code]], "hv": {}, "atr": {}}
+        for tf in VOL_BARS:
+            df = (frames.get(tf) or {}).get(code)
+            hv, s1 = _rank(_vol_series(df, VOL_WIN))
+            at, s2 = _rank(_atr_series(df, VOL_WIN))
+            row["hv"][tf] = _r(hv, 0)
+            row["atr"][tf] = _r(at, 0)
+            if hv is None and at is None:
+                missing += 1
+            for sp in (s1, s2):
+                if sp:
+                    spans[tf] = max(spans.get(tf, 0), sp)
+        rows.append(row)
+    warn = (f"{missing} of {len(U.CODES) * len(VOL_BARS)} cells short of the "
+            "sixty observations a rank needs") if missing else None
+    return {"rows": rows, "spans": spans, "warn": warn}
+
+
 def build_margins(margins: dict, daily: dict) -> dict:
     rows = []
     for code in U.CODES:

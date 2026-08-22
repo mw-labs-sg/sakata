@@ -299,6 +299,18 @@ def curve_data(v: str = CACHE_V) -> dict:
     return d
 
 
+@st.cache_data(ttl=TTL_FAST, show_spinner="ranking volatility…")
+def vol_grid_data(v: str = CACHE_V) -> dict:
+    """Percentile grid over the five bar sizes.
+
+    TTL_FAST, not the margins TTL: this reads price bars, not the margin
+    file, and a 15-minute column on an hour-old cache would be a lie in the
+    one column whose whole point is that it is current. Both frames are
+    already in memory for Spreads and Portfolio, so nothing new is fetched.
+    """
+    return MARGIN.build_vol_grid({"15m": prices("15m", "60d"), **by_bar()})
+
+
 @st.cache_data(ttl=TTL_SLOW, show_spinner="pulling margins…")
 def margin_data(v: str = CACHE_V) -> dict:
     """AMP is the fragile half; the vol columns are not.
@@ -490,7 +502,8 @@ with t[2]:
 
 # --------------------------------------------------------------- Margins
 with t[3]:
-    source("AMP margins + CME margin file · Yahoo OHLC for vol", margin_data, key="margins")
+    source("AMP margins + CME margin file · Yahoo OHLC 15m to 1W for vol",
+           margin_data, vol_grid_data, *PRICE_CACHES, key="margins")
     mc = st.columns(5)
     msort = mc[0].selectbox("Sort", list(R.MARGIN_SORTS), key="mg_sort",
                             help="Which column the table ranks on. Leverage"
@@ -500,6 +513,15 @@ with t[3]:
                                  " actually moves. Sector groups the book by"
                                  " class instead of ranking it.")
     UI.md(R.margins(margin_data(), msort))
+
+    vc = st.columns(5)
+    vsort = vc[0].selectbox("Rank", list(R.VOL_GRID_SORTS), key="mg_vol_sort",
+                            index=list(R.VOL_GRID_SORTS).index("HV 1D"),
+                            help="Which bar the grid ranks on. Sector groups"
+                                 " it by class instead, which is how you read"
+                                 " the term structure rather than the"
+                                 " leaderboard.")
+    UI.md(R.vol_grid(vol_grid_data(), vsort))
 
 # ------------------------------------------------------------- Technical
 with t[4]:
