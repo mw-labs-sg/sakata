@@ -970,11 +970,18 @@ _H = [("", "Instrument", "l"), ("", "Last", ""),
 
 
 def _head() -> str:
-    """Two lines per header cell, both in the reading ink.
+    """Two lines per header cell, both in the reading ink, both centred.
 
     The qualifier was set at 9px on 0.65 opacity and read as damage rather
     than as hierarchy — at that size the eye cannot resolve whether HV/20d is
     two words or one smudged one.
+
+    Centred rather than right-aligned to the figures: a two-line header hung
+    off the right edge puts "HV" and "20d" on different left margins whenever
+    the words differ in width, so the stack reads as two stray labels instead
+    of one. Centring gives every cell a shared axis, and `vertical-align:
+    bottom` drops the one-line headers (Last, Lev) onto the same baseline as
+    the second line of the stacked ones, so the row has a single floor.
     """
     t = _tok()
     out = ""
@@ -983,17 +990,27 @@ def _head() -> str:
         lead = (f'<span style="display:block;font-size:10px;font-weight:600;'
                 f'color:{t.get("body")};letter-spacing:.07em;'
                 f'margin-bottom:1px">{top}</span>' if top else "")
-        out += (f'<th{c} style="color:{t.get("ink")};font-weight:600">'
-                f"{lead}{bot}</th>")
+        out += (f'<th{c} style="color:{t.get("ink")};font-weight:600;'
+                f'text-align:center;vertical-align:bottom">{lead}{bot}</th>')
     return out
 
 
 def margins(d: dict, sort: str = "HV %ile") -> str:
-    """Financials above, Commodities below.
+    """One table, every contract, one ranking.
 
-    Stacked rather than side by side: this table is twelve columns wide, and
-    two of them across a laptop would wrap every number. The Board can sit
-    side by side because it carries six narrow columns; this one cannot.
+    Split into Financials and Commodities the sort ran twice and neither half
+    knew about the other: picking "HV %ile" gave two local rankings and never
+    answered which contract in the book is actually at an extreme, which is
+    the only question the dropdown exists to ask. Nineteen rows is a short
+    table. The sector swatch already carries the class the two eyebrows were
+    spelling out, and the legend now names all eight sectors rather than the
+    two groups, so the merge returns more than it takes.
+
+    The level columns — notional, maintenance, ATR $ — are not comparable
+    across classes, and sorting the merged list on one of them clumps the
+    rates and FX contracts at the top. That was half true inside Financials
+    already (6J notional against NKD); the sorts actually reached for are the
+    percentiles and leverage, and those are unit-free.
 
     Column order reads as one sentence: what the contract costs (last,
     notional, maintenance), what that costs against risk (leverage, days of
@@ -1022,56 +1039,65 @@ def margins(d: dict, sort: str = "HV %ile") -> str:
             return '<td class="faint sep">—</td>'
         return f'<td class="sep" style="color:{t.get("ink")}">{v:,.1f}x</td>'
 
-    def panel(group):
-        # Leverage is computed here rather than in sk_margins: it is notional
-        # over maintenance, both already on the row, and a copy keeps the
-        # cached payload the data layer handed us untouched.
-        rows = [dict(r, lev=(r["notional"] / r["maint"])
-                     if (r.get("notional") and r.get("maint")) else None)
-                for r in d["rows"] if r.get("group") == group]
-        if not rows:
-            return ""
-        rows.sort(key=lambda r: (r.get(key) is None,
-                                 -(r.get(key) or 0) if desc else (r.get(key) or 0)))
-        body = ""
-        for r in rows:
-            vp = r.get("volPct")
-            # The wash keys off HV, not ATR. They agree most of the time, and
-            # tinting on both would give two rows the same colour for
-            # different reasons — which is worse than tinting on one.
-            tint = ""
-            if vp is not None and vp >= 80:
-                tint = f'background:{t.get("amber")}1a'
-            elif vp is not None and vp <= 20:
-                tint = f'background:{t.get("teal")}14'
-            body += (f'<tr style="{tint}"><td class="l">'
-                     f'{swatch(r.get("sector", ""))}{esc(r.get("code"))} '
-                     f'<span class="nm">{esc(r.get("name"))}</span></td>'
-                     # Last in the reading ink: it is the number every other
-                     # column is derived from, so it should not be the
-                     # faintest thing on the row.
-                     f'<td style="color:{t.get("ink")}">'
-                     f'{num(r.get("last"), r.get("dec", 2)) or "—"}</td>'
-                     + cell(r.get("notional"), 0, "dim")
-                     # Maintenance in the reading ink alongside last: it is the
-                     # cash the contract actually ties up, and dimming it put
-                     # the one number a size decision starts from behind the
-                     # statistics derived from it.
-                     + f'<td style="color:{t.get("ink")}">'
-                       f'{num(r.get("maint"), 0) or "—"}</td>'
-                     + levcell(r.get("lev")) + cell(r.get("daysATR"), 1)
-                     + cell(r.get("annVol"), 1, "sep")
-                     + cell(r.get("vol100"), 1, "dim")
-                     + cell(r.get("atr"), 0) + cell(r.get("atr100"), 0, "dim")
-                     # The two percentiles adjacent: one asks how wide the
-                     # closes have been, the other how wide the days have
-                     # been, and the pair only says something when they
-                     # disagree — which you cannot see with four columns
-                     # of levels sitting between them.
-                     + pcell(vp, "sep") + pcell(r.get("atrPct")) + "</tr>")
-        return eyebrow(group) + table(_head(), body)
+    # Leverage is computed here rather than in sk_margins: it is notional over
+    # maintenance, both already on the row, and a copy keeps the cached
+    # payload the data layer handed us untouched.
+    rows = [dict(r, lev=(r["notional"] / r["maint"])
+                 if (r.get("notional") and r.get("maint")) else None)
+            for r in d.get("rows", [])]
+    if not rows:
+        return flag
+    rows.sort(key=lambda r: (r.get(key) is None,
+                             -(r.get(key) or 0) if desc else (r.get(key) or 0)))
 
-    return flag + panel("Financials") + panel("Commodities")
+    body, seen = "", set()
+    for r in rows:
+        seen.add(r.get("sector", ""))
+        vp = r.get("volPct")
+        # The wash keys off HV, not ATR. They agree most of the time, and
+        # tinting on both would give two rows the same colour for different
+        # reasons — which is worse than tinting on one.
+        tint = ""
+        if vp is not None and vp >= 80:
+            tint = f'background:{t.get("amber")}1a'
+        elif vp is not None and vp <= 20:
+            tint = f'background:{t.get("teal")}14'
+        body += (f'<tr style="{tint}"><td class="l">'
+                 f'{swatch(r.get("sector", ""))}{esc(r.get("code"))} '
+                 f'<span class="nm">{esc(r.get("name"))}</span></td>'
+                 # Last in the reading ink: it is the number every other
+                 # column is derived from, so it should not be the faintest
+                 # thing on the row.
+                 f'<td style="color:{t.get("ink")}">'
+                 f'{num(r.get("last"), r.get("dec", 2)) or "—"}</td>'
+                 + cell(r.get("notional"), 0, "dim")
+                 # Maintenance in the reading ink alongside last: it is the
+                 # cash the contract actually ties up, and dimming it put the
+                 # one number a size decision starts from behind the
+                 # statistics derived from it.
+                 + f'<td style="color:{t.get("ink")}">'
+                   f'{num(r.get("maint"), 0) or "—"}</td>'
+                 + levcell(r.get("lev")) + cell(r.get("daysATR"), 1)
+                 + cell(r.get("annVol"), 1, "sep")
+                 + cell(r.get("vol100"), 1, "dim")
+                 + cell(r.get("atr"), 0) + cell(r.get("atr100"), 0, "dim")
+                 # The two percentiles adjacent: one asks how wide the closes
+                 # have been, the other how wide the days have been, and the
+                 # pair only says something when they disagree — which you
+                 # cannot see with four columns of levels sitting between
+                 # them.
+                 + pcell(vp, "sep") + pcell(r.get("atrPct")) + "</tr>")
+
+    # Legend in universe order, not sort order: the key is a map of the book
+    # and should not reshuffle every time the ranking column changes.
+    legend = "".join(
+        f'<span class="key">{swatch(s)}{esc(s)}</span>'
+        for g in ("Financials", "Commodities") for s in U.GROUPS[g]
+        if s in seen)
+    return (flag
+            + eyebrow(f"{len(rows)} contracts",
+                      f'<span class="legend">{legend}</span>')
+            + table(_head(), body))
 
 
 # --------------------------------------------------------------- Calendar
