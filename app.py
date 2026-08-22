@@ -523,6 +523,14 @@ with t[3]:
                                  " leaderboard.")
     UI.md(R.vol_grid(vol_grid_data(), vsort))
 
+    lc = st.columns(5)
+    lsort = lc[0].selectbox("Rank ", list(R.VOL_LEVEL_SORTS), key="mg_lvl_sort",
+                            index=list(R.VOL_LEVEL_SORTS).index("HV 1D"),
+                            help="Same eight columns as the grid above,"
+                                 " carrying the figures the ranks were taken"
+                                 " of: annualised vol, and ATR in dollars.")
+    UI.md(R.vol_levels(vol_grid_data(), lsort))
+
 # ------------------------------------------------------------- Technical
 with t[4]:
     # by_bar belongs in this list. Without it, clearing technical_grid and

@@ -1241,6 +1241,92 @@ def vol_grid(d: dict, sort: str = "HV 1D") -> str:
             + table(_vhead(), body))
 
 
+# ------------------------------------------------ Volatility levels by bar
+# Same eight columns as the percentile grid, carrying the figures the ranks
+# were taken of. The two tables answer different halves of one question: the
+# grid says whether a contract is unusual for itself, this one says how much
+# it actually moves, and neither is recoverable from the other.
+VOL_LEVEL_SORTS = {f"{'ATR' if m == 'atrLvl' else 'HV'} {TF_LABEL[tf]}":
+                   (m, tf) for m in ("hvLvl", "atrLvl") for tf in MG_BARS}
+VOL_LEVEL_SORTS["Sector"] = ("sector", "")
+
+_LH = ([("", "Instrument", "l")]
+       + [(TF_LABEL[tf], m, "tfsep" if i == 0 else "")
+          for tf in MG_BARS for i, m in enumerate(("HV %", "ATR $"))])
+
+
+def _lhead() -> str:
+    t = _tok()
+    out = ""
+    for top, bot, cls in _LH:
+        c = f' class="{cls}"' if cls else ""
+        if top:
+            l1 = (f'<span style="display:block;font-size:10px;font-weight:600;'
+                  f'color:{t.get("body")};letter-spacing:.07em;'
+                  f'margin-bottom:1px">{top}</span>')
+            l2 = bot
+        else:
+            l1 = (f'<span style="display:block;font-size:10.5px;'
+                  f'font-weight:600;color:{t.get("ink")};letter-spacing:.08em;'
+                  f'margin-bottom:1px">{bot}</span>')
+            l2 = "&nbsp;"
+        out += (f'<th{c} style="color:{t.get("ink")};font-weight:600;'
+                f'text-align:center;vertical-align:bottom">{l1}{l2}</th>')
+    return out
+
+
+def vol_levels(d: dict, sort: str = "HV 1D") -> str:
+    """The figures behind the percentiles, same eight columns.
+
+    Annualised vol is on one scale across the row, which is the point of
+    annualising: 15m at 2.4% beside 1D at 12.6% says the last five hours have
+    been far calmer than a normal day for that contract, and the rank grid
+    can only imply it. ATR is in dollars for the same reason it is on the
+    margin table — a 0.5 move in NG and a 5-point move in ES are incomparable
+    until the multiplier is applied.
+
+    No tint. The grid above is the heat map and this is its footnote; two
+    heat maps stacked would leave the reader deciding which one to scan.
+    """
+    t = _tok()
+    rows = list(d.get("rows") or [])
+    if not rows:
+        return ""
+    meas, tf = VOL_LEVEL_SORTS.get(sort, VOL_LEVEL_SORTS["HV 1D"])
+
+    def order(r):
+        if meas == "sector":
+            return (0, SECTOR_ORDER.get(r.get("sector"), 99),
+                    -(r["hvLvl"].get("1d") or 0))
+        v = r.get(meas, {}).get(tf)
+        return (v is None, -(v or 0), 0)
+
+    rows.sort(key=order)
+
+    def lcell(v, dec, cls, sep=""):
+        if v is None:
+            return f'<td class="faint {sep}">—</td>'
+        return f'<td class="{cls} {sep}">{v:,.{dec}f}</td>'
+
+    body = ""
+    for r in rows:
+        body += (f'<tr><td class="l">{swatch(r.get("sector", ""))}'
+                 f'{esc(r.get("code"))} '
+                 f'<span class="nm">{esc(r.get("name"))}</span></td>')
+        for b in MG_BARS:
+            # Vol in the reading ink, ATR dimmed behind it: the pair is one
+            # fact stated twice, once as a rate and once as cash, and giving
+            # both equal weight made the row read as eight separate numbers.
+            body += lcell(r.get("hvLvl", {}).get(b), 1, "dim", "tfsep")
+            body += lcell(r.get("atrLvl", {}).get(b), 0, "dim")
+        body += "</tr>"
+
+    return (eyebrow("Volatility levels by bar",
+                    '<span class="legend"><span class="key">annualised %, '
+                    'and ATR in dollars</span></span>')
+            + table(_lhead(), body))
+
+
 # --------------------------------------------------------------- Calendar
 TYPE_COL = {"Policy": "#a596d6", "Macro": "#6f9fd8", "Inventory": "#c08360",
             "Report": "#a5b96f", "Positioning": "#d0ae6b",

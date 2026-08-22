@@ -20,16 +20,23 @@ from sk_fmt import r as _r
 VOL_WIN = 20        # the vol measure itself: one trading month
 VOL_SLOW = 100      # the base rate: roughly five months, a full regime
 PCTILE_WIN = 252    # one year of daily observations to rank against
+MAX_BPY = 30_000    # 15-minute bars run ~23,500 a year; denser is a broken index
 
 
 def _bars_per_year(index) -> float:
-    """Measured, not assumed. 252 for exchange-traded, ~365 for 24/7 crypto."""
+    """Measured, not assumed. 252 for exchange-traded, ~365 for 24/7 crypto.
+
+    The ceiling was 400, which is fine for the daily series this was written
+    for and silently wrong for every intraday one: 15-minute bars run ~23,500
+    a year, so the annualised figure came out 7.7x under. The percentile grid
+    never noticed because a rank is scale-invariant, but a level is not.
+    """
     if len(index) < 30:
         return 252.0
     yrs = (index[-1] - index[0]).total_seconds() / (365.25 * 24 * 3600)
     if yrs <= 0:
         return 252.0
-    return float(np.clip(len(index) / yrs, 12, 400))
+    return float(np.clip(len(index) / yrs, 12, MAX_BPY))
 
 
 def _rsi(df, period=14):
@@ -72,11 +79,36 @@ def _atr_series(df, window=20):
     return tr.rolling(window).mean().dropna()
 
 
+def _returns(df):
+    """Close-to-close returns, with the session break dropped on intraday bars.
+
+    A fifteen-minute series carries the overnight halt as one more bar-to-bar
+    move, and it is not one — it is fifteen hours of news arriving in a single
+    print. Daily and weekly bars keep every return, because a Friday-to-Monday
+    daily move IS a daily move; the filter is gated on the modal bar being
+    shorter than a day so it never touches them.
+
+    Whole-series, dropping them takes CL's 15m vol from 54.6 to 48.0. The
+    latest 20-bar window is often clean — there is roughly one halt a day and
+    twenty 15m bars is five hours — so this shows up as a column that was
+    right most of the time and overstated the rest, which is worse than one
+    that is wrong consistently.
+    """
+    r = df["close"].pct_change()
+    step = pd.Series(df.index).diff().dropna()
+    if step.empty:
+        return r.dropna()
+    modal = step.mode().iloc[0]
+    if modal < pd.Timedelta(days=1):
+        r = r.mask(np.r_[False, (step > modal * 1.5).to_numpy()])
+    return r.dropna()
+
+
 def _vol_series(df, window):
     """Rolling annualised vol, as a series so it can be ranked against itself."""
     if df is None or len(df) < window + 5:
         return None
-    r = df["close"].pct_change().dropna()
+    r = _returns(df)
     if len(r) < window + 2:
         return None
     ann = _bars_per_year(r.index) ** 0.5
@@ -188,14 +220,24 @@ def build_vol_grid(frames: dict) -> dict:
     """
     rows, spans, missing = [], {}, 0
     for code in U.CODES:
+        mult = U.MULT.get(code)
         row = {"code": code, "name": U.NAME[code], "sector": U.SECTOR[code],
-               "group": U.GROUP_OF[U.SECTOR[code]], "hv": {}, "atr": {}}
+               "group": U.GROUP_OF[U.SECTOR[code]], "hv": {}, "atr": {},
+               "hvLvl": {}, "atrLvl": {}}
         for tf in VOL_BARS:
             df = (frames.get(tf) or {}).get(code)
-            hv, s1 = _rank(_vol_series(df, VOL_WIN))
-            at, s2 = _rank(_atr_series(df, VOL_WIN))
+            # The levels come off the same two series the ranks are taken
+            # from, so the second table costs one dict write per cell rather
+            # than a second pass over the frames.
+            sv, av = _vol_series(df, VOL_WIN), _atr_series(df, VOL_WIN)
+            hv, s1 = _rank(sv)
+            at, s2 = _rank(av)
             row["hv"][tf] = _r(hv, 0)
             row["atr"][tf] = _r(at, 0)
+            row["hvLvl"][tf] = _r(float(sv.iloc[-1])
+                                  if sv is not None and len(sv) else None, 1)
+            pts = float(av.iloc[-1]) if av is not None and len(av) else None
+            row["atrLvl"][tf] = _r(pts * mult if (pts and mult) else None, 0)
             if hv is None and at is None:
                 missing += 1
             for sp in (s1, s2):
