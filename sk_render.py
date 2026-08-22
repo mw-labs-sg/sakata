@@ -1162,7 +1162,7 @@ VOL_GRID_SORTS["Sector"] = ("sector", "")
 # or the reverse — had to be carried across the table by eye. The timeframe
 # takes the top line and names the block; the measure takes the bottom line.
 _VH = ([("", "Instrument", "l")]
-       + [(TF_LABEL[tf], m, "sep" if i == 0 else "")
+       + [(TF_LABEL[tf], m, "tfsep" if i == 0 else "")
           for tf in MG_BARS for i, m in enumerate(("HV", "ATR"))])
 
 
@@ -1230,7 +1230,7 @@ def vol_grid(d: dict, sort: str = "HV 1D") -> str:
                  f'<span class="nm">{esc(r.get("name"))}</span></td>')
         for b in MG_BARS:
             for i, m in enumerate(("hv", "atr")):
-                body += pcell(r.get(m, {}).get(b), "sep" if i == 0 else "")
+                body += pcell(r.get(m, {}).get(b), "tfsep" if i == 0 else "")
         body += "</tr>"
 
     warn = f'<div class="flag">{esc(d["warn"])}</div>' if d.get("warn") else ""

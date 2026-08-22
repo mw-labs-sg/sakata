@@ -272,6 +272,12 @@ pre, pre *, code {{ color: {t.get('ink')} !important; }}
    and the grouping it exists to show read as noise. It has to beat the
    ordinary column line to mean anything. */
 th.sep, td.sep {{ border-left: 1px solid {t.get('faint')}80; }}
+/* The vol grid divides four times in eight columns, twice the density of the
+   margin table's three blocks, and the cells either side are already tinted —
+   so the block rule there has to carry further than a hairline. Half-opacity
+   mute: still a line rather than a border, but one you can find without
+   looking for it. */
+th.tfsep, td.tfsep {{ border-left: 1px solid {t.get('mute')}8c; }}
 /* Charts keep their own up/down tokens — a candle body is a mark, not a
    number — so this deliberately does not reach inside svg. */
 svg .neg {{ color: inherit !important; }}
