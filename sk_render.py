@@ -1156,15 +1156,14 @@ VOL_GRID_SORTS = {f"{m.upper() if m == 'atr' else 'HV'} {TF_LABEL[tf]}":
                   (m, tf) for m in ("hv", "atr") for tf in MG_BARS}
 VOL_GRID_SORTS["Sector"] = ("sector", "")
 
-# Two blocks of five. "HV" and "ATR" repeat down each block rather than
-# spanning it: the main table already repeats a head-word across its pairs
-# (HV 20 / HV 100, ATR $ 20 / ATR $ 100), and a colspan group row would be
-# the only two-storey header in the app.
+# One block per bar, HV and ATR paired inside it. Split into a block of HV
+# and a block of ATR, the two readings for the same bar sat five columns
+# apart and the comparison they exist to support — closes wide, days narrow,
+# or the reverse — had to be carried across the table by eye. The timeframe
+# takes the top line and names the block; the measure takes the bottom line.
 _VH = ([("", "Instrument", "l")]
-       + [("HV", TF_LABEL[tf], "sep" if i == 0 else "")
-          for i, tf in enumerate(MG_BARS)]
-       + [("ATR", TF_LABEL[tf], "sep" if i == 0 else "")
-          for i, tf in enumerate(MG_BARS)])
+       + [(TF_LABEL[tf], m, "sep" if i == 0 else "")
+          for tf in MG_BARS for i, m in enumerate(("HV", "ATR"))])
 
 
 def _vhead() -> str:
@@ -1188,19 +1187,20 @@ def _vhead() -> str:
 
 
 def vol_grid(d: dict, sort: str = "HV 1D") -> str:
-    """The same nineteen rows, read at five bar sizes.
+    """The same nineteen rows, read at four bar sizes.
 
     The margin table answers "is this expensive for what it moves" one
     contract at a time. This one answers "what is moving, and since when",
     which is the question the margin table was being used for sideways. Every
     cell is a percentile of that contract against its own history at that bar
     size, so the whole grid is on one scale and the row reads left to right
-    as a term structure: hot at 15m and cold at 1W is something that started
-    this morning, cold at 15m and hot at 1W is something burning out.
+    from the day into the session: hot at 15m and cold at 1D is something
+    that started this morning, cold at 15m and hot at 1D is something
+    burning out.
 
-    No row wash here, unlike the margin table. Ten tinted cells a row already
-    make a heat map, and a background behind them would be a second signal
-    competing with the one the reader is meant to scan.
+    No row wash here, unlike the margin table. Eight tinted cells a row
+    already make a heat map, and a background behind them would be a second
+    signal competing with the one the reader is meant to scan.
     """
     t = _tok()
     rows = list(d.get("rows") or [])
@@ -1228,35 +1228,17 @@ def vol_grid(d: dict, sort: str = "HV 1D") -> str:
         body += (f'<tr><td class="l">{swatch(r.get("sector", ""))}'
                  f'{esc(r.get("code"))} '
                  f'<span class="nm">{esc(r.get("name"))}</span></td>')
-        for m in ("hv", "atr"):
-            for i, b in enumerate(MG_BARS):
+        for b in MG_BARS:
+            for i, m in enumerate(("hv", "atr")):
                 body += pcell(r.get(m, {}).get(b), "sep" if i == 0 else "")
         body += "</tr>"
 
-    # The baselines are not equal and the table has to say so. A year of that
-    # bar size wherever a year exists; 15m gets the sixty days Yahoo serves
-    # and nothing more, so a 100 in that column means highest in two months,
-    # not highest in a year. Stated rather than hidden, because the whole
-    # value of the row is comparing across it.
-    sp = d.get("spans") or {}
-    ranked = " · ".join(f"{TF_LABEL[b]} vs {sp[b]}d" for b in MG_BARS
-                        if sp.get(b))
     warn = f'<div class="flag">{esc(d["warn"])}</div>' if d.get("warn") else ""
     return (warn
             + eyebrow("Volatility percentile by bar",
                       '<span class="legend"><span class="key">20 bars of '
                       'lookback at every size</span></span>')
-            + table(_vhead(), body)
-            + note("Each cell ranks that contract's 20-bar volatility against "
-                   "a year of its own bars at that size, so the grid is one "
-                   "scale across and down. The baselines are not the same "
-                   f"length — {ranked} — because Yahoo serves sixty days of "
-                   "15-minute data and no more: a 100 at 15m is the highest "
-                   "in two months, not in a year. Ranks only, never levels. "
-                   "Fifteen-minute returns carry the overnight gap as though "
-                   "it were a fifteen-minute move, which lifts every "
-                   "observation in that series alike and so survives a rank "
-                   "but would not survive a level.", wide=True))
+            + table(_vhead(), body))
 
 
 # --------------------------------------------------------------- Calendar

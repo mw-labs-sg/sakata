@@ -125,10 +125,15 @@ def _zscore(series) -> float:
 # ------------------------------------------------- volatility across bars
 # The margin table is an indirect volatility scan: every column on it is
 # either what the exchange charges for risk or the risk it is charging for.
-# This makes the scan direct, and reads it at five bar sizes at once, because
+# This makes the scan direct, and reads it at four bar sizes at once, because
 # one number cannot tell a contract that has been wild all year from one that
 # started twenty minutes ago.
-VOL_BARS = ("15m", "1h", "4h", "1d", "1wk")
+# Longest first: the day is the frame of reference and the shorter bars
+# are read against it, so the row is scanned left to right as "normally
+# this, right now that". 1W is out — twenty weekly bars is five months,
+# which is a regime rather than a reading, and it was answering a
+# different question from the other four.
+VOL_BARS = ("1d", "4h", "1h", "15m")
 
 
 def _year_of_bars(index) -> int:
@@ -168,12 +173,12 @@ def _rank(series):
 
 
 def build_vol_grid(frames: dict) -> dict:
-    """{bar: {code: OHLC}} for the five bar sizes -> one percentile per cell.
+    """{bar: {code: OHLC}} for the four bar sizes -> one percentile per cell.
 
     Twenty bars of lookback at every size, the same VOL_WIN the daily table
-    uses. Twenty 15-minute bars is five hours and twenty weekly bars is five
-    months, and that gap is the point: reading across a row is reading the
-    same measure at five resolutions, so 15m hot against 1W cold is something
+    uses. Twenty 15-minute bars is five hours and twenty daily bars is a
+    month, and that gap is the point: reading across a row is reading the
+    same measure at four resolutions, so 15m hot against 1D cold is something
     that started this morning, and the reverse is something burning out.
 
     Fifteen-minute returns carry the overnight gap as if it were a
