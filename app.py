@@ -240,10 +240,17 @@ def _dollars(text: str) -> int:
     return max(CAPITAL_MIN, min(int(digits or CAPITAL_MIN), CAPITAL_MAX))
 
 
-def _capital() -> None:
+def _capital(key: str = "pf_capital_txt"):
     """Rewrite the box with separators, on change. Runs as a callback, which
-    is the only point at which a widget's own state may still be set."""
-    st.session_state["pf_capital_txt"] = f"{_dollars(st.session_state.get('pf_capital_txt', '')):,}"
+    is the only point at which a widget's own state may still be set.
+
+    Takes the key because two tabs now quote against an account — the
+    portfolio's basket and the spread field's tickets — and a shared callback
+    that hardcoded one of them would rewrite the wrong box.
+    """
+    def go():
+        st.session_state[key] = f"{_dollars(st.session_state.get(key, '')):,}"
+    return go
 
 
 @st.cache_data(ttl=TTL_FAST, show_spinner=False)
@@ -598,7 +605,34 @@ with t[4]:
         sc[3].checkbox("Auto", key="sp_auto",
                        help="Refetch by itself once the 15-minute cache "
                             "expires, instead of waiting for Refresh")
-        UI.md(R.spreads(field, per, spsort, R.freshness(stamp, TTL_FAST)))
+        # Neither of these rebuilds the field. A ratio is scale-free, so
+        # capital and vol target only decide how large it is drawn — the same
+        # split the Portfolio tab makes, and the reason they can sit under a
+        # 15-minute cache and still respond on the keystroke.
+        s2 = st.columns([3, 3, 3, 2])
+        sp_cap_usd = _dollars(s2[0].text_input(
+            "Capital", value="1,000,000", key="sp_capital_txt",
+            on_change=_capital("sp_capital_txt"),
+            help="What the Send column and the cards are quoted against. The"
+                 " ratio does not move with it; the number of contracts does,"
+                 " and below a few hundred thousand the rounding starts"
+                 " costing the hedge."))
+        sp_vol = float(s2[1].selectbox(
+            "Vol target", ["5%", "10%", "15%", "20%", "30%", "40%"],
+            index=4, key="sp_vol",
+            help="Annualised volatility to hold the position at. This is a"
+                 " scale, not a mix: 20% instead of 30% buys two thirds of"
+                 " both legs. It changes the hedge only through rounding —"
+                 " watch HEDGE on the cards when you drop it.").rstrip("%"))
+        sp_size = s2[2].selectbox(
+            "Contracts", ["Standard + Small", "Standard Only"],
+            key="sp_size",
+            help="Whether micros and minis may close the gap on a leg. On a"
+                 " small account they are usually the difference between a"
+                 " hedge that lands and one that is 30% off.")
+        UI.md(R.spreads(field, per, spsort, R.freshness(stamp, TTL_FAST),
+                        capital=sp_cap_usd, vol_target=sp_vol,
+                        smalls=(sp_size == "Standard + Small")))
         if st.session_state.get("sp_auto"):
             autorefresh(stamp, TTL_FAST)
 
@@ -669,7 +703,7 @@ with t[6]:
     # are a shape and these only decide how large it is drawn, so they take
     # effect without a re-run.
     pf_cap_usd = _dollars(r2[1].text_input(
-        "Capital", value="1,000,000", key="pf_capital_txt", on_change=_capital,
+        "Capital", value="1,000,000", key="pf_capital_txt", on_change=_capital(),
         help="What the weights are sized against. Notional and contracts scale"
              " with it; the ratios do not. Below about $500k these baskets"
              " stop being fillable — watch the Miss column."))

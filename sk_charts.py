@@ -61,7 +61,14 @@ def bar_chart(items, w=1100) -> str:
 
 
 def line_chart(labels, series, bars=None, w=1100, h=280, dec=2) -> str:
-    """series: [{k,v,c,w?,dash?,o?}]. bars is an optional volume/OI underlay."""
+    """series: [{k,v,c,w?,dash?,o?,cap?}]. bars is an optional volume underlay.
+
+    `cap` is the stroke linecap, and it exists so a line can be genuinely
+    DOTTED rather than finely dashed: butt caps on a 1-unit dash draw
+    rectangles, and a round cap on a zero-length one draws a circle. A
+    benchmark that reads as dots is not the same object as one that reads as
+    a short-dashed line, and both appear on the same chart.
+    """
     pad_l, pad_r, pad_t, pad_b = 52, 46, 12, 42
     allv = [v for sr in series for v in sr["v"]
             if v is not None and v == v]
@@ -107,9 +114,10 @@ def line_chart(labels, series, bars=None, w=1100, h=280, dec=2) -> str:
         if not d:
             continue
         dash = f' stroke-dasharray="{sr["dash"]}"' if sr.get("dash") else ""
+        cap = f' stroke-linecap="{sr["cap"]}"' if sr.get("cap") else ""
         s += (f'<path d="{d}" fill="none" stroke="{sr["c"]}" '
-              f'stroke-width="{sr.get("w", 2)}"{dash} stroke-linejoin="round" '
-              f'opacity="{sr.get("o", 1)}"/>')
+              f'stroke-width="{sr.get("w", 2)}"{dash}{cap} '
+              f'stroke-linejoin="round" opacity="{sr.get("o", 1)}"/>')
     every = math.ceil(n / 12) or 1
     for i, lb in enumerate(labels):
         if i % every:

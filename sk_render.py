@@ -17,6 +17,7 @@ import os
 import sk_charts as CH
 import sk_knowledge as KN
 import sk_margins as MG
+import sk_spreads as SP
 import sk_universe as U
 from sk_ui import (BIAS_COL, C, SECTOR_COL, cell, chips, esc, eyebrow, note,
                    num, pct, swatch, table)
@@ -508,17 +509,60 @@ def portfolio(res: dict, per: str, pl: dict = None,
 
     curve, eqc = res["curve"], res["equalCurve"]
     # Ink and faint at chart weight is grey against grey: the picture could
-    # not say which line was the answer. Teal is the basket, dashed grey is
-    # the benchmark, and the key says so.
-    series = [{"k": "equal weight, same legs", "v": eqc["v"], "c": faint,
-               "w": 1.4, "dash": "5 4", "o": 0.85},
+    # not say which line was the answer. Teal is the basket; the benchmark is
+    # ink, dotted and at half strength — which resolves to white on the dark
+    # theme and to near-black on the light one, so it reads as a reference
+    # against the plot in both rather than as a second answer. Faint was too
+    # close to the gridlines to be seen as a line at all.
+    series = [{"k": "equal weight, same legs", "v": eqc["v"], "c": ink,
+               "w": 1.8, "dash": "0.1 5", "cap": "round", "o": 0.55},
               {"k": "this portfolio", "v": curve["v"], "c": teal, "w": 2.6}]
     legend = "".join(
         f'<span class="key" style="display:inline-flex;align-items:center;'
         f'gap:6px"><i style="display:inline-block;width:18px;height:0;'
-        f'border-top:{"2px dashed" if sr.get("dash") else "3px solid"} '
-        f'{sr["c"]}"></i><span style="color:{sr["c"]};font-weight:600">'
-        f'{esc(sr["k"])}</span></span>' for sr in reversed(series))
+        f'border-top:{"2px dotted" if sr.get("dash") else "3px solid"} '
+        f'{sr["c"]};opacity:{sr.get("o", 1)}"></i>'
+        f'<span style="color:{sr["c"]};opacity:{sr.get("o", 1)};'
+        f'font-weight:600">{esc(sr["k"])}</span></span>'
+        for sr in reversed(series))
+
+    # What the picture is for, said in words. Two numbers, because they answer
+    # two different questions and the tab would be dishonest carrying only one:
+    # the OBJECTIVE delta is what the search actually maximised and what the
+    # weights were chosen on, and the end-of-curve gap is what the two lines
+    # on screen literally show. They can disagree — a basket can win on ROA by
+    # taking a shallower hole rather than by making more — and when they do,
+    # that disagreement is the finding.
+    okey = {"ROA": "roa", "ER (Adj)": "erAdj", "Sharpe": "sharpe"}.get(
+        res.get("objective"), "roa")
+    ov, bv = st_.get(okey), eq.get(okey)
+    odel = (None if ov is None or not bv else (ov - bv) / abs(bv) * 100)
+    if odel is None:
+        verdict = (f'<span style="color:{faint}">{esc(per)} · '
+                   f'{len(curve["t"])} bars</span>')
+    else:
+        beats = odel >= 0
+        vcol = pos if beats else amber
+        verdict = (f'<span style="padding:2px 8px;border-radius:3px;'
+                   f'background:{vcol}22;color:{vcol};font-weight:700;'
+                   f'font-size:10.5px;letter-spacing:.04em;white-space:nowrap">'
+                   f'{"BEATS" if beats else "LOSES TO"} EQUAL WEIGHT '
+                   f'{"+" if beats else ""}{odel:.0f}% ON '
+                   f'{esc(res.get("objective", "").upper())}</span>')
+    # Rebased to 100 at the left edge, both of them, so the difference of the
+    # two end points IS the gap in percentage points over the window. Read off
+    # the drawn series rather than off the stats, because the stats are quoted
+    # at the size held and these lines are not.
+    cend = curve["v"][-1] if curve["v"] else None
+    eend = eqc["v"][-1] if eqc["v"] else None
+    gap = (f'ends at {cend:,.1f} vs {eend:,.1f} — '
+           f'{cend - eend:+,.1f} points over the window'
+           if cend is not None and eend is not None else "")
+    plotsub = " · ".join(x for x in (
+        f'{esc(per)} · {len(curve["t"])} bars',
+        (f'{esc(res.get("objective", ""))} {num(ov, 2)} vs {num(bv, 2)}'
+         if odel is not None else ""),
+        gap) if x)
 
     # The score and its curve share the top band, and the weights run the full
     # width underneath. The conclusion is one thing said twice — four rows of
@@ -574,8 +618,9 @@ def portfolio(res: dict, per: str, pl: dict = None,
     # — the legend names the two lines, not what they are for.
     plot = ('<div class="plot">'
             '<div class="ctitle"><b>The curve behind the score</b>'
-            f'<span>{esc(per)} · {len(curve["t"])} bars</span></div>'
+            f'{verdict}</div>'
             + f'<div class="clegend">{legend}</div>'
+            + f'<div class="cstats" style="color:{mute}">{plotsub}</div>'
             + CH.line_chart(curve["t"], series, None, 620, 300, 1)
             + "</div>")
 
@@ -614,7 +659,8 @@ def freshness(stamp, ttl: int) -> str:
 
 
 def spreads(d: dict, per: str, sort: str = DEFAULT_SORT,
-            fresh: str = "") -> str:
+            fresh: str = "", capital: float = 1_000_000.0,
+            vol_target: float = 30.0, smalls: bool = True) -> str:
     p = d["data"][per]
     t = _tok()
 
@@ -635,7 +681,7 @@ def spreads(d: dict, per: str, sort: str = DEFAULT_SORT,
     head = ('<th class="l">#</th><th class="l">Long</th><th class="l">Short</th>'
             '<th>ER</th><th>ER (Adj)</th><th>Win%</th><th>Vol%</th>'
             '<th>Tot%</th><th>MDD%</th><th>ROA</th>'
-            f'<th class="l">Ratio ({esc(weighting["label"])})</th>'
+            f'<th class="l">Send ({esc(weighting["label"])})</th>'
             '<th>vs leg</th><th>Top 10</th>')
     body = ""
     for i, r in enumerate(rows, 1):
@@ -653,30 +699,37 @@ def spreads(d: dict, per: str, sort: str = DEFAULT_SORT,
             wash = (f'background:{t.get("pos", "#0a7c66")}1f' if beat else "")
             legcell = (f'<td class="{"pos" if beat else "warn"}" '
                        f'style="{wash}">{"+" if beat else ""}{dv:.0f}%</td>')
-        # A count, not a list of names. The names are still there on hover for
-        # the one row in twenty where you want to know which.
-        # Contracts per leg for equal dollar risk, long : short. Not the sigma
-        # ratio — a 6J contract carries $78k of notional against $24k for ZC,
-        # so matching volatility is not matching size.
-        # The order, not the ratio. 1.6 : 1 cannot be sent anywhere; the
-        # whole-contract equivalent can, and micros are what make it reachable.
-        # The ratio it targets, how far off the hedge lands and what one unit
-        # costs all sit on hover rather than widening the row.
-        # One unit of the long leg against however much of the short it takes.
-        # The whole-contract combinations that used to sit here — full size and
-        # smallest micro equivalent — were two more decisions in a cell that
-        # only has to answer "how much of the other one". They survive on
-        # hover, for when the order is actually being filled.
+        # The order, at the account on screen. A ratio is scale-free and a
+        # ticket is not: "1 GC : 2.34 SI" is true at a million dollars and at
+        # five thousand, and sendable at neither — the number of contracts is
+        # the first thing that says whether this window's best idea fits in
+        # the account at all. Contracts also carry what the sigma ratio could
+        # not: a 6J contract is $78k of notional against $24k for ZC, so
+        # matching volatility was never matching size, and the column now
+        # shows the size.
+        #
+        # The exact ratio it targets, how far the fill's hedge lands from it,
+        # and the leverage it takes all sit on hover rather than widening a
+        # row that already carries eleven columns.
+        sz = SP.size_at(r, capital, vol_target, p.get("ann") or 252,
+                        smalls=smalls)
         ex = r.get(sxkey)
-        if ex:
-            qty = 1 / ex          # short legs per single long leg
-            tk = (r.get("ticket") or {}).get("std") or {}
-            tip = (f'whole contracts: {tk["text"]} ({tk["err"]}% off, '
-                   f'${tk.get("risk", 0):,.0f} risk)' if tk.get("text") else "")
-            size = (f'<td class="l dim" title="{esc(tip)}">'
-                    f'1 {esc(r["long"])} : {qty:,.2f} {esc(r["short"])}</td>')
+        if sz and sz["text"] != "—":
+            tip = []
+            if ex:
+                tip.append(f'ratio 1 {r["long"]} : {1 / ex:,.2f} {r["short"]}')
+            if sz.get("hedge") is not None:
+                tip.append(f'hedge {sz["hedge"]:+.1f}% off that')
+            tip.append(f'{sz["lev"]:.2f}x gross, holds {sz["volAt"]:.0f}% vol')
+            size = (f'<td class="l dim" title="{esc(" · ".join(tip))}">'
+                    f'{esc(sz["text"])}</td>')
+        elif ex:
+            size = (f'<td class="l faint" title="does not fill at '
+                    f'{capital:,.0f}">1 : {1 / ex:,.2f}</td>')
         else:
             size = '<td class="l faint">—</td>'
+        # A count, not a list of names. The names are still there on hover for
+        # the one row in twenty where you want to know which.
         also = r.get("alsoTop") or []
         alsocell = ('<td class="faint">—</td>' if not also else
                     f'<td class="dim" title="{esc(" ".join(also))}">'
@@ -709,11 +762,12 @@ def spreads(d: dict, per: str, sort: str = DEFAULT_SORT,
                        if d.get("mode") == "vol" else
                        ["equal-notional legs", "no leg cap"])
                     + ([fresh] if fresh else []))
-            + spread_charts(p, t, sort))
+            + spread_charts(p, t, sort, capital, vol_target, smalls))
 
 
-def spread_charts(p: dict, t: dict = None,
-                  sort: str = DEFAULT_SORT) -> str:
+def spread_charts(p: dict, t: dict = None, sort: str = DEFAULT_SORT,
+                  capital: float = 1_000_000.0, vol_target: float = 30.0,
+                  smalls: bool = True) -> str:
     """Legs rebased to 100 in the side colours, spread over them in the ink.
 
     The grid follows the table: same ranking, same order, same twelve. The
@@ -794,6 +848,61 @@ def spread_charts(p: dict, t: dict = None,
                  else None, "%", pos if (c.get("tot") or 0) >= 0 else neg,
                  on="Tot%"),
         ])
+        # The line the ratio was always missing. A card that says "1 GC :
+        # 2.34 SI" has told you the shape and nothing about whether you can
+        # hold it: the same sentence is true for a million-dollar account and
+        # a five-thousand-dollar one, and only one of them can send it. So the
+        # ratio is quoted against the account and the vol target on screen —
+        # the contracts to send, the gross it takes, the volatility the ROUNDED
+        # position actually runs at, and how far its hedge landed from the one
+        # the field was ranked on.
+        #
+        # The vol target does not touch the ratio, which is the point worth
+        # seeing: 20% instead of 30% buys two thirds of both legs, same mix.
+        # It moves the hedge only through rounding, and it moves it most on
+        # the small account — which is exactly where a spread quietly stops
+        # being a spread, and exactly what the old display could not say.
+        sz = SP.size_at(c, capital, vol_target, p.get("ann") or 252,
+                        smalls=smalls)
+        if not sz or sz["text"] == "—":
+            sized = ""
+        else:
+            hv = sz.get("hedge")
+            # Under 2% is inside the noise of a sigma sampled off a few dozen
+            # bars, so it is not worth colouring. Past 10% the position being
+            # held is not the one that ranked.
+            hcol = (faint if hv is None or abs(hv) < 2
+                    else (neg if abs(hv) >= 10 else ink))
+            hedge = ("" if hv is None else
+                     f'<span style="white-space:nowrap"><span style="color:'
+                     f'{faint};font-size:9px;letter-spacing:.07em">HEDGE</span> '
+                     f'<span style="color:{hcol};font-weight:'
+                     f'{700 if hcol == neg else 600}">{hv:+.0f}%</span></span>')
+            # Above 3x the vol target is being reached with borrowed room
+            # rather than with the position, which is a different decision and
+            # gets a different colour.
+            lcol = neg if sz["lev"] >= 3 else faint
+            sized = (f'<div class="cstats" style="gap:3px 10px">'
+                     f'<span style="white-space:nowrap"><span style="color:'
+                     f'{faint};font-size:9px;letter-spacing:.07em;'
+                     f'font-weight:600">SEND</span> <span style="color:{ink};'
+                     f'font-weight:700">{esc(sz["text"])}</span></span>'
+                     f'<span style="white-space:nowrap"><span style="color:'
+                     f'{faint};font-size:9px;letter-spacing:.07em">GROSS</span> '
+                     f'<span style="color:{lcol};font-weight:600">'
+                     f'{sz["lev"]:.2f}×</span></span>'
+                     f'<span style="white-space:nowrap"><span style="color:'
+                     f'{faint};font-size:9px;letter-spacing:.07em">HOLDS</span> '
+                     f'<span style="color:{ink};font-weight:600">'
+                     f'{sz["volAt"]:.0f}%</span>'
+                     # Only worth naming the target when the fill missed it.
+                     # "30% of 30% asked" is a sentence that says one thing
+                     # twice; "25% of 30% asked" is the whole point.
+                     + (f' <span style="color:{neg}">of {vol_target:.0f}% '
+                        f'asked</span>'
+                        if abs(sz["volAt"] - vol_target) >= 1 else "")
+                     + f'</span>{hedge}</div>')
+
         cards += (f'<div class="plot"><div class="ctitle">'
                   f'<b>{n}. {esc(c["label"])}</b>'
                   # The verdict was already reaching for the far corner with
@@ -803,8 +912,12 @@ def spread_charts(p: dict, t: dict = None,
                   f'{verdict}</div>'
                   f'<div class="clegend">{legend}</div>'
                   f'<div class="cstats">{stats}</div>'
+                  f'{sized}'
                   + CH.line_chart(c["t"], series, None, 560, 220, 1) + "</div>")
-    return (eyebrow("Why they ranked")
+    return (eyebrow("Why they ranked",
+                    f'<span style="margin-left:auto;color:{faint};'
+                    f'font-size:11.5px;font-weight:500">sized for '
+                    f'${capital:,.0f} at {vol_target:.0f}% vol</span>')
             + f'<div class="cgrid">{cards}</div>')
 
 # ------------------------------------------------------------------ Curve

@@ -396,6 +396,85 @@ def _window_field(name, by_bar, mode=MODE, chart_keys=()):
             out["sizeVol"] = label(v)
         return out
 
+    def basis(c):
+        """What it takes to hold one dollar of this position, in dollars.
+
+        The Ratio and Size columns are proportions, and a proportion has no
+        size: 1 GC : 2.34 SI is the same sentence whether the account is a
+        million or a hundred. It is also the one number a vol target CANNOT
+        move — asking for 20% instead of 30% buys two thirds as many of both
+        legs, not a different mix. What actually changes at 20% is that the
+        position is smaller, so rounding to whole contracts costs a larger
+        share of it and the hedge that gets SENT drifts further from the one
+        that was computed. None of that is visible until the ratio is quoted
+        against an account.
+
+        So this ships the primitives instead of an answer: the notional each
+        leg carries per dollar of spread capital, what one contract of each
+        costs, and the two sigmas and their correlation. size_at() turns them
+        into contracts at whatever capital and vol target are on screen —
+        which has to happen at render time, because the field is cached for
+        fifteen minutes and those two controls are not search arguments.
+        """
+        lg, sh = c["long"], c["short"]
+        out = {"wLong": None, "wShort": None, "unitLong": None,
+               "unitShort": None, "sigLong": None, "sigShort": None,
+               "smallLong": None, "smallShort": None, "flip": False}
+        # compute_outrights orients on Sharpe, so a short outright carries its
+        # only leg in "short". The sizing is the same either way — one leg at
+        # weight one — and the direction is already in the label, so the leg
+        # is read from whichever side holds it.
+        one = lg or sh
+        if not one or one not in raw_last:
+            return out
+        if c["kind"] != "pair":
+            cl = ss.name_of(one)
+            ml = U.MULT.get(cl)
+            if not ml:
+                return out
+            mic = U.MICRO.get(cl)
+            # A short outright is short: the fill has to read "-98 ZN", not
+            # "+98 ZN". The weight is one either way — sizing does not care
+            # which way a single leg points — so the direction rides beside it
+            # rather than as a negative weight, which would have flipped the
+            # notional and the leverage along with the label.
+            return {**out, "wLong": 1.0, "wShort": 0.0, "flip": one is sh,
+                    "unitLong": _num(raw_last[one] * ml, 2),
+                    "sigLong": _num(sigma.get(one, 0.0), 8),
+                    "smallLong": ([mic[0], _num(raw_last[one] * mic[1], 2)]
+                                  if mic else None)}
+        cl = ss.name_of(lg)
+        ml = U.MULT.get(cl)
+        if not ml:
+            return out
+        out["unitLong"] = _num(raw_last[lg] * ml, 2)
+        out["sigLong"] = _num(sigma.get(lg, 0.0), 8)
+        micl = U.MICRO.get(cl)
+        if micl:
+            out["smallLong"] = [micl[0], _num(raw_last[lg] * micl[1], 2)]
+        if not sh or sh not in raw_last:
+            return out
+        cs = ss.name_of(sh)
+        ms = U.MULT.get(cs)
+        if not ms:
+            return out
+        out["unitShort"] = _num(raw_last[sh] * ms, 2)
+        out["sigShort"] = _num(sigma.get(sh, 0.0), 8)
+        mics = U.MICRO.get(cs)
+        if mics:
+            out["smallShort"] = [mics[0], _num(raw_last[sh] * mics[1], 2)]
+        s1, s2 = sigma.get(lg, 0.0), sigma.get(sh, 0.0)
+        if mode == "vol" and s1 > 0 and s2 > 0:
+            # weighted_spread builds (a/s1 - b/s2) * (s1+s2)/2, so each leg's
+            # notional weight is that scale over its own sigma. Read straight
+            # off the same expression the returns were computed from rather
+            # than re-derived, so the sizing cannot drift from the statistics.
+            m = (s1 + s2) / 2
+            out["wLong"], out["wShort"] = _num(m / s1, 6), _num(m / s2, 6)
+        else:
+            out["wLong"], out["wShort"] = 1.0, 1.0
+        return out
+
     HEDGE_TOL = 0.02        # 2% off is inside the noise of a sampled sigma
 
     def ticket(c):
@@ -544,7 +623,8 @@ def _window_field(name, by_bar, mode=MODE, chart_keys=()):
             "mdd": _num(c["MDD%"], 1), "corr": _num(c["Corr"]),
             "ratio": _num(c["Ratio"]),
             "bestLegEr": best_leg, "legDelta": delta,
-            **contracts(c), "ticket": ticket(c), "roa": roa(c),
+            **contracts(c), **basis(c), "ticket": ticket(c),
+            "roa": roa(c),
         })
 
     # Charts follow the table's order, capped so one instrument cannot occupy
@@ -631,7 +711,10 @@ def _window_field(name, by_bar, mode=MODE, chart_keys=()):
                    # shape you like can be sanity-checked without scrolling
                    # back up to find its row.
                    "win": _num(c["Win%"], 0), "vol": _num(c["Vol%"], 1),
-                   "mdd": _num(c["MDD%"], 1),
+                   "mdd": _num(c["MDD%"], 1), "corr": _num(c["Corr"]),
+                   # Enough to price the card at any capital and vol target
+                   # without rebuilding a cached field. See basis().
+                   **basis(c),
                    "bestLegEr": best_leg, "legDelta": delta})
         charts.append(cv)
 
@@ -665,6 +748,87 @@ def _window_field(name, by_bar, mode=MODE, chart_keys=()):
         # screen, so it reads the number from here rather than keeping a copy.
         "chartCap": CHART_N,
     }
+
+
+def size_at(c, capital: float, vol_target: float, ann: float,
+            smalls: bool = True) -> dict | None:
+    """This position in contracts, for an account of `capital` at `vol_target`.
+
+    The ratio is scale-free and the vol target does not touch it. What the
+    target sets is the SCALE: k = target / the position's own volatility, so
+    30% on a 12%-vol spread is 2.5x the account in gross notional and 20% is
+    two thirds of that — the same mix, less of it. The ratio only moves once
+    the scale is small enough that whole contracts cannot express it, and then
+    it moves for a reason worth seeing rather than a reason worth hiding, so
+    both numbers are reported: the hedge the sizing asked for, and the hedge
+    the fill actually carries.
+
+    Vol is computed rather than assumed. The ideal fill hits the target by
+    construction; the rounded one does not, and quoting the target next to a
+    position that is really running at 22% would make this display a lie in
+    exactly the case it exists to expose. Two sigmas and a correlation are
+    enough to price it exactly, and all three ship with the candidate.
+    """
+    from sk_portfolio import _fill
+
+    wl, ws = c.get("wLong"), c.get("wShort")
+    ul, us = c.get("unitLong"), c.get("unitShort")
+    uvol = c.get("vol")
+    if wl is None or not ul or not capital or not vol_target or not uvol:
+        return None
+    pair = bool(ws) and bool(us)
+    k = vol_target / uvol
+    lname = c.get("lgName") or c.get("long")
+    sname = c.get("shName") or c.get("short")
+    if not pair:
+        # A short outright's only leg lives on the short side of the label, so
+        # the fill is quoted against whichever name is actually there.
+        lname = lname or sname
+        sname = None
+    sm_l = c.get("smallLong") if smalls else None
+    sm_s = c.get("smallShort") if smalls else None
+    side = -1.0 if c.get("flip") else 1.0
+    fl = _fill(side * capital * k * wl, ul, (sm_l[1] if sm_l else 0.0),
+               (sm_l[0] if sm_l else ""), lname or "")
+    fs = (_fill(-capital * k * ws, us, (sm_s[1] if sm_s else 0.0),
+                (sm_s[0] if sm_s else ""), sname or "")
+          if pair else None)
+
+    nl = abs(fl.get("notional") or 0.0)
+    ns = abs((fs or {}).get("notional") or 0.0)
+    s1, s2 = c.get("sigLong") or 0.0, c.get("sigShort") or 0.0
+    rho = c.get("corr")
+    xl, xs = nl / capital, ns / capital
+    var = (xl * s1) ** 2 + (xs * s2) ** 2
+    if pair and rho is not None and rho == rho:
+        var -= 2 * xl * xs * rho * s1 * s2
+    vol_at = (max(var, 0.0) ** 0.5) * (ann ** 0.5) * 100
+
+    # How far the hedge that can be SENT sits from the one that was ranked.
+    # In vol mode the target is equal dollar risk per leg; in notional mode it
+    # is equal dollar exposure. Both are wLong : wShort, so one expression
+    # covers them and neither convention gets a special case.
+    hedge = None
+    if pair and ns > 0 and ws:
+        hedge = ((nl / ns) / (wl / ws) - 1) * 100
+
+    gross = abs(nl) + ns
+    text = " · ".join(x for x in ((fl.get("text") if fl.get("lots") else None),
+                                  (fs.get("text") if fs and fs.get("lots")
+                                   else None)) if x and x != "—")
+    return {"text": text or "—",
+            "long": fl, "short": fs,
+            "k": round(k, 3),
+            "gross": gross, "lev": gross / capital if capital else 0.0,
+            "target": capital * k * (wl + (ws or 0.0)),
+            "volAt": round(vol_at, 1),
+            "hedge": None if hedge is None else round(hedge, 1),
+            # The ideal, for the reader who wants the proportion back. It is
+            # the same number the Ratio column carries, expressed in contracts.
+            "ratio": (round((wl / ul) / (ws / us), 2)
+                      if pair and ws and us else None),
+            "unfilled": [n for n, f in ((lname, fl), (sname, fs))
+                         if f is not None and not f.get("lots")]}
 
 
 def _top10_windows(out: dict, top=10) -> dict:
