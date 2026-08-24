@@ -4,8 +4,8 @@
     {
       "name": "sakata",
       "runtimeExecutable": "streamlit",
-      "runtimeArgs": ["run", "app.py", "--server.port", "8501", "--server.headless", "true"],
-      "port": 8501
+      "runtimeArgs": ["run", "app.py", "--server.port", "8511", "--server.headless", "true"],
+      "port": 8511
     }
   ]
 }
