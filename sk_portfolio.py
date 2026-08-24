@@ -809,7 +809,15 @@ def plan(closes, fine, res: dict, capital: float, vol_target: float,
         # the answer is usually within reach.
         needs = None
         if unit and not f.get("lots") and w["w"] and lev:
-            needs = (unit / 2) / (abs(w["w"]) / 100) / lev
+            # Half of the SMALLEST contract that can hold this leg, not half
+            # of the standard. With micros enabled a leg starts filling from
+            # half a micro, and quoting the standard's threshold overstated
+            # the capital needed by the whole micro divisor — silver read
+            # $1.68M when a 1,000oz SIL puts the leg on at $335k. When smalls
+            # are switched off `small` is zero and the standard is the answer
+            # again, which is the same sentence the fill chooser reads.
+            step = small if (small and small < unit) else unit
+            needs = (step / 2) / (abs(w["w"]) / 100) / lev
         # Margin on the position that can actually be sent, not on the ideal.
         # A small contract's margin is not published here, but margin tracks
         # notional closely enough that dividing the standard's by the same

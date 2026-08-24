@@ -406,6 +406,31 @@ def portfolio(res: dict, per: str, pl: dict = None,
     # quarters there is no room left for a bad day, let alone another trade.
     mpc = pl.get("marginPct", 0)
     mcol = ink if mpc < 50 else (amber if mpc < 75 else t.get("neg", amber))
+    def riskcell(rk, code_):
+        """The variance share, coloured — it was the greyest thing on the row.
+
+        This is the column that catches a basket which is one bet wearing five
+        hedges, and it was rendered `dim` beside a Weight column in full ink.
+        A negative share is a leg taking variance OUT of the portfolio, which
+        is the good side and so reads teal; a positive one past 40% is a
+        concentration the weight cap cannot see, so it takes the same amber
+        the Miss column uses for a fill that has drifted off its leg.
+        """
+        if rk is None:
+            return '<td class="faint">—</td>'
+        if rk < 0:
+            col_, wt = teal, 550
+        elif abs(rk) >= 60:
+            col_, wt = amber, 700
+        elif abs(rk) >= 40:
+            col_, wt = amber, 550
+        else:
+            col_, wt = mute, 450
+        tip_ = (f'{code_} carries {rk:.1f}% of the portfolio variance'
+                + (" — it hedges, so it takes risk out" if rk < 0 else ""))
+        return (f'<td style="color:{col_};font-weight:{wt}" '
+                f'title="{esc(tip_)}">{rk:.1f}</td>')
+
     rows = ""
     for i, leg in enumerate(legs, 1):
         long_ = leg["w"] >= 0
@@ -437,7 +462,7 @@ def portfolio(res: dict, per: str, pl: dict = None,
                  f'{"long" if long_ else "short"}</td>'
                  f'<td style="color:{ink};font-weight:700">'
                  f'{abs(leg["w"]):.1f}%</td>'
-                 + cell(leg.get("risk"), 1, "dim")
+                 + riskcell(leg.get("risk"), code)
                  + (f'<td class="dim">{abs(leg["notional"]):,.0f}</td>'
                     if leg.get("notional") is not None
                     else '<td class="faint">—</td>')
@@ -455,7 +480,10 @@ def portfolio(res: dict, per: str, pl: dict = None,
                  + "</tr>")
     if pl:
         got = (pl.get("filled") or {}).get("gross") or 0
-        rows += (f'<tr><td class="l dim">Gross exposure</td>'
+        # `out` is the raised band the other tabs use for a summary row. The
+        # two totals sat in plain body rows and read as a seventh and eighth
+        # leg until the eye reached the word "exposure".
+        rows += (f'<tr class="out"><td class="l dim">Gross exposure</td>'
                  f'<td class="l dim">{lev:.2f}×</td>'
                  f'<td class="dim">100.0%</td>'
                  f'<td class="dim">100.0</td>'
@@ -475,7 +503,7 @@ def portfolio(res: dict, per: str, pl: dict = None,
         net_pc = net_d / capital * 100 if capital else 0
         nfill = sum((l["fill"] or {}).get("notional") or 0 for l in legs)
         ncol = pos if abs(net_pc) < 25 else amber
-        rows += (f'<tr><td class="l dim">Net exposure</td>'
+        rows += (f'<tr class="out"><td class="l dim">Net exposure</td>'
                  f'<td class="l dim" style="color:{ncol}">'
                  f'{"long" if net_d >= 0 else "short"}</td>'
                  f'<td class="dim">{res["net"]:+.1f}%</td>'
@@ -599,11 +627,61 @@ def portfolio(res: dict, per: str, pl: dict = None,
     # this line rather than in a block of their own: the size the table is
     # quoted at, and whether it is still the same basket as last time.
     held = f"held at {pl.get('lev', 0):.2f}×"
-    if pl.get("capped"):
-        held += f", capped from {pl.get('wantLev', 0):.2f}×"
     turned = (f'{turn["kept"]} of {turn["of"]} legs held · '
               f'{turn["turnover"]:.0f}% turnover since the last run'
               if turn else "")
+
+    # The vol target was the one control with nothing on screen to answer it.
+    # A 30% target on a quiet basket asks for 6.8x, the 1x cap refuses, and
+    # the table then reports 4.4% volatility — a seventh of the risk the
+    # control was set to — while the card said only "capped from 6.82x". The
+    # cap was named and the thing it cost was not. Trends already reconciles
+    # these two numbers in one clause and this says it the same way, with the
+    # cap moved down beside it: the cap is the reason for the miss, so the two
+    # belong on one line rather than at opposite ends of the card.
+    volat = pl.get("volAt")
+    size_bits = []
+    if volat is not None and vol_target:
+        miss = abs(volat - vol_target) >= 1
+        vc = amber if miss else pos
+        size_bits.append(
+            f'<span style="color:{vc};font-weight:{700 if miss else 600}">'
+            f'holds {volat:.1f}% vol {"of" if miss else "at"} the '
+            f'{vol_target:.0f}% target</span>')
+    elif volat is not None:
+        size_bits.append(f'<span style="color:{mute}">holds {volat:.1f}% vol '
+                         f'— sized on leverage, not on a vol target</span>')
+    if pl.get("capped"):
+        size_bits.append(f'<span style="color:{amber}">capped at '
+                         f'{pl.get("lev", 0):.2f}× from '
+                         f'{pl.get("wantLev", 0):.2f}×</span>')
+    sep = f'<span style="color:{faint}">·</span>'
+    sizeline = (f'<div class="cstats" style="margin-bottom:5px">'
+                f'{sep.join(size_bits)}</div>' if size_bits else "")
+
+    # The legs no fill can reach, counted and named. Every such row already
+    # shows its own em-dash in the Fill column, but nothing added them up, and
+    # a basket missing two of six legs is not the basket the table above it
+    # scored — the Executable row is washed green for being the one that is
+    # true, and it is only true if you know what is missing from it. The
+    # capital figure is the largest of the per-leg thresholds, so it is the
+    # number at which the WHOLE basket fills rather than the next leg.
+    und = pl.get("undersized") or []
+    warn = ""
+    if und and legs:
+        # "A, B and C" rather than "A, B, C": this is a sentence, and the
+        # list is short enough to be read as one.
+        named = (" and ".join(und) if len(und) < 3
+                 else ", ".join(und[:-1]) + " and " + und[-1])
+        needs = [l.get("needs") for l in legs
+                 if l["code"] in und and l.get("needs")]
+        at = (f' · the whole basket fills from about ${max(needs):,.0f}'
+              if needs else "")
+        warn = (f'<div style="margin:0 0 8px;padding:5px 9px;border-radius:4px;'
+                f'background:{amber}1a;color:{amber};font-size:10.5px;'
+                f'font-weight:600;line-height:1.5">'
+                f'{esc(named)} cannot be sent at ${capital:,.0f} — '
+                f'{len(und)} of {len(legs)} legs{esc(at)}</div>')
 
     scored = (statrow("Optimized", st_, False)
               # Executable, not "as filled": it is the row you can send, and
@@ -628,9 +706,17 @@ def portfolio(res: dict, per: str, pl: dict = None,
 
     # A bare table, not table(): inside the card its border would be a second
     # rectangle drawn 14px inside the first one.
+    #
+    # Four lines above the numbers, in the order a reader needs them: what the
+    # card is and the size it is quoted at, whether that size hit the risk
+    # that was asked for, what cannot be sent at all, and last — quietest —
+    # where the rows came from. The three facts that carry colour used to be
+    # one grey run-on sentence with the provenance, which is the one thing on
+    # the card nobody needs to read twice.
     card = ('<div class="plot">'
             f'<div class="ctitle"><b>What this portfolio scored</b>'
             f'<span>{esc(held)}</span></div>'
+            + sizeline + warn
             + (f'<div class="cstats" style="color:{mute}">{esc(sub)}</div>'
                if sub else "")
             + '<div class="scroll"><table>'
@@ -659,9 +745,14 @@ def portfolio(res: dict, per: str, pl: dict = None,
                          f'</span>')
                + table('<th class="l">Instrument</th>'
                        '<th class="l">Side</th><th>Weight</th>'
-                       '<th>Risk%</th><th>Notional</th>'
-                       '<th class="l">Fill</th><th>Miss</th><th>Fees</th>'
-                       '<th>Margin</th>', rows)
+                       '<th title="Share of portfolio variance. Sums to 100 '
+                       'across the legs; a hedge reads negative.">Risk%</th>'
+                       # Four of these columns are dollars and three of them
+                       # were not saying so, which left Miss — the one that is
+                       # a percentage — looking like the odd one out.
+                       '<th>Notional $</th>'
+                       '<th class="l">Fill</th><th>Miss%</th><th>Fees $</th>'
+                       '<th>Margin $</th>', rows)
                + '</div>')
     return f'<div class="pfgrid">{card}{plot}</div>{weights}'
 
