@@ -660,7 +660,8 @@ def freshness(stamp, ttl: int) -> str:
 
 def spreads(d: dict, per: str, sort: str = DEFAULT_SORT,
             fresh: str = "", capital: float = 1_000_000.0,
-            vol_target: float = 30.0, smalls: bool = True) -> str:
+            vol_target: float = 30.0, smalls: bool = True,
+            max_lev: float | None = 1.0) -> str:
     p = d["data"][per]
     t = _tok()
 
@@ -712,7 +713,7 @@ def spreads(d: dict, per: str, sort: str = DEFAULT_SORT,
         # and the leverage it takes all sit on hover rather than widening a
         # row that already carries eleven columns.
         sz = SP.size_at(r, capital, vol_target, p.get("ann") or 252,
-                        smalls=smalls)
+                        smalls=smalls, max_lev=max_lev)
         ex = r.get(sxkey)
         if sz and sz["text"] != "—":
             tip = []
@@ -720,7 +721,9 @@ def spreads(d: dict, per: str, sort: str = DEFAULT_SORT,
                 tip.append(f'ratio 1 {r["long"]} : {1 / ex:,.2f} {r["short"]}')
             if sz.get("hedge") is not None:
                 tip.append(f'hedge {sz["hedge"]:+.1f}% off that')
-            tip.append(f'{sz["lev"]:.2f}x gross, holds {sz["volAt"]:.0f}% vol')
+            tip.append(f'{sz["lev"]:.2f}x gross, holds {sz["volAt"]:.0f}% vol'
+                       + (f' — capped from {sz["wantLev"]:.2f}x'
+                          if sz.get("capped") else ""))
             size = (f'<td class="l dim" title="{esc(" · ".join(tip))}">'
                     f'{esc(sz["text"])}</td>')
         elif ex:
@@ -762,12 +765,13 @@ def spreads(d: dict, per: str, sort: str = DEFAULT_SORT,
                        if d.get("mode") == "vol" else
                        ["equal-notional legs", "no leg cap"])
                     + ([fresh] if fresh else []))
-            + spread_charts(p, t, sort, capital, vol_target, smalls))
+            + spread_charts(p, t, sort, capital, vol_target, smalls,
+                            max_lev))
 
 
 def spread_charts(p: dict, t: dict = None, sort: str = DEFAULT_SORT,
                   capital: float = 1_000_000.0, vol_target: float = 30.0,
-                  smalls: bool = True) -> str:
+                  smalls: bool = True, max_lev: float | None = 1.0) -> str:
     """Legs rebased to 100 in the side colours, spread over them in the ink.
 
     The grid follows the table: same ranking, same order, same twelve. The
@@ -863,7 +867,7 @@ def spread_charts(p: dict, t: dict = None, sort: str = DEFAULT_SORT,
         # the small account — which is exactly where a spread quietly stops
         # being a spread, and exactly what the old display could not say.
         sz = SP.size_at(c, capital, vol_target, p.get("ann") or 252,
-                        smalls=smalls)
+                        smalls=smalls, max_lev=max_lev)
         if not sz or sz["text"] == "—":
             sized = ""
         else:
@@ -878,10 +882,17 @@ def spread_charts(p: dict, t: dict = None, sort: str = DEFAULT_SORT,
                      f'{faint};font-size:9px;letter-spacing:.07em">HEDGE</span> '
                      f'<span style="color:{hcol};font-weight:'
                      f'{700 if hcol == neg else 600}">{hv:+.0f}%</span></span>')
-            # Above 3x the vol target is being reached with borrowed room
-            # rather than with the position, which is a different decision and
-            # gets a different colour.
+            # Colour follows what is HELD, not what was asked for. Above 3x
+            # the vol target is being reached with borrowed room rather than
+            # with the position, which is a different decision and deserves
+            # the warning; a position the cap already pulled back to 1x is
+            # carrying no such risk, however much the sizing wanted. What it
+            # wanted still shows — as text, beside it.
             lcol = neg if sz["lev"] >= 3 else faint
+            grossv = (f'{sz["lev"]:.2f}×'
+                      + (f'<span style="color:{faint};font-weight:500"> '
+                         f'of {sz["wantLev"]:.1f}× asked</span>'
+                         if sz.get("capped") else ""))
             sized = (f'<div class="cstats" style="gap:3px 10px">'
                      f'<span style="white-space:nowrap"><span style="color:'
                      f'{faint};font-size:9px;letter-spacing:.07em;'
@@ -890,17 +901,24 @@ def spread_charts(p: dict, t: dict = None, sort: str = DEFAULT_SORT,
                      f'<span style="white-space:nowrap"><span style="color:'
                      f'{faint};font-size:9px;letter-spacing:.07em">GROSS</span> '
                      f'<span style="color:{lcol};font-weight:600">'
-                     f'{sz["lev"]:.2f}×</span></span>'
+                     f'{grossv}</span></span>'
                      f'<span style="white-space:nowrap"><span style="color:'
                      f'{faint};font-size:9px;letter-spacing:.07em">HOLDS</span> '
                      f'<span style="color:{ink};font-weight:600">'
                      f'{sz["volAt"]:.0f}%</span>'
-                     # Only worth naming the target when the fill missed it.
-                     # "30% of 30% asked" is a sentence that says one thing
-                     # twice; "25% of 30% asked" is the whole point.
+                     # Only worth naming the target when the fill missed it,
+                     # and only worth colouring when the MISS is a surprise.
+                     # "30% of 30% asked" says one thing twice. "39% of 30%
+                     # asked" is rounding losing the target on an account too
+                     # small to express it, which is the whole point of the
+                     # line. A capped position missing by 27 points is neither
+                     # — it is the cap doing exactly what it was set to do,
+                     # already said one field to the left, and painting twelve
+                     # cards amber for it is how a warning stops being read.
                      + (f' <span style="color:{neg}">of {vol_target:.0f}% '
                         f'asked</span>'
-                        if abs(sz["volAt"] - vol_target) >= 1 else "")
+                        if not sz.get("capped")
+                        and abs(sz["volAt"] - vol_target) >= 1 else "")
                      + f'</span>{hedge}</div>')
 
         cards += (f'<div class="plot"><div class="ctitle">'
@@ -917,7 +935,10 @@ def spread_charts(p: dict, t: dict = None, sort: str = DEFAULT_SORT,
     return (eyebrow("Why they ranked",
                     f'<span style="margin-left:auto;color:{faint};'
                     f'font-size:11.5px;font-weight:500">sized for '
-                    f'${capital:,.0f} at {vol_target:.0f}% vol</span>')
+                    f'${capital:,.0f} at {vol_target:.0f}% vol, '
+                    + (f'{max_lev:g}× gross at most' if max_lev
+                       else 'no leverage cap')
+                    + '</span>')
             + f'<div class="cgrid">{cards}</div>')
 
 # ------------------------------------------------------------------ Curve

@@ -751,7 +751,7 @@ def _window_field(name, by_bar, mode=MODE, chart_keys=()):
 
 
 def size_at(c, capital: float, vol_target: float, ann: float,
-            smalls: bool = True) -> dict | None:
+            smalls: bool = True, max_lev: float | None = 1.0) -> dict | None:
     """This position in contracts, for an account of `capital` at `vol_target`.
 
     The ratio is scale-free and the vol target does not touch it. What the
@@ -762,6 +762,22 @@ def size_at(c, capital: float, vol_target: float, ann: float,
     it moves for a reason worth seeing rather than a reason worth hiding, so
     both numbers are reported: the hedge the sizing asked for, and the hedge
     the fill actually carries.
+
+    A vol target alone is not a position size, and on this field it is not
+    even close. Two things multiply. The target asks for k units of a spread
+    that is usually quieter than the account wants — 30% against a 9.3% spread
+    is already 3.2x. And vol weighting makes ONE unit cost more than a dollar
+    whenever the legs' vols differ: 6E prints a fraction of gold's per-bar
+    sigma, so it carries about 2.5 of notional against gold's 0.63, and the
+    unlevered spread is 3.2x gross before the target is applied at all.
+    Together they asked for $10.2m of notional on a million-dollar account,
+    which is arithmetic rather than a trade.
+
+    So `max_lev` caps gross, exactly as sk_portfolio.plan does, and when it
+    binds the position simply runs below its target. That has to be said out
+    loud rather than left as two numbers to divide, so `capped` and `wantLev`
+    come back with the fill: the volatility asked for was 30%, the volatility
+    held is what a sendable position could reach.
 
     Vol is computed rather than assumed. The ideal fill hits the target by
     construction; the rounded one does not, and quoting the target next to a
@@ -777,7 +793,13 @@ def size_at(c, capital: float, vol_target: float, ann: float,
     if wl is None or not ul or not capital or not vol_target or not uvol:
         return None
     pair = bool(ws) and bool(us)
-    k = vol_target / uvol
+    k = want_k = vol_target / uvol
+    # Gross per unit of spread, which is 1.0 only on an outright or on two
+    # legs of identical volatility. Everywhere else it is the first half of
+    # why the contract counts looked large.
+    unit_gross = wl + (ws or 0.0)
+    if max_lev and unit_gross > 0 and k * unit_gross > max_lev:
+        k = max_lev / unit_gross
     lname = c.get("lgName") or c.get("long")
     sname = c.get("shName") or c.get("short")
     if not pair:
@@ -820,7 +842,13 @@ def size_at(c, capital: float, vol_target: float, ann: float,
             "long": fl, "short": fs,
             "k": round(k, 3),
             "gross": gross, "lev": gross / capital if capital else 0.0,
-            "target": capital * k * (wl + (ws or 0.0)),
+            # What the target asked for before the cap, so a position running
+            # at 3% of a 30% target can say which of the two it is: a quiet
+            # spread, or a cap doing its job.
+            "wantLev": round(want_k * unit_gross, 2),
+            "capped": bool(max_lev and want_k * unit_gross > max_lev + 1e-9),
+            "unitGross": round(unit_gross, 2),
+            "target": capital * k * unit_gross,
             "volAt": round(vol_at, 1),
             "hedge": None if hedge is None else round(hedge, 1),
             # The ideal, for the reader who wants the proportion back. It is

@@ -609,7 +609,7 @@ with t[4]:
         # capital and vol target only decide how large it is drawn — the same
         # split the Portfolio tab makes, and the reason they can sit under a
         # 15-minute cache and still respond on the keystroke.
-        s2 = st.columns([3, 3, 3, 2])
+        s2 = st.columns([3, 2, 2, 3])
         sp_cap_usd = _dollars(s2[0].text_input(
             "Capital", value="1,000,000", key="sp_capital_txt",
             on_change=_capital("sp_capital_txt"),
@@ -624,7 +624,20 @@ with t[4]:
                  " scale, not a mix: 20% instead of 30% buys two thirds of"
                  " both legs. It changes the hedge only through rounding —"
                  " watch HEDGE on the cards when you drop it.").rstrip("%"))
-        sp_size = s2[2].selectbox(
+        # Without this the field asked for $10.2m of notional on a $1m
+        # account and called it a spread. Two things multiply: a vol target
+        # above the position's own volatility, and vol-weighted legs whose
+        # gross exceeds one dollar per dollar whenever their vols differ.
+        # Same control, same default and same meaning as the Portfolio tab.
+        sp_lev = s2[2].selectbox(
+            "Max leverage", ["1×", "2×", "3×", "5×", "None"],
+            index=0, key="sp_lev",
+            help="Ceiling on gross notional over capital. A quiet spread needs"
+                 " leverage to reach a vol target — GC/6E wanted 10×"
+                 " for 30% — and this is where you say how much of that"
+                 " you will take. When it binds the position runs below"
+                 " target, and the card says so.")
+        sp_size = s2[3].selectbox(
             "Contracts", ["Standard + Small", "Standard Only"],
             key="sp_size",
             help="Whether micros and minis may close the gap on a leg. On a"
@@ -632,7 +645,9 @@ with t[4]:
                  " hedge that lands and one that is 30% off.")
         UI.md(R.spreads(field, per, spsort, R.freshness(stamp, TTL_FAST),
                         capital=sp_cap_usd, vol_target=sp_vol,
-                        smalls=(sp_size == "Standard + Small")))
+                        smalls=(sp_size == "Standard + Small"),
+                        max_lev=(None if sp_lev == "None"
+                                 else float(sp_lev.rstrip("×")))))
         if st.session_state.get("sp_auto"):
             autorefresh(stamp, TTL_FAST)
 
