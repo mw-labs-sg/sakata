@@ -85,18 +85,29 @@ def board(d: dict, hz: str = "Day") -> str:
 # -------------------------------------------------------------- Technical
 def technical(d: dict, code: str, hz: str, dec: int) -> str:
     order, grid = d["order"], d["grid"]
-    head = ('<th class="l">Instrument</th>' +
-            "".join(f"<th>{h}</th>" for h in order) + "<th>Σ</th>")
-    body, last_sec = "", None
+    # The selected horizon takes the same weight the Board gives it. Two
+    # dropdowns sit above this matrix and neither of them used to be visible
+    # in it: the reader picked a horizon and an instrument, and then had to
+    # find the cell those two chose by counting columns.
+    head = ('<th class="l">Instrument</th>'
+            + "".join(f'<th{" class=\"on\"" if h == hz else ""}>{esc(h)}</th>'
+                      for h in order)
+            + '<th title="Ladder total: every horizon’s bias for this '
+              'instrument, added up, so a column that agrees with itself '
+              'reads far from zero.">Σ</th>')
+    body, legend, seen = "", "", []
     for u_code in U.CODES:
         g = grid.get(u_code)
         if not g:
             continue
+        # A sector is a swatch on the row, not a row of its own. Eight
+        # sub-headers spent eight lines of table height saying what an 8px
+        # square says beside the code — and they said it in the Instrument
+        # column, where the eye is already reading instrument names.
         sec = U.SECTOR[u_code]
-        if sec != last_sec:
-            last_sec = sec
-            body += (f'<tr class="sec"><td class="l">{esc(sec)}</td>'
-                     f'<td colspan="{len(order) + 1}"></td></tr>')
+        if sec not in seen:
+            seen.append(sec)
+            legend += f'<span class="key">{swatch(sec)}{esc(sec)}</span>'
         tot, cells = 0, ""
         for h in order:
             c = g.get(h)
@@ -105,13 +116,19 @@ def technical(d: dict, code: str, hz: str, dec: int) -> str:
                 continue
             tot += c["score"]
             title = f'{c["bias"]} · {c["regime"]} / {c["retrace"]} / {c["trend"]}'
-            cells += (f'<td style="color:{BIAS_COL[str(c["score"])]};'
-                      f'font-weight:600" title="{esc(title)}">'
+            cells += (f'<td{" class=\"on\"" if h == hz else ""} '
+                      f'style="color:{BIAS_COL[str(c["score"])]};'
+                      f'font-weight:{700 if h == hz else 600}" '
+                      f'title="{esc(title)}">'
                       f'{"+" if c["score"] > 0 else ""}{c["score"]}</td>')
-        body += (f'<tr><td class="l ind">{esc(u_code)} '
-                 f'{esc(U.NAME[u_code])}</td>{cells}'
+        # The row the chart below is drawn from takes the raised band. It is
+        # the only thing on the tab that connects nineteen rows of scores to
+        # the one candlestick chart underneath them.
+        body += (f'<tr{" class=\"out\"" if u_code == code else ""}>'
+                 f'<td class="l">{swatch(sec)}{esc(u_code)} '
+                 f'<span class="nm">{esc(U.NAME[u_code])}</span></td>{cells}'
                  f'<td style="color:{C["pos"] if tot >= 0 else C["amber"]};'
-                 f'font-weight:600">{"+" if tot > 0 else ""}{tot}</td></tr>')
+                 f'font-weight:700">{"+" if tot > 0 else ""}{tot}</td></tr>')
 
     g = grid.get(code, {})
     c = g.get(hz, {})
@@ -137,7 +154,9 @@ def technical(d: dict, code: str, hz: str, dec: int) -> str:
                  "bands. Each horizon votes <b>range</b>, <b>retrace</b> and "
                  "<b>trend</b>, summing to a bias between −3 and +3. Σ is the "
                  "ladder total.")
-            + eyebrow("Bias matrix") + table(head, body)
+            + eyebrow("Bias matrix",
+                      f'<span class="legend">{legend}</span>')
+            + table(head, body)
             + note(f'<b>{esc(code)} · {esc(hz)}</b> — {esc(c.get("bias", "—"))} '
                    f'({esc(c.get("regime", "—"))} / {esc(c.get("retrace", "—"))} '
                    f'/ {esc(c.get("trend", "—"))}) · position {pos} of prior '

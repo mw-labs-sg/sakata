@@ -495,10 +495,14 @@ def source(label: str, *caches, key: str = "", action: str = "") -> bool:
 
 # Tab order is reading order: what happened, what is being said about it, what
 # is scheduled, then the analytical tabs, with the standing reference last.
+# Portfolio sits beside Trends because they are one question asked at two
+# sizes — Trends ranks the pairs, Portfolio holds a basket of them, and the
+# legs on one tab are the rows of the other. Technical follows, being the only
+# analytical tab that looks at a single instrument on its own.
 # Uppercased here rather than in CSS: which element holds the label has moved
 # between Streamlit versions, so a selector is a thing that breaks on upgrade.
-TABS = ["Board", "News", "Calendar", "Margin Vol", "Trends", "Technical",
-        "Portfolio", "Curve", "Knowledge"]
+TABS = ["Board", "News", "Calendar", "Margin Vol", "Trends", "Portfolio",
+        "Technical", "Curve", "Knowledge"]
 t = st.tabs([x.upper() for x in TABS])
 
 # ----------------------------------------------------------------- Board
@@ -652,7 +656,7 @@ with t[4]:
             autorefresh(stamp, TTL_FAST)
 
 # ------------------------------------------------------------- Technical
-with t[5]:
+with t[6]:
     # by_bar belongs in this list. Without it, clearing technical_grid and
     # prices left by_bar's 15-minute entry intact, so the grid was rebuilt from
     # byte-identical bars and Refresh fetched nothing — while Board's Refresh
@@ -676,7 +680,7 @@ with t[5]:
         UI.md(R.technical(grid, code, hzt, U.DEC[code]))
 
 # ------------------------------------------------------------- Portfolio
-with t[6]:
+with t[5]:
     # Optimize sits on the header line with Refresh: both are "go and do
     # something", and it was the only control on the tab that did not belong
     # with the settings it followed.
