@@ -837,7 +837,7 @@ def plan(closes, fine, res: dict, capital: float, vol_target: float,
     eqw = np.array(res.get("equalW") or [])
     sized = sc.stats(w * lev) if w.size else None
     sized_eq = sc.stats(eqw * lev) if eqw.size else None
-    filled = None
+    filled, exec_curve = None, None
     if np.abs(achieved).sum() > 0:
         # Rescored on the position that can actually be sent: same shape only
         # if the rounding was kind, which is exactly what needs checking.
@@ -846,6 +846,14 @@ def plan(closes, fine, res: dict, capital: float, vol_target: float,
         # against capital too. Multiplying by `gross` counted the
         # leverage twice and reported a fill 1.7x its own target.
         filled["gross"] = float(np.abs(achieved).sum()) * capital
+        # The same rescore as a line, so the rounding can be seen rather than
+        # inferred from a row of ratios. Divided back out of the leverage
+        # because the two curves it is drawn against are unit-gross shapes:
+        # held at 1.7x it would tower over both for a reason that has nothing
+        # to do with the fill, and the fill is the only thing this line is
+        # here to show.
+        if lev:
+            exec_curve = _series(sc.index, sc.curve(achieved / lev))
     # One round turn, in and out. Against a window's return it is usually
     # noise; against 11,000 micro tickets it was not, which is the whole
     # reason the fill chooser now spends in dollars.
@@ -860,6 +868,7 @@ def plan(closes, fine, res: dict, capital: float, vol_target: float,
             "feeShare": (fee_total / capital * 100 / abs(tot) * 100)
             if capital and tot else None,
             "sized": sized, "sizedEqual": sized_eq, "pvol": pvol,
+            "execCurve": exec_curve,
             "capped": bool(max_lev and want > max_lev + 1e-9),
             "volAt": pvol * lev,
             "target": sum(abs(l["notional"]) for l in legs),

@@ -508,15 +508,35 @@ def portfolio(res: dict, per: str, pl: dict = None,
                 f'{cells}</tr>')
 
     curve, eqc = res["curve"], res["equalCurve"]
-    # Ink and faint at chart weight is grey against grey: the picture could
-    # not say which line was the answer. Teal is the basket; the benchmark is
-    # ink, dotted and at half strength — which resolves to white on the dark
-    # theme and to near-black on the light one, so it reads as a reference
-    # against the plot in both rather than as a second answer. Faint was too
-    # close to the gridlines to be seen as a line at all.
+    exc = pl.get("execCurve")
+    # The three rows of the table, drawn. Two of them are arguments and one is
+    # the position, so only one is solid: teal, the basket in whole contracts,
+    # is what can be sent and it sits on top. The ideal is the same shape
+    # before rounding, amber and dotted because it is the claim rather than
+    # the answer; equal weight is ink, dotted and at half strength — which
+    # resolves to white on the dark theme and near-black on the light one, so
+    # it reads as a reference in both. Ink and faint at chart weight was grey
+    # against grey and could not say which line was the answer; faint alone
+    # was too close to the gridlines to be seen as a line at all.
+    #
+    # Back to front: the reference under the claim, the claim under the
+    # position. Nothing solid is ever crossed out by a dotted line.
+    ideal = ({"k": "optimized (ideal weights)", "v": curve["v"], "c": amber,
+              "w": 2.0, "dash": "0.1 5", "cap": "round", "o": 0.95}
+             if exc else
+             # No fill to draw — an unpriced basket, or one no leg reaches.
+             # The ideal is then the only answer on screen, so it stops
+             # deferring to a line that is not there.
+             {"k": "optimized (ideal weights)", "v": curve["v"], "c": amber,
+              "w": 2.6})
     series = [{"k": "equal weight, same legs", "v": eqc["v"], "c": ink,
                "w": 1.8, "dash": "0.1 5", "cap": "round", "o": 0.55},
-              {"k": "this portfolio", "v": curve["v"], "c": teal, "w": 2.6}]
+              ideal]
+    if exc:
+        series.append({"k": "executable (whole contracts)", "v": exc["v"],
+                       "c": teal, "w": 2.6})
+    # Legend in the table's order — optimized, executable, equal weight — so
+    # the two halves of the card are read the same way down.
     legend = "".join(
         f'<span class="key" style="display:inline-flex;align-items:center;'
         f'gap:6px"><i style="display:inline-block;width:18px;height:0;'
@@ -524,13 +544,13 @@ def portfolio(res: dict, per: str, pl: dict = None,
         f'{sr["c"]};opacity:{sr.get("o", 1)}"></i>'
         f'<span style="color:{sr["c"]};opacity:{sr.get("o", 1)};'
         f'font-weight:600">{esc(sr["k"])}</span></span>'
-        for sr in reversed(series))
+        for sr in ([ideal] + series[2:] + series[:1]))
 
     # What the picture is for, said in words. Two numbers, because they answer
     # two different questions and the tab would be dishonest carrying only one:
     # the OBJECTIVE delta is what the search actually maximised and what the
-    # weights were chosen on, and the end-of-curve gap is what the two lines
-    # on screen literally show. They can disagree — a basket can win on ROA by
+    # weights were chosen on, and the end-of-curve gap is what the lines on
+    # screen literally show. They can disagree — a basket can win on ROA by
     # taking a shallower hole rather than by making more — and when they do,
     # that disagreement is the finding.
     okey = {"ROA": "roa", "ER (Adj)": "erAdj", "Sharpe": "sharpe"}.get(
@@ -555,8 +575,15 @@ def portfolio(res: dict, per: str, pl: dict = None,
     # at the size held and these lines are not.
     cend = curve["v"][-1] if curve["v"] else None
     eend = eqc["v"][-1] if eqc["v"] else None
-    gap = (f'ends at {cend:,.1f} vs {eend:,.1f} — '
-           f'{cend - eend:+,.1f} points over the window'
+    xend = exc["v"][-1] if (exc and exc["v"]) else None
+    # The executable end point goes beside the ideal rather than in place of
+    # it: the distance between those two is the price of whole contracts, and
+    # it is the one number the third line was added to make visible.
+    gap = (f'ends at {cend:,.1f} ideal'
+           + (f', {xend:,.1f} executable' if xend is not None else "")
+           + f' vs {eend:,.1f} equal — '
+             f'{(xend if xend is not None else cend) - eend:+,.1f} points '
+             f'over the window'
            if cend is not None and eend is not None else "")
     plotsub = " · ".join(x for x in (
         f'{esc(per)} · {len(curve["t"])} bars',
