@@ -425,10 +425,10 @@ def portfolio(res: dict, per: str, pl: dict = None,
             if leg.get("needs"):
                 tip += (f' · fills from about ${leg["needs"]:,.0f} of '
                         f'capital at this weight')
-        # No ordinal and no weight bar. Beside the chart the table has 676px
-        # for eleven columns, and those two were the only ones carrying
-        # nothing a neighbour did not already say — the rows are in weight
-        # order and the bar was drawing the number next to it.
+        # No ordinal and no weight bar. Both were carrying nothing a neighbour
+        # did not already say — the rows are in weight order and the bar was
+        # drawing the number next to it — and the width is better spent on the
+        # nine columns that answer something.
         rows += (f'<tr><td class="l">'
                  f'{swatch(U.SECTOR.get(code, ""))}{esc(code)} '
                  f'<span class="nm">{esc(U.NAME.get(code, ""))}</span></td>'
@@ -520,11 +520,10 @@ def portfolio(res: dict, per: str, pl: dict = None,
         f'{sr["c"]}"></i><span style="color:{sr["c"]};font-weight:600">'
         f'{esc(sr["k"])}</span></span>' for sr in reversed(series))
 
-    # The scored table goes FIRST. The weights are the argument and the score
-    # is the conclusion; a reader who stops after one table should have
-    # stopped after the conclusion. Its caption is gone with it — three rows
-    # of seven numbers under a heading that names the leverage do not need a
-    # paragraph explaining that they are numbers.
+    # The score and its curve share the top band, and the weights run the full
+    # width underneath. The conclusion is one thing said twice — four rows of
+    # numbers and the line they came off — so it reads across, not down; the
+    # weights are the working, and the working goes last.
     # Two facts outlived the chip row they used to live in, and both belong on
     # this line rather than in a block of their own: the size the table is
     # quoted at, and whether it is still the same basket as last time.
@@ -549,8 +548,8 @@ def portfolio(res: dict, per: str, pl: dict = None,
                         wash=(f"background:{amber}14;"
                               if (hold or {}).get("thin") else "")))
     # The notes that used to trail each label are one line under the title
-    # instead. In a 400px card they were wrapping the label column to three
-    # lines and pushing the numbers off the right edge.
+    # instead. Wrapping the label column to three lines pushed the numbers off
+    # the right edge, and half a page is still not room for both.
     sub = " · ".join(x for x in (
         "ideal vs whole contracts vs equal weight",
         (f'held forward fit on {hold["trainBars"]} bars through '
@@ -568,8 +567,16 @@ def portfolio(res: dict, per: str, pl: dict = None,
               '<th>Sharpe</th><th>Win%</th><th>Vol%</th><th>Tot%</th>'
               '<th>MDD%</th></tr></thead>'
               f'<tbody>{scored}</tbody></table></div>'
+            + "</div>")
+
+    # The picture is its own card beside the table rather than a second half
+    # of it. Same head, same border, and a title that says what it is drawing
+    # — the legend names the two lines, not what they are for.
+    plot = ('<div class="plot">'
+            '<div class="ctitle"><b>The curve behind the score</b>'
+            f'<span>{esc(per)} · {len(curve["t"])} bars</span></div>'
             + f'<div class="clegend">{legend}</div>'
-            + CH.line_chart(curve["t"], series, None, 560, 300, 1)
+            + CH.line_chart(curve["t"], series, None, 620, 300, 1)
             + "</div>")
 
     weights = ('<div>'
@@ -584,7 +591,7 @@ def portfolio(res: dict, per: str, pl: dict = None,
                        '<th class="l">Fill</th><th>Miss</th><th>Fees</th>'
                        '<th>Margin</th>', rows)
                + '</div>')
-    return f'<div class="pfgrid">{weights}{card}</div>'
+    return f'<div class="pfgrid">{card}{plot}</div>{weights}'
 
 
 
