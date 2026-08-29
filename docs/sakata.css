@@ -32,8 +32,8 @@
 
   /* ground */
   --bg:#f4f6f7;                 /* page: a half-step off white so cards lift */
-  --glow-a:rgba(124,58,237,.25);
-  --glow-b:rgba(14,165,233,.18);
+  --glow-a:rgba(13,148,136,.16);
+  --glow-b:rgba(34,211,238,.08);
   --surface:#ffffff;            /* cards, tables, controls */
   --raised:#fafbfc;             /* hover, section rows, summary bars */
   --line:#e0e5e8;               /* structural border */
@@ -74,7 +74,7 @@
    glare at 6am, and the coral stops vibrating the way it does on #000. */
 :root[data-theme="dark"]{
   --bg:#0b0f12; --surface:#11171b; --raised:#161d22;
-  --glow-a:rgba(139,92,246,.31); --glow-b:rgba(14,165,233,.23);
+  --glow-a:rgba(20,184,166,.20); --glow-b:rgba(34,211,238,.10);
   --line:#232c33; --hair:#1a2229;
 
   --ink:#e9eff2; --body:#b6c2c9; --mute:#8b979f; --faint:#68757d;
@@ -101,8 +101,8 @@
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%;background:var(--bg)}
 body{margin:0;background:
-  radial-gradient(1050px 720px at 12% -6%,var(--glow-a),transparent 64%),
-  radial-gradient(940px 680px at 94% 10%,var(--glow-b),transparent 66%),
+  radial-gradient(1180px 780px at 10% -8%,var(--glow-a),transparent 70%),
+  radial-gradient(1080px 760px at 96% 6%,var(--glow-b),transparent 72%),
   var(--bg);background-attachment:fixed;color:var(--ink);font-family:var(--sans);
   font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased;
   text-rendering:optimizeLegibility;font-feature-settings:'tnum' 1,'lnum' 1}

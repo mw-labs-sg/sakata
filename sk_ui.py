@@ -180,8 +180,8 @@ def _bridge(t: dict) -> str:
           '+ [data-testid="stElementContainer"]')
     return f"""
 .stApp {{ background:
-  radial-gradient(1050px 720px at 12% -6%, {t.get('glow-a')}, transparent 64%),
-  radial-gradient(940px 680px at 94% 10%, {t.get('glow-b')}, transparent 66%),
+  radial-gradient(1180px 780px at 10% -8%, {t.get('glow-a')}, transparent 70%),
+  radial-gradient(1080px 760px at 96% 6%, {t.get('glow-b')}, transparent 72%),
   {t.get('bg')} !important; background-attachment: fixed !important; }}
 /* Streamlit paints an opaque view container inside .stApp. It covered the
    ambient background even though the gradient itself was valid and present.
