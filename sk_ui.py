@@ -76,8 +76,15 @@ def _block(css: str, selector: str) -> dict:
     return _declarations(m.group(1)) if m else {}
 
 
-@st.cache_data
 def _load_css() -> str:
+    """Read the theme source directly.
+
+    The file is small, and Streamlit's function cache only hashes this
+    function's Python source—not the CSS file it reads. Caching here therefore
+    kept an older stylesheet after deployment while the new bridge expected
+    newer tokens, producing invalid values such as `radial-gradient(...,
+    None, ...)`. A direct read is cheap and keeps code and tokens atomic.
+    """
     try:
         return CSS_PATH.read_text(encoding="utf-8")
     except Exception:
