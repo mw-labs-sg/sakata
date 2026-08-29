@@ -115,9 +115,11 @@ body{margin:0;background:
 /* Mark, wordmark, hairline, stamp, switch — one lockup spanning the full
    measure, so the eye lands on the name and exits at the build time. */
 .head{display:flex;align-items:center;gap:10px;margin-bottom:16px}
-.mark{flex:none;margin-bottom:2px;color:var(--teal);filter:drop-shadow(0 0 8px var(--glow-a))}
-.wordmark{font-family:var(--display);font-size:23px;font-weight:800;
-  letter-spacing:-.035em;color:var(--ink);margin:0;line-height:1}
+.mark{flex:none;margin-bottom:2px;color:transparent;
+  background:url('enso.svg') center/contain no-repeat;
+  filter:drop-shadow(0 0 8px var(--glow-a))}
+.wordmark{font-family:var(--display);font-size:24px;font-weight:700;
+  letter-spacing:-.022em;color:var(--ink);margin:0;line-height:1}
 .rule{flex:1;height:1px;background:var(--line);margin:2px 4px 0}
 .stamp{font-family:var(--mono);font-size:11px;font-weight:400;
   color:var(--faint);white-space:nowrap;letter-spacing:-.02em}

@@ -343,7 +343,7 @@ svg .neg {{ color: inherit !important; }}
 {sw} .stButton button p {{ font-size: 14px !important; }}
 .sk-head {{ display: flex; align-items: center; gap: 10px; margin: 0 0 4px; }}
 .sk-mark {{ flex: none; color: {t.get('teal')}; margin-bottom: 2px; filter: drop-shadow(0 0 8px {t.get('glow-a')}); }}
-.sk-word {{ font-family: var(--display); font-size: 23px; font-weight: 800; letter-spacing: -.035em; color: {t.get('ink')}; margin: 0; line-height: 1; }}
+.sk-word {{ font-family: var(--display); font-size: 24px; font-weight: 700; letter-spacing: -.022em; color: {t.get('ink')}; margin: 0; line-height: 1; }}
 .sk-rule {{ flex: 1; height: 1px; background: {t.get('line')}; margin: 2px 4px 0; }}
 .sk-stamp {{ font-size: 11px; color: {t.get('faint')}; white-space: nowrap; letter-spacing: -.02em; }}
 .chart {{ width: 100%; height: auto; }}
@@ -368,16 +368,17 @@ svg .neg {{ color: inherit !important; }}
 # favicon below can state it outright.
 MARK = ('<svg class="sk-mark" width="30" height="30" viewBox="0 0 32 32" '
         'fill="none" aria-hidden="true">'
-        '<defs><linearGradient id="enso" x1="5" y1="26" x2="27" y2="5" '
-        'gradientUnits="userSpaceOnUse"><stop stop-color="currentColor" '
-        'stop-opacity=".58"/><stop offset=".48" stop-color="currentColor"/>'
-        '<stop offset="1" stop-color="currentColor" stop-opacity=".82"/>'
-        '</linearGradient></defs>'
-        '<path d="M24.8 7.1C29.4 12.2 29 20.5 23.8 25.2C18.4 30.1 9.8 28.8 '
-        '5.7 22.9C1.9 17.4 3.8 9.8 9.5 6.2C13.3 3.8 18.1 3.7 21.7 5.3" '
-        'stroke="url(#enso)" stroke-width="4.2" stroke-linecap="round"/>'
-        '<path d="M22.5 5.65C23.25 5.95 23.9 6.38 24.5 6.85" stroke="currentColor" '
-        'stroke-width="1.35" stroke-linecap="round" opacity=".55"/>'
+        '<path d="M23.9 6.3C29.5 10.8 29.8 19.6 24.6 24.9C19.2 30.4 9.8 29.4 '
+        '5.4 23C1.4 17.3 3.3 9.5 9.1 5.8C12.7 3.5 17.4 3.2 21.1 4.8" '
+        'stroke="currentColor" stroke-width="4.35" stroke-linecap="round"/>'
+        '<path d="M6.1 23.8C3.4 19.4 3.7 14.3 6.4 10.2" stroke="currentColor" '
+        'stroke-width=".72" stroke-linecap="round" opacity=".52"/>'
+        '<path d="M7.5 25.3C5.4 23.1 4.2 20.7 4 18.2" stroke="currentColor" '
+        'stroke-width=".46" stroke-linecap="round" opacity=".34"/>'
+        '<path d="M22.15 5.2C23.1 5.55 24 6.15 24.75 6.9" stroke="currentColor" '
+        'stroke-width="1.25" stroke-linecap="round" opacity=".7"/>'
+        '<path d="M23.35 5.55L25.3 6.15" stroke="currentColor" stroke-width=".38" '
+        'stroke-linecap="round" opacity=".42"/>'
         '</svg>')
 
 # The browser-tab icon, derived from MARK rather than copied. `currentColor`
@@ -394,7 +395,7 @@ MARK = ('<svg class="sk-mark" width="30" height="30" viewBox="0 0 32 32" '
 # an SVG STRING into a data URI, so this needs no file on disk — and needing
 # no file is what stops it drifting from the mark it is a picture of.
 FAVICON = (MARK
-           .replace('class="sk-mark" width="28" height="28" ', "")
+           .replace('class="sk-mark" width="30" height="30" ', "")
            .replace("currentColor", tokens(False).get("teal-b", "#14b8a6")))
 
 
@@ -434,7 +435,7 @@ def header(stamp: str = "") -> None:
        f'<span style="flex:none;line-height:0;color:{t.get("teal")};'
        f'align-self:center">{MARK}</span>'
        f'<span style="font-family:var(--display),Inter,sans-serif;font-size:27px;'
-       f'font-weight:800;letter-spacing:-.035em;color:{t.get("ink")};'
+       f'font-weight:700;letter-spacing:-.022em;color:{t.get("ink")};'
        f'line-height:1">Sakata</span>'
        f'<span style="flex:1"></span>'
        f'<span style="font-size:11px;color:{t.get("faint")};white-space:nowrap;'
