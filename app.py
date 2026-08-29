@@ -38,7 +38,12 @@ import sk_technical as TECH
 import sk_ui as UI
 import sk_universe as U
 
+# The tab icon is the header mark, which is also the icon site/index.html
+# carries — three surfaces, one drawing. Without it Streamlit serves its own
+# logo, so an open Sakata tab was indistinguishable from any other Streamlit
+# app in the same window.
 st.set_page_config(page_title="Sakata · futures terminal", layout="wide",
+                   page_icon=UI.FAVICON,
                    initial_sidebar_state="collapsed")
 
 

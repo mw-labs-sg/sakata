@@ -342,6 +342,23 @@ MARK = ('<svg class="sk-mark" width="28" height="28" viewBox="0 0 32 32" fill="n
         '<circle cx="11.6" cy="19.0" r="2.2" fill="#d3a355"/>'
         '</svg>')
 
+# The browser-tab icon, derived from MARK rather than copied. `currentColor`
+# is what lets the header mark take teal from whichever theme is on; a favicon
+# has no inherited colour to take, so the swirl has to be stated. teal-b is
+# the one to state — the bright mint holds on a white tab strip and on a dark
+# one, and a browser does not tell the page which it has, so a favicon gets
+# one colour or it gets the wrong one half the time. Read from the stylesheet
+# like every other colour here: the point of the token system is that a hex
+# literal in Python is a second place to get it wrong.
+#
+# The class and the 28px header sizing come off: a tab renders this at 16px
+# and sk-mark's rules do not exist in the browser's chrome. Streamlit base64s
+# an SVG STRING into a data URI, so this needs no file on disk — and needing
+# no file is what stops it drifting from the mark it is a picture of.
+FAVICON = (MARK
+           .replace('class="sk-mark" width="28" height="28" ', "")
+           .replace("currentColor", tokens(False).get("teal-b", "#14b8a6")))
+
 
 def md(s: str) -> None:
     """Emit raw HTML. Blank lines must go: markdown ends a raw-HTML block at
