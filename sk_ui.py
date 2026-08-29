@@ -334,12 +334,25 @@ svg .neg {{ color: inherit !important; }}
 """
 
 
-MARK = ('<svg class="sk-mark" width="28" height="28" viewBox="0 0 32 32" fill="none" aria-hidden="true">'
-        '<path d="M22.3 7.8L22.8 8.0L23.3 8.3L23.8 8.6L24.2 9.0L24.5 9.4L24.8 9.9L25.0 10.4L25.2 10.9L25.4 11.3L25.6 11.8L25.7 12.3L25.8 12.8L25.9 13.3L25.9 13.8L26.0 14.2L26.0 14.7L26.0 15.2L26.0 15.7L26.0 16.2L25.9 16.7L25.8 17.2L25.7 17.6L25.5 18.1L25.3 18.6L25.1 19.0L24.8 19.5L24.5 20.0L24.2 20.4L23.9 20.8L23.6 21.2L23.2 21.6L22.9 22.0L22.5 22.4L22.1 22.8L21.6 23.1L21.2 23.4L20.7 23.8L20.2 24.0L19.7 24.3L19.2 24.5L18.7 24.8L18.1 24.9L17.6 25.1L17.0 25.3L16.5 25.4L15.9 25.4L15.3 25.5L14.8 25.5L14.2 25.5L13.6 25.5L13.1 25.4L12.5 25.3L11.9 25.2L11.4 25.1L10.9 24.9L10.3 24.7L9.8 24.4L9.3 24.2L8.8 23.9L8.4 23.6L8.0 23.2L7.6 22.7L7.2 22.3L6.9 21.9L6.6 21.4L6.3 21.0L6.1 20.5L5.9 20.0L5.7 19.5L5.5 19.0L5.3 18.4L5.2 17.9L5.2 17.4L5.1 16.9L5.1 16.3L5.1 15.8L5.2 15.2L5.2 14.7L5.4 14.2L5.5 13.6L5.7 13.1L5.9 12.6L6.1 12.1L6.4 11.6L6.7 11.1L7.1 10.6L7.5 10.2L7.9 9.7L8.3 9.3L8.7 8.9L9.2 8.6L9.7 8.2L10.2 7.9L10.8 7.6L11.3 7.3L11.9 7.1L12.4 6.9L13.0 6.7L13.6 6.5L14.2 6.4L14.7 6.3L15.3 6.2L15.9 6.1L16.5 6.1L17.1 6.1L17.7 6.1L18.3 6.1L18.9 6.2L19.5 6.3L20.1 6.4L20.1 6.4L20.2 6.4L20.2 6.4L20.2 6.3L20.3 6.3L20.3 6.3L20.3 6.2L20.3 6.2L20.3 6.1L20.3 6.1L20.3 6.1L20.3 6.0L20.2 6.0L20.2 6.0L19.6 5.8L19.0 5.7L18.4 5.6L17.8 5.5L17.2 5.4L16.5 5.4L15.9 5.4L15.3 5.4L14.6 5.4L14.0 5.5L13.4 5.6L12.7 5.7L12.1 5.9L11.5 6.0L10.9 6.3L10.2 6.5L9.6 6.8L9.0 7.1L8.4 7.4L7.9 7.8L7.3 8.2L6.8 8.6L6.3 9.1L5.8 9.6L5.4 10.1L5.0 10.7L4.6 11.2L4.3 11.8L4.0 12.5L3.8 13.1L3.6 13.8L3.5 14.4L3.4 15.1L3.4 15.7L3.4 16.4L3.5 17.0L3.6 17.7L3.7 18.3L3.9 18.9L4.1 19.5L4.4 20.0L4.7 20.6L5.0 21.1L5.3 21.6L5.7 22.1L6.1 22.5L6.5 23.0L7.0 23.4L7.4 23.8L7.9 24.1L8.4 24.5L8.8 24.9L9.3 25.3L9.8 25.6L10.4 25.9L10.9 26.2L11.5 26.5L12.1 26.8L12.7 27.0L13.3 27.2L14.0 27.3L14.6 27.5L15.3 27.6L16.0 27.6L16.7 27.6L17.3 27.6L18.0 27.5L18.7 27.4L19.4 27.3L20.1 27.1L20.8 26.9L21.5 26.7L22.1 26.4L22.7 26.1L23.4 25.7L24.0 25.3L24.5 24.9L25.1 24.4L25.6 24.0L26.1 23.5L26.6 22.9L27.0 22.4L27.4 21.8L27.8 21.2L28.1 20.6L28.4 19.9L28.6 19.3L28.8 18.6L29.0 18.0L29.1 17.3L29.3 16.6L29.4 15.9L29.4 15.2L29.4 14.5L29.3 13.8L29.1 13.1L28.9 12.4L28.7 11.8L28.4 11.2L28.0 10.6L27.6 10.1L27.1 9.6L26.6 9.1L26.1 8.7L25.6 8.3L25.0 7.9L24.5 7.6L24.0 7.2L23.5 6.8L23.0 6.4L22.8 6.4L22.6 6.3L22.5 6.4L22.3 6.4L22.2 6.5L22.0 6.6L21.9 6.8L21.9 6.9L21.8 7.1L21.9 7.3L21.9 7.4L22.0 7.6L22.1 7.7Z" fill="currentColor"/>'
-        '<path d="M4.1 17.8L4.0 15.9L4.2 14.0L4.8 12.1L5.9 10.4L7.2 8.9L8.9 7.7L10.7 6.8L12.5 6.1L14.5 5.7L16.4 5.6L18.3 5.7L20.2 6.0" fill="none" stroke="currentColor" stroke-width="0.3" stroke-linecap="round" opacity="0.55"/>'
-        '<path d="M7.5 23.2L6.0 21.4L4.9 19.4L4.3 17.1L4.4 14.7L5.1 12.4L6.4 10.2L8.2 8.4L10.4 7.1L12.8 6.2L15.3 5.8L17.7 5.8L20.1 6.2" fill="none" stroke="currentColor" stroke-width="0.26" stroke-linecap="round" opacity="0.5"/>'
-        '<path d="M5.2 12.7L5.9 11.4L6.7 10.2L7.8 9.1L8.9 8.2L10.2 7.4L11.6 6.8L13.0 6.4L14.4 6.1L15.8 5.9L17.3 5.9L18.7 6.1L20.1 6.4" fill="none" stroke="currentColor" stroke-width="0.22" stroke-linecap="round" opacity="0.45"/>'
-        '<circle cx="11.6" cy="19.0" r="2.2" fill="#d3a355"/>'
+# One brushstroke, opening at the top right. An ensō is a circle drawn in a
+# single stroke and left unclosed, which is the whole of the idea: a cycle,
+# and the admission that it was drawn by a hand rather than struck by a
+# compass. The old mark chased that with four stacked paths and a swarm of
+# two-hundred-odd points, and arrived at a ring with texture on it.
+#
+# This is one filled outline instead, and every part of it is doing the work
+# a brush does. The stroke lands heavy at the top right and thins as it goes,
+# because a brush carries a finite load of ink; it lifts to a point rather
+# than stopping at an edge, because that is what lifting looks like. The
+# circle is deliberately about 4% out of round, and the entry is cut on the
+# slant rather than square across. A perfectly round ensō of constant width
+# is not a minimal ensō, it is a loading spinner.
+#
+# currentColor, so the header takes teal from whichever theme is on and the
+# favicon below can state it outright.
+MARK = ('<svg class="sk-mark" width="28" height="28" viewBox="0 0 32 32" '
+        'fill="none" aria-hidden="true">'
+        '<path d="M24.07 4.62L25.13 5.63L26.07 6.75L26.86 7.97L27.50 9.26L27.99 10.60L28.33 11.98L28.51 13.38L28.55 14.78L28.45 16.16L28.22 17.52L27.86 18.85L27.38 20.12L26.78 21.35L26.07 22.51L25.26 23.61L24.34 24.62L23.32 25.54L22.20 26.36L21.01 27.06L19.73 27.63L18.40 28.07L17.02 28.35L15.60 28.48L14.18 28.43L12.77 28.22L11.40 27.84L10.08 27.29L8.84 26.58L7.70 25.73L6.67 24.76L5.78 23.67L5.02 22.49L4.41 21.25L3.95 19.95L3.64 18.63L3.47 17.29L3.45 15.95L3.56 14.63L3.81 13.34L4.18 12.10L4.67 10.90L5.26 9.76L5.95 8.69L6.74 7.69L7.62 6.77L8.58 5.94L9.64 5.23L10.77 4.64L11.95 4.17L13.18 3.83L14.43 3.62L15.70 3.52L15.70 3.78L14.60 3.95L13.53 4.25L12.52 4.67L11.56 5.18L10.68 5.78L9.87 6.44L9.13 7.16L8.45 7.91L7.85 8.71L7.32 9.55L6.86 10.42L6.47 11.32L6.16 12.24L5.93 13.18L5.77 14.14L5.69 15.10L5.68 16.07L5.75 17.04L5.91 18.01L6.16 18.97L6.50 19.90L6.94 20.79L7.46 21.64L8.08 22.44L8.78 23.16L9.56 23.81L10.41 24.37L11.31 24.82L12.26 25.17L13.24 25.42L14.23 25.55L15.23 25.58L16.21 25.49L17.18 25.30L18.11 25.02L19.00 24.65L19.84 24.20L20.63 23.67L21.36 23.08L22.03 22.44L22.63 21.75L23.18 21.01L23.65 20.24L24.07 19.44L24.42 18.61L24.70 17.75L24.91 16.88L25.06 15.98L25.12 15.07L25.11 14.16L25.02 13.24L24.84 12.33Z" fill="currentColor"/>'
         '</svg>')
 
 # The browser-tab icon, derived from MARK rather than copied. `currentColor`
