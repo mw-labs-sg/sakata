@@ -2,7 +2,7 @@
 
 ## FILES
 
-app.py — Streamlit terminal; nine tabs, cached data functions, refresh/staleness shell | imports: sk_amp, sk_board, sk_calendar, sk_curve, sk_margins, sk_portfolio, sk_render, sk_sources, sk_spreads, sk_technical, sk_ui, sk_universe | called by: —
+app.py — Streamlit terminal; ten tabs, cached data functions, refresh/staleness shell | imports: sk_amp, sk_board, sk_calendar, sk_curve, sk_export, sk_knowledge, sk_margins, sk_portfolio, sk_render, sk_sources, sk_spreads, sk_technical, sk_ui, sk_universe | called by: —
 
 build.py — CI build of the static site; fetches once, writes every JSON payload | imports: sk_amp, sk_board, sk_curve, sk_knowledge, sk_margins, sk_sources, sk_spreads, sk_technical, sk_universe | called by: —
 
@@ -21,6 +21,8 @@ sk_calendar.py — Calendar tab data: scheduled events, roll dates, expiries | i
 sk_charts.py — every SVG the site draws | imports: sk_ui | called by: sk_render
 
 sk_curve.py — term structure, roll, annualised carry from CME settlements | imports: sk_fmt, sk_universe | called by: app, build, pull
+
+sk_export.py — provider-neutral Briefing export; cleans chart series and serialises canonical JSON plus LLM-ready Markdown | imports: — | called by: app
 
 sk_fmt.py — JSON number formatting shared by tab modules | imports: — | called by: sk_board, sk_curve, sk_margins, sk_technical
 
@@ -61,6 +63,7 @@ Styling and table markup: sk_ui.py, site/sakata.css, sk_render.py, sk_charts.py
 Spreads and portfolio: sakata_stats.py, sk_spreads.py, sk_portfolio.py, sk_render.py, app.py
 Data fetching: sk_sources.py, sk_amp.py, sk_curve.py, pull.py, build.py, diag_margins.py
 Tab wiring: app.py, sk_render.py
+Briefing export: app.py, sk_export.py
 Static site: build.py, sk_knowledge.py, site/
 Board tab: sk_board.py, sk_render.py, app.py
 Technical tab: sk_technical.py, sk_render.py, app.py

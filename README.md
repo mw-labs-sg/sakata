@@ -47,6 +47,7 @@ sk_ui.py            palette, CSS bridge, table/number helpers
 sk_charts.py        hand-rolled SVG: bars, lines, candles
 sk_amp.py           AMP + CME margin scraping (supersedes the old sk_sources path)
 sk_calendar.py      Calendar — rules, holidays, ET->SGT conversion
+sk_export.py        Briefing — canonical JSON snapshot + LLM-ready Markdown
 
 site/               the shell, edited by hand
   index.html        script order lives here
@@ -95,6 +96,7 @@ seconds and offline.
 | Margins   | AMP + CME outright file         | Margin vs notional, vol and daily range |
 | Events    | *computed in the browser*       | Pure calendar rules, so they stay correct even if the build is stale |
 | News      | Trading Economics + CoinDesk    | Overnight commentary, built to paste into an LLM |
+| Briefing  | All computed tabs               | Download a focused/full Markdown brief or canonical JSON snapshot |
 
 ## Adding an instrument
 

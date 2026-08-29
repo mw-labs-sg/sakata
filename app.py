@@ -29,6 +29,8 @@ import sk_amp as AMP
 import sk_board as BOARD
 import sk_calendar as CAL
 import sk_curve as CURVE
+import sk_export as EX
+import sk_knowledge as KN
 import sk_margins as MARGIN
 import sk_portfolio as PF
 import sk_render as R
@@ -507,7 +509,7 @@ def source(label: str, *caches, key: str = "", action: str = "") -> bool:
 # Uppercased here rather than in CSS: which element holds the label has moved
 # between Streamlit versions, so a selector is a thing that breaks on upgrade.
 TABS = ["Board", "News", "Calendar", "Margin Vol", "Trends", "Portfolio",
-        "Technical", "Curve", "Knowledge"]
+        "Technical", "Curve", "Knowledge", "Briefing"]
 t = st.tabs([x.upper() for x in TABS])
 
 # ----------------------------------------------------------------- Board
@@ -873,3 +875,112 @@ with t[8]:
     last_kn = {c: float(df["close"].iloc[-1]) for c, df in daily_kn.items()
                if df is not None and len(df)}
     UI.md(R.knowledge(grp, last_kn))
+
+# --------------------------------------------------------------- Briefing
+with t[9]:
+    UI.md(UI.note(
+        "Build one provider-neutral market snapshot for ChatGPT, Claude or "
+        "another LLM. <b>Markdown</b> is the recommended attachment; JSON is "
+        "the exact machine-readable copy. Chart drawing arrays are excluded, "
+        "while the computed tables, rankings, levels and warnings remain."))
+
+    ec = st.columns([2, 2, 6], vertical_alignment="bottom")
+    brief_mode = ec[0].selectbox(
+        "Detail", ["Focused", "Full"], key="brief_mode",
+        help="Focused keeps the selected spread window and technical contract. "
+             "Full includes every computed spread window and technical contract.")
+    build_brief = ec[1].button("Build briefing", type="primary",
+                               help="Refresh the downloadable snapshot from "
+                                    "Sakata's current cached data.")
+
+    if build_brief:
+        now = dt.datetime.now(dt.timezone.utc)
+        full = brief_mode == "Full"
+        daily_brief = prices("1d", "10y")
+        board_brief = BOARD.build_board(daily_brief)
+        spreads_brief = spread_field(
+            R.BASES.get(st.session_state.get("sp_basis", "Vol"), "vol"))
+        technical_brief = technical_grid()
+
+        if not full:
+            selected_window = st.session_state.get("sp_window")
+            if selected_window not in spreads_brief.get("data", {}):
+                selected_window = next(iter(spreads_brief.get("data", {})), None)
+            spreads_brief = {
+                "mode": spreads_brief.get("mode"),
+                "computed": spreads_brief.get("computed"),
+                "summary": spreads_brief.get("summary", []),
+                "selected_window": selected_window,
+                "data": ({selected_window: spreads_brief["data"][selected_window]}
+                         if selected_window else {}),
+            }
+            selected_code = st.session_state.get("tech_code")
+            if selected_code not in technical_brief.get("grid", {}):
+                selected_code = next(iter(technical_brief.get("grid", {})), None)
+            technical_brief = {
+                "order": technical_brief.get("order", []),
+                "selected_contract": selected_code,
+                "grid": ({selected_code: technical_brief["grid"][selected_code]}
+                         if selected_code else {}),
+            }
+
+        cal_days_brief = int(st.session_state.get("cal_days", 14))
+        selections = {
+            "board_horizon": st.session_state.get("board_hz", "Day"),
+            "calendar_days": cal_days_brief,
+            "spread_window": st.session_state.get("sp_window"),
+            "spread_function": st.session_state.get("sp_sort"),
+            "spread_basis": st.session_state.get("sp_basis"),
+            "technical_contract": st.session_state.get("tech_code"),
+            "technical_horizon": st.session_state.get("tech_hz"),
+            "curve_contract": st.session_state.get("cv_code"),
+            "knowledge_group": st.session_state.get("kn_group", "All"),
+            "portfolio_settings": st.session_state.get("pf_for"),
+        }
+        sections = {
+            "board": board_brief,
+            "news": news_data(),
+            "calendar": CAL.build(cal_days_brief),
+            "margins": margin_data(),
+            "volatility": vol_grid_data(),
+            "spreads": spreads_brief,
+            "technical": technical_brief,
+            "portfolio": {
+                "result": st.session_state.get("pf_result"),
+                "plan": plan,
+                "held_forward": st.session_state.get("pf_hold"),
+                "turnover": st.session_state.get("pf_turn"),
+            },
+            "curve": curve_data(),
+            "knowledge": KN.KNOWLEDGE,
+        }
+        data = EX.snapshot(sections, selections, brief_mode, now)
+        stamp = now.strftime("%Y-%m-%d-%H%M")
+        st.session_state["brief_pack"] = {
+            "mode": brief_mode,
+            "stamp": stamp,
+            "md": EX.as_markdown(data),
+            "json": EX.as_json(data),
+        }
+
+    pack = st.session_state.get("brief_pack")
+    if pack:
+        st.caption(f'{pack["mode"]} briefing built {pack["stamp"]} UTC · '
+                   f'{len(pack["md"].encode("utf-8")) / 1024:,.0f} KB Markdown')
+        dc = st.columns([2, 2, 6])
+        dc[0].download_button(
+            "Download brief (.md)", data=pack["md"],
+            file_name=f'sakata-briefing-{pack["stamp"]}.md',
+            mime="text/markdown", type="primary", key="brief_md")
+        dc[1].download_button(
+            "Download data (.json)", data=pack["json"],
+            file_name=f'sakata-briefing-{pack["stamp"]}.json',
+            mime="application/json", key="brief_json")
+        with st.expander("Analysis prompt included in the Markdown file"):
+            st.code("Act as a cross-asset futures strategist. Analyse only the "
+                    "supplied snapshot. Identify the market regime, cross-asset "
+                    "agreement and divergences, strongest opportunities, risks, "
+                    "and clear invalidation conditions.", language=None)
+    else:
+        st.caption("Choose a detail level, then build the briefing. Nothing is "
+                   "sent anywhere; both files are created in your browser.")
