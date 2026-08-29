@@ -200,6 +200,16 @@ body, .stApp {{ color: {t.get('body')} !important; }}
 .block-container {{ max-width: 1160px; padding: 20px 24px 56px; }}
 #MainMenu, footer, header[data-testid="stHeader"] {{ display: none; }}
 .stApp, .stApp * {{ font-family: var(--sans) !important; }}
+/* The broad type bridge above also catches Streamlit's ligature icons. When
+   "Material Symbols Rounded" is replaced with Inter, the expander chevron
+   becomes the literal word `arrow_right` and the theme glyph can clip. Put
+   the icon font back on the stable test id after the general rule. */
+[data-testid="stIconMaterial"] {{
+  font-family: "Material Symbols Rounded", "Material Symbols Outlined" !important;
+  font-weight: normal !important; font-style: normal !important;
+  letter-spacing: normal !important; text-transform: none !important;
+  white-space: nowrap !important; word-wrap: normal !important;
+}}
 .sk-stamp, code, pre, pre * {{ font-family: var(--mono) !important; }}
 /* Streamlit 1.59 draws the strip as [role="tablist"] with no testid, and each
    tab as [data-testid="stTab"]. The old [data-baseweb="tab-list"] selectors

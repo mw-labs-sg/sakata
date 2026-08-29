@@ -977,10 +977,11 @@ with t[9]:
             file_name=f'sakata-briefing-{pack["stamp"]}.json',
             mime="application/json", key="brief_json")
         with st.expander("Analysis prompt included in the Markdown file"):
-            st.code("Act as a cross-asset futures strategist. Analyse only the "
-                    "supplied snapshot. Identify the market regime, cross-asset "
-                    "agreement and divergences, strongest opportunities, risks, "
-                    "and clear invalidation conditions.", language=None)
+            st.markdown(
+                "Act as a cross-asset futures strategist. Analyse only the "
+                "supplied snapshot. Identify the market regime, cross-asset "
+                "agreement and divergences, strongest opportunities, risks, "
+                "and clear invalidation conditions.")
     else:
         st.caption("Choose a detail level, then build the briefing. Nothing is "
                    "sent anywhere; both files are created in your browser.")
