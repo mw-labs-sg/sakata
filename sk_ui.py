@@ -172,7 +172,10 @@ def _bridge(t: dict) -> str:
     sw = ('[data-testid="stElementContainer"]:has(#sk-theme-anchor) '
           '+ [data-testid="stElementContainer"]')
     return f"""
-.stApp {{ background: {t.get('bg')}; }}
+.stApp {{ background:
+  radial-gradient(900px 540px at 8% -8%, {t.get('glow-a')}, transparent 66%),
+  radial-gradient(760px 520px at 96% 2%, {t.get('glow-b')}, transparent 68%),
+  {t.get('bg')}; background-attachment: fixed; }}
 /* Streamlit bakes config.toml's textColor into its emotion classes and exposes
    no CSS variable to retarget it — there is not one custom property on :root,
    body, .stApp or stAppViewContainer — so the per-theme ink has to be set here
@@ -326,7 +329,7 @@ svg .neg {{ color: inherit !important; }}
 {sw} .stButton button {{ width: 32px; padding: 0; font-size: 14px; }}
 {sw} .stButton button p {{ font-size: 14px !important; }}
 .sk-head {{ display: flex; align-items: center; gap: 10px; margin: 0 0 4px; }}
-.sk-mark {{ flex: none; color: {t.get('teal')}; margin-bottom: 2px; }}
+.sk-mark {{ flex: none; color: {t.get('teal')}; margin-bottom: 2px; filter: drop-shadow(0 0 8px {t.get('glow-a')}); }}
 .sk-word {{ font-family: var(--display); font-size: 23px; font-weight: 800; letter-spacing: -.035em; color: {t.get('ink')}; margin: 0; line-height: 1; }}
 .sk-rule {{ flex: 1; height: 1px; background: {t.get('line')}; margin: 2px 4px 0; }}
 .sk-stamp {{ font-size: 11px; color: {t.get('faint')}; white-space: nowrap; letter-spacing: -.02em; }}
@@ -350,9 +353,18 @@ svg .neg {{ color: inherit !important; }}
 #
 # currentColor, so the header takes teal from whichever theme is on and the
 # favicon below can state it outright.
-MARK = ('<svg class="sk-mark" width="28" height="28" viewBox="0 0 32 32" '
+MARK = ('<svg class="sk-mark" width="30" height="30" viewBox="0 0 32 32" '
         'fill="none" aria-hidden="true">'
-        '<path d="M24.07 4.62L25.13 5.63L26.07 6.75L26.86 7.97L27.50 9.26L27.99 10.60L28.33 11.98L28.51 13.38L28.55 14.78L28.45 16.16L28.22 17.52L27.86 18.85L27.38 20.12L26.78 21.35L26.07 22.51L25.26 23.61L24.34 24.62L23.32 25.54L22.20 26.36L21.01 27.06L19.73 27.63L18.40 28.07L17.02 28.35L15.60 28.48L14.18 28.43L12.77 28.22L11.40 27.84L10.08 27.29L8.84 26.58L7.70 25.73L6.67 24.76L5.78 23.67L5.02 22.49L4.41 21.25L3.95 19.95L3.64 18.63L3.47 17.29L3.45 15.95L3.56 14.63L3.81 13.34L4.18 12.10L4.67 10.90L5.26 9.76L5.95 8.69L6.74 7.69L7.62 6.77L8.58 5.94L9.64 5.23L10.77 4.64L11.95 4.17L13.18 3.83L14.43 3.62L15.70 3.52L15.70 3.78L14.60 3.95L13.53 4.25L12.52 4.67L11.56 5.18L10.68 5.78L9.87 6.44L9.13 7.16L8.45 7.91L7.85 8.71L7.32 9.55L6.86 10.42L6.47 11.32L6.16 12.24L5.93 13.18L5.77 14.14L5.69 15.10L5.68 16.07L5.75 17.04L5.91 18.01L6.16 18.97L6.50 19.90L6.94 20.79L7.46 21.64L8.08 22.44L8.78 23.16L9.56 23.81L10.41 24.37L11.31 24.82L12.26 25.17L13.24 25.42L14.23 25.55L15.23 25.58L16.21 25.49L17.18 25.30L18.11 25.02L19.00 24.65L19.84 24.20L20.63 23.67L21.36 23.08L22.03 22.44L22.63 21.75L23.18 21.01L23.65 20.24L24.07 19.44L24.42 18.61L24.70 17.75L24.91 16.88L25.06 15.98L25.12 15.07L25.11 14.16L25.02 13.24L24.84 12.33Z" fill="currentColor"/>'
+        '<defs><linearGradient id="enso" x1="5" y1="26" x2="27" y2="5" '
+        'gradientUnits="userSpaceOnUse"><stop stop-color="currentColor" '
+        'stop-opacity=".58"/><stop offset=".48" stop-color="currentColor"/>'
+        '<stop offset="1" stop-color="currentColor" stop-opacity=".82"/>'
+        '</linearGradient></defs>'
+        '<path d="M24.8 7.1C29.4 12.2 29 20.5 23.8 25.2C18.4 30.1 9.8 28.8 '
+        '5.7 22.9C1.9 17.4 3.8 9.8 9.5 6.2C13.3 3.8 18.1 3.7 21.7 5.3" '
+        'stroke="url(#enso)" stroke-width="4.2" stroke-linecap="round"/>'
+        '<path d="M22.5 5.65C23.25 5.95 23.9 6.38 24.5 6.85" stroke="currentColor" '
+        'stroke-width="1.35" stroke-linecap="round" opacity=".55"/>'
         '</svg>')
 
 # The browser-tab icon, derived from MARK rather than copied. `currentColor`
