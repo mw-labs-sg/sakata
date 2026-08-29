@@ -512,9 +512,14 @@ t = st.tabs([x.upper() for x in TABS])
 
 # ----------------------------------------------------------------- Board
 with t[0]:
-    source("Yahoo · daily closes", *PRICE_CACHES, key="board")
-    bc = st.columns(5)
-    hz = bc[0].selectbox("Horizon", R.HZ, key="board_hz",
+    # Board has one action and one control. Keeping them in one toolbar avoids
+    # spending two full Streamlit rows on four words before the data begins.
+    bc = st.columns([1, 2, 7], vertical_alignment="bottom")
+    if bc[0].button("Refresh", key="rf_board", help="Refetch this tab"):
+        for fn in PRICE_CACHES:
+            fn.clear()
+        st.rerun()
+    hz = bc[1].selectbox("Horizon", R.HZ, key="board_hz",
                          help="Which return column the board is read on. Every"
                               " other column is unchanged by it — only the"
                               " move and the ranking follow the horizon.")

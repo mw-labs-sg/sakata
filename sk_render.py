@@ -74,9 +74,7 @@ def board(d: dict, hz: str = "Day") -> str:
         return (f'<div>{eyebrow(group, f"<span class=\'legend\'>{legend}</span>")}'
                 f"{table(head, body)}</div>")
 
-    return (f'<div class="bar"><span class="spacer"></span>'
-            f'<span class="chip">{len(d["rows"])} instruments</span></div>'
-            + eyebrow(f"Sector performance · {hz} %")
+    return (eyebrow(f"Sector performance · {hz} %")
             + f'<div class="plot">{CH.bar_chart(agg)}</div>'
             + '<div class="grid2" style="margin-top:16px">'
             + panel("Financials") + panel("Commodities") + "</div>")

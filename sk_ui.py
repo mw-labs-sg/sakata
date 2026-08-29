@@ -173,8 +173,8 @@ def _bridge(t: dict) -> str:
           '+ [data-testid="stElementContainer"]')
     return f"""
 .stApp {{ background:
-  radial-gradient(980px 620px at 4% -10%, {t.get('glow-a')}, transparent 62%),
-  radial-gradient(860px 580px at 100% 4%, {t.get('glow-b')}, transparent 64%),
+  radial-gradient(1050px 720px at 12% -6%, {t.get('glow-a')}, transparent 64%),
+  radial-gradient(940px 680px at 94% 10%, {t.get('glow-b')}, transparent 66%),
   {t.get('bg')}; background-attachment: fixed; }}
 /* Streamlit bakes config.toml's textColor into its emotion classes and exposes
    no CSS variable to retarget it — there is not one custom property on :root,
