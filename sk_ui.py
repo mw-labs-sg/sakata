@@ -175,7 +175,13 @@ def _bridge(t: dict) -> str:
 .stApp {{ background:
   radial-gradient(1050px 720px at 12% -6%, {t.get('glow-a')}, transparent 64%),
   radial-gradient(940px 680px at 94% 10%, {t.get('glow-b')}, transparent 66%),
-  {t.get('bg')}; background-attachment: fixed; }}
+  {t.get('bg')} !important; background-attachment: fixed !important; }}
+/* Streamlit paints an opaque view container inside .stApp. It covered the
+   ambient background even though the gradient itself was valid and present.
+   Keep the application ground on .stApp and let the inner layout layers show
+   through to it. */
+[data-testid="stAppViewContainer"], [data-testid="stMain"],
+.stMain, section[data-testid="stMain"] {{ background: transparent !important; }}
 /* Streamlit bakes config.toml's textColor into its emotion classes and exposes
    no CSS variable to retarget it — there is not one custom property on :root,
    body, .stApp or stAppViewContainer — so the per-theme ink has to be set here
