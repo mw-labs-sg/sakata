@@ -58,6 +58,38 @@ def _seg_ranges(df: pd.DataFrame, seg: str) -> pd.Series:
     return rng[rng.index != p[-1]]
 
 
+# Bars per year at each segment size, for annualising a vol computed on
+# segment closes. A year rung is left out on purpose: one observation a year
+# cannot be annualised, and printing a number there would be arithmetic
+# rather than a measurement.
+SEG_PER_YEAR = {"D": 252, "W": 52, "M": 12, "Q": 4}
+HV_SEGS = 20
+
+
+def read_hv(df: pd.DataFrame, seg: str) -> dict:
+    """Annualised vol of segment-to-segment closes.
+
+    Deliberately not the bar-level HV the Margin tab computes. That one
+    annualises an hourly series with a factor clipped to 400 bars a year, so
+    its LEVELS are badly understated and only its ranks are safe to read.
+    Here the observations are the same units the rest of the row is in — one
+    per day on Day, one per week on Week — so the number can be printed as a
+    number.
+    """
+    p = df.index.to_period(seg)
+    g = df.groupby(p)
+    sizes = g.size()
+    keep = sizes >= max(sizes.median() * MIN_SEG_FRACTION, 2)
+    closes = g["close"].last()[keep]
+    closes = closes[closes.index != p[-1]]
+    ret = closes.pct_change().dropna()
+    per_year = SEG_PER_YEAR.get(str(seg)[0].upper())
+    if per_year is None or len(ret) < SEG_RANK_MIN:
+        return {"segHv": None}
+    sd = float(ret.tail(HV_SEGS).std())
+    return {"segHv": _r(sd * (per_year ** 0.5) * 100, 1)}
+
+
 def read_range(rng: pd.Series) -> dict:
     """The prior segment's range, the average before it, and its percentile."""
     if rng is None or len(rng) < SEG_RANK_MIN + 1:
@@ -201,43 +233,42 @@ def read_bias(r) -> dict:
 
 
 def read_bands(cur: pd.DataFrame, r) -> dict:
-    """Did the retrace vote flip inside this segment, and which way.
+    """A band reached and given back — the two events these levels exist for.
 
-    The obvious version of this — did a wick reach the band — is worthless,
-    and measurably so: it marked 94% of the grid. The bands are built FROM
-    the current segment's own extremes (rb is the midpoint of its high and
-    the prior low, rs the midpoint of its low and the prior high), so any
-    segment whose range is comparable to the one before it brackets both of
-    them by construction. Touching a level that is drawn inside your own
-    range is not an event, and no threshold rescues it, because the problem
-    is the definition rather than the size.
-
-    What is an event is a CLOSE beyond a band that has since been given back.
-    That is the band-tier twin of the failed break: the retrace vote was Bull
-    earlier this segment and is not now, so the sell band was reached and
-    rejected; or it was Bear and is not now, so the buy band was lost and
-    reclaimed. Closes only, and strictly earlier bars — the current one is
-    the outcome, not the evidence.
+    On CLOSES, never wicks. The obvious wick version marked 94% of the grid
+    and no threshold fixed it: the bands are built FROM the segment's own
+    extremes — rb is the midpoint of its high and the prior low, rs of its
+    low and the prior high — so any segment whose range is anything like the
+    one before it brackets both by construction. A level drawn inside your
+    own range is not a level you can touch. A close beyond one that has since
+    been given back is an event, and the earlier bars are the evidence while
+    the current one is only the outcome.
     """
-    blank = {"leftBull": False, "leftBear": False, "bandNote": None}
+    blank = {"rsMark": None, "rbMark": None, "bandNote": None}
     if cur is None or len(cur) < 2:
         return blank
-    hi = cur[["rb", "rs"]].max(axis=1)
-    lo = cur[["rb", "rs"]].min(axis=1)
+    # Against BOTH bands, not each one alone. rb and rs cross — a segment
+    # that rallies hard drags rb up through rs — and read separately that
+    # puts a cell above the sell band and below the buy band at the same
+    # time. Measured: nine cells in ten carried a mark, which is a mark on
+    # none of them. max/min is what the retrace vote already uses, for this.
     past = cur["close"].iloc[:-1]
-    was_bull = bool((past > hi.iloc[:-1]).any())
-    was_bear = bool((past < lo.iloc[:-1]).any())
-    now_bull = bool(r.close > max(r.rb, r.rs))
-    now_bear = bool(r.close < min(r.rb, r.rs))
-    left_bull = was_bull and not now_bull
-    left_bear = was_bear and not now_bear
+    hi = cur[["rb", "rs"]].max(axis=1).iloc[:-1]
+    lo = cur[["rb", "rs"]].min(axis=1).iloc[:-1]
+    now_hi, now_lo = max(r.rb, r.rs), min(r.rb, r.rs)
+    # Only the give-back is reported. Still being beyond a band is what the
+    # glyph says, and repeating it here spends a mark on a fact already on
+    # the cell three characters to the left.
+    rejected = bool((past > hi).any()) and r.close <= now_hi
+    reclaimed = bool((past < lo).any()) and r.close >= now_lo
     said = []
-    if left_bull:
+    if rejected:
         said.append("rejected at the sell band")
-    if left_bear:
+    if reclaimed:
         said.append("reclaimed the buy band")
-    return {"leftBull": left_bull, "leftBear": left_bear,
-            "bandNote": ", ".join(said) or None}
+    return {"rsMark": "rejected" if rejected else None,
+            "rbMark": "reclaimed" if reclaimed else None,
+            "bandNote": " \u00b7 ".join(said) or None}
 
 
 def read_rr(r) -> dict:
@@ -287,6 +318,7 @@ def build_technical(frames_by_bar: dict) -> dict:
                 **read_bias(r), **read_rr(r),
                 **read_bands(o[o["seg"] == r.seg], r),
                 **read_range(_seg_ranges(df, cfg["seg"])),
+                **read_hv(df, cfg["seg"]),
             }
         if per_h:
             out[code] = per_h
