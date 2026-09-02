@@ -201,6 +201,70 @@ def _break_line(label, items, colour, faint) -> str:
             f'{esc(label)}</span>{body}</div>')
 
 
+# Four steps, not the two the drill-down table uses. That one prints five
+# numbers a reader takes one at a time; this one prints ninety-five they take
+# as a field, and a field wants a gradient or it is a wall of identical
+# digits. Amber throughout because vol has no direction — a 95th percentile
+# is not bullish or bearish, it is loud, and colouring it teal would say
+# otherwise beside a matrix where teal means long.
+def _hv_heat(pct):
+    if pct is None:
+        return C["faint"]
+    if pct >= 80:
+        return BIAS_COL["-3"]
+    if pct >= 60:
+        return BIAS_COL["-2"]
+    if pct <= 20:
+        return C["faint"]
+    return C["mute"]
+
+
+def _hv_matrix(cols: list, order: list, code: str, hz: str, head: str,
+               tight: str) -> str:
+    """The bias matrix's columns again, carrying volatility rank instead.
+
+    Same instruments in the same order, so the two tables stack into one
+    reading: the top says what price is doing and the bottom says how hard
+    it is having to work to do it. Sorting this one on its own numbers would
+    have made them two tables about two different universes.
+    """
+    rows = ""
+    for h in order:
+        cells, any_ = "", False
+        for s in cols:
+            c = s["by_h"].get(h) or {}
+            sel = s["code"] == code
+            bg = ("background:var(--hair);" if sel and h == hz
+                  else "background:var(--raised);" if sel else "")
+            pct = c.get("segHvPct")
+            if pct is None:
+                cells += f'<td style="{bg}{tight}" class="faint">\u2014</td>'
+                continue
+            any_ = True
+            tip = (f'{s["code"]} \u00b7 {h} \u00b7 HV {num(c.get("segHv"), 1)}%'
+                   f' · {num(pct, 0)}th percentile of '
+                   f'{c.get("segHvN", 0)} readings')
+            cells += (f'<td style="{bg}{tight}color:{_hv_heat(pct)};'
+                      f'font-weight:{700 if h == hz else 600}" '
+                      f'title="{esc(tip)}">{num(pct, 0)}</td>')
+        # A rung with no reading anywhere is dropped rather than drawn as a
+        # row of dashes. Year is always that row: one observation a year
+        # cannot be annualised, so it has nothing to rank.
+        if any_:
+            rows += (f'<tr{" class=\"out\"" if h == hz else ""}>'
+                     f'<td class="l">{esc(h)}</td>{cells}</tr>')
+    if not rows:
+        return ""
+    return (eyebrow("Volatility percentile")
+            + table(head, rows)
+            + note("Annualised volatility of segment-to-segment closes over "
+                   "the last 20 segments, ranked against every earlier "
+                   "reading of the same measure, up to 52. Low is a "
+                   "market that has stopped moving, high one that is "
+                   "being paid to. Hover for the level, and the sample "
+                   "it was ranked against.", wide=True))
+
+
 def technical_matrix(d: dict, code: str, hz: str) -> str:
     """The survey half: what is breaking, and the whole ladder."""
     order, grid = d["order"], d["grid"]
@@ -335,7 +399,8 @@ def technical_matrix(d: dict, code: str, hz: str) -> str:
                    "bands, drawn on the side each one sits. The number is "
                    "the bias: <b>range</b>, <b>retrace</b> and <b>trend</b>, "
                    "one vote each, summed −3 to +3. Columns run "
-                   "most-broken first; Σ totals the ladder.", wide=True))
+                   "most-broken first; Σ totals the ladder.", wide=True)
+            + _hv_matrix(cols, order, code, hz, head, TIGHT))
 
 
 def _hv_tone(pct):
@@ -379,13 +444,13 @@ def _range_table(g: dict, order: list, hz: str, dec: int) -> str:
             'ATR 20</th>'
             '<th title="The prior range over that average. Above 1 is a wider '
             'period than usual, below 1 a quieter one.">\u00d7 ATR</th>'
-            '<th title="Where the prior range sits among the last 52 '
-            'completed segments.">Pctile</th>'
+            '<th title="Where the prior range sits among the completed '
+            'segments before it, up to 52.">Pctile</th>'
             '<th title="Annualised volatility of segment-to-segment closes '
             'over the last 20 segments. A year cannot be annualised from one '
             'observation, so the Year rung is blank.">HV %</th>'
-            '<th title="Where that volatility sits among the last 52 readings '
-            'of the same measure.">HV pctile</th>')
+            '<th title="Where that volatility sits among the readings '
+            'before it, up to 52.">HV pctile</th>')
     return eyebrow("Range and volatility") + table(head, rows)
 
 

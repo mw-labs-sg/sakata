@@ -85,19 +85,25 @@ def read_hv(df: pd.DataFrame, seg: str) -> dict:
     ret = closes.pct_change().dropna()
     per_year = SEG_PER_YEAR.get(str(seg)[0].upper())
     if per_year is None or len(ret) < SEG_RANK_MIN:
-        return {"segHv": None, "segHvPct": None}
+        return {"segHv": None, "segHvPct": None, "segHvN": 0}
     # Rolled rather than taken once, so the level and its rank come off the
     # same series. A vol quoted beside a percentile computed some other way
     # is two answers to one question, and the reader has no way to see it.
     roll = ret.rolling(min(HV_SEGS, len(ret))).std().dropna()
     if roll.empty:
-        return {"segHv": None, "segHvPct": None}
+        return {"segHv": None, "segHvPct": None, "segHvN": 0}
     hv = float(roll.iloc[-1]) * (per_year ** 0.5) * 100
-    pct = None
+    pct, n = None, 0
     if len(roll) >= SEG_RANK_MIN:
         tail = roll.tail(SEG_RANK_WIN)
+        n = int(len(tail))
         pct = float((tail <= tail.iloc[-1]).mean() * 100)
-    return {"segHv": _r(hv, 1), "segHvPct": _r(pct, 0)}
+    # The sample size ships with the rank because it is not always 52. A
+    # Month rung built from two years of 4h bars has twenty-odd observations
+    # and a Qtr rung forty, so their percentiles land on multiples of 4 and
+    # 2.5 — still a rank, but one whose tooltip must not claim a year of
+    # weeks it never had.
+    return {"segHv": _r(hv, 1), "segHvPct": _r(pct, 0), "segHvN": n}
 
 
 def read_range(rng: pd.Series) -> dict:
