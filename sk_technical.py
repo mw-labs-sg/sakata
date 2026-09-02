@@ -28,6 +28,54 @@ MIN_SEG_FRACTION = 0.4   # a segment must carry this share of the median bar
 MIN_POKE = 0.10
 
 
+# Ranking the prior segment's range against the segments before it. An ATR
+# in BARS would answer a different question from the one this tab asks: the
+# levels are a segment's high and low, so the range that matters is the
+# segment's, and the average to read it against is an average of segments.
+# It also makes the reading follow the Horizon dropdown for free — prior day
+# on Day, prior week on Week — instead of needing its own timeframe control.
+SEG_RANK_WIN = 52       # completed segments to rank the prior one against
+SEG_RANK_MIN = 8        # below this a percentile is theatre, not a statistic
+ATR_SEGS = 20           # segments in the average range
+
+
+def _seg_ranges(df: pd.DataFrame, seg: str) -> pd.Series:
+    """High-low of every COMPLETED segment, thin ones dropped.
+
+    Same MIN_SEG_FRACTION filter _prior uses, for the same reason: two hours
+    of Sunday globex is not a day, and letting it into the sample would put
+    the bottom of the range distribution somewhere no session ever went.
+
+    The segment in progress is dropped outright. It is not a range yet, and
+    ranking a Monday morning against finished weeks reports the quietest week
+    of the year — every week, until about Wednesday.
+    """
+    p = df.index.to_period(seg)
+    g = df.groupby(p)
+    sizes = g.size()
+    keep = sizes >= max(sizes.median() * MIN_SEG_FRACTION, 2)
+    rng = (g["high"].max() - g["low"].min())[keep].dropna()
+    return rng[rng.index != p[-1]]
+
+
+def read_range(rng: pd.Series) -> dict:
+    """The prior segment's range, the average before it, and its percentile."""
+    if rng is None or len(rng) < SEG_RANK_MIN + 1:
+        return {"segRange": None, "segAtr": None, "segAtrN": ATR_SEGS,
+                "segRangeX": None, "segRangePct": None, "segRangeN": 0}
+    prior = float(rng.iloc[-1])
+    tail = rng.tail(SEG_RANK_WIN)
+    atr = float(rng.tail(ATR_SEGS).mean())
+    return {
+        "segRange": _r(prior, 6),
+        "segAtr": _r(atr, 6),
+        "segAtrN": ATR_SEGS,
+        "segRangeX": _r(prior / atr, 2) if atr else None,
+        "segRangePct": _r(float((tail <= prior).mean() * 100), 0),
+        "segRangeN": int(len(tail)),
+    }
+
+
 def _prior(agg: pd.Series, sizes: pd.Series) -> pd.Series:
     """Previous SUBSTANTIVE segment's value, per segment.
 
@@ -197,6 +245,7 @@ def build_technical(frames_by_bar: dict) -> dict:
                 "pos": _r(r.pos, 1),
                 "rngpct": _r((r.prev_high - r.prev_low) / r.prev_low * 100, 2),
                 **read_bias(r), **read_rr(r),
+                **read_range(_seg_ranges(df, cfg["seg"])),
             }
         if per_h:
             out[code] = per_h

@@ -70,21 +70,31 @@
 }
 
 /* ---------------------------------------------------------------- dark */
-/* Not black. #0b0f12 is a cool near-black: a white wick reads on it without
-   glare at 6am, and the coral stops vibrating the way it does on #000. */
-:root[data-theme="dark"]{
-  --bg:#0b0f12; --surface:#11171b; --raised:#161d22;
-  --glow-a:rgba(20,184,166,.20); --glow-b:rgba(34,211,238,.10);
-  --line:#232c33; --hair:#1a2229;
+/* Navy, not black, and not the cool grey it used to be. #0b0f12 was a
+   near-neutral with a faint cyan cast, which is a fine ground and an odd
+   one to sit beside a charting platform all day: every level, wick and
+   annotation the reader carries over from there arrives off a blue field,
+   and the eye reads the two surfaces as different lighting rather than
+   different apps.
 
-  --ink:#e9eff2; --body:#b6c2c9; --mute:#8b979f; --faint:#68757d;
+   The ramp is one hue (~223) at six lightnesses, so contrast steps are
+   unchanged from the grey it replaces — this is a hue rotation, not a
+   relighting. Teal and amber are left exactly where they were: they are
+   the identity, and both sit further from navy than they did from grey,
+   which is the incidental win. */
+:root[data-theme="dark"]{
+  --bg:#0f1523; --surface:#161d2d; --raised:#1c2436;
+  --glow-a:rgba(20,184,166,.18); --glow-b:rgba(56,132,255,.12);
+  --line:#2a3450; --hair:#1f273a;
+
+  --ink:#e7ecf6; --body:#b5bfd4; --mute:#8a94ac; --faint:#69738d;
 
   --teal:#2dd4bf; --teal-b:#5eead4; --teal-d:#8ff0e2; --teal-w:#10322f;
 
   --pos:#34d3a8; --neg:#f0736a; --amber:#d3a355;
-  --warn-bg:#1c1a12; --warn-line:#3a3222; --warn-ink:#d8c79c; --warn-strong:#f0e3c2;
+  --warn-bg:#231d10; --warn-line:#42351f; --warn-ink:#ddcb9d; --warn-strong:#f3e6c4;
 
-  --grid:#1a2229; --axis:#2b353d; --volbar:#1e262d;
+  --grid:#1f273a; --axis:#37425f; --volbar:#232c41;
   --up:#2dd4bf; --down:#f0736a;
   --shadow:0 14px 42px rgba(0,0,0,.28),0 1px 2px rgba(0,0,0,.50);
 
@@ -92,10 +102,10 @@
   --sec-crypto:#5fb8ac;  --sec-energy:#c08360; --sec-metals:#d0ae6b;
   --sec-grains:#a5b96f;  --sec-softs:#6bb9a4;  --sec-other:#7d8891;
 
-  --bias3:#8ff0e2; --bias2:#2dd4bf; --bias1:#189d92; --bias0:#78848d;
+  --bias3:#8ff0e2; --bias2:#2dd4bf; --bias1:#189d92; --bias0:#7a849c;
   --biasn1:#a75f59; --biasn2:#f0736a; --biasn3:#ff9d94;
 
-  --caret:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%238b979f' stroke-width='1.5'/%3E%3C/svg%3E");
+  --caret:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%238a94ac' stroke-width='1.5'/%3E%3C/svg%3E");
 }
 
 *{box-sizing:border-box}

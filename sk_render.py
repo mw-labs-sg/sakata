@@ -286,6 +286,41 @@ def technical_levels(d: dict, code: str, hz: str, dec: int) -> str:
             ("Prior low", c.get("low")), ("Close", c.get("close")),
             ("MA100", c.get("ma100")), ("MA200", c.get("ma200"))])
 
+    # Volatility in the tab's own units, as chips rather than as two more
+    # rows of the Levels table: that column holds prices, and a percentile
+    # and a multiple are not prices. Sharing a column with them would make
+    # every number in it need reading twice to know what it was.
+    vol = ""
+    if c.get("segRange") is not None:
+        pctile = c.get("segRangePct")
+        # Only the ends of the distribution get a colour. A 40th percentile
+        # range is the market being ordinary, and colouring it says otherwise.
+        tone = (BIAS_COL["-3"] if (pctile or 0) >= 80
+                else C["faint"] if (pctile or 0) <= 20 else None)
+        # Label, value, tone, tooltip. The sample size lives in the tooltip
+        # rather than in the label: "pctile of 52" beside "69" put two
+        # numbers against each other in one chip, and the reader has to work
+        # out which one is the answer before reading either.
+        n = c.get("segRangeN", 0)
+        parts = [("Prior range", num(c["segRange"], dec), None,
+                  f"High minus low of the last completed {hz.lower()}"),
+                 (f'ATR {c.get("segAtrN", "")}', num(c.get("segAtr"), dec),
+                  None, f'Mean range of the last {c.get("segAtrN", "")} '
+                        f"completed {hz.lower()}s")]
+        if c.get("segRangeX") is not None:
+            parts.append(("vs ATR", f'{num(c["segRangeX"], 2)}×', None,
+                          "The prior range over that average: above 1 is a "
+                          "wider period than usual, below 1 a quieter one."))
+        if pctile is not None:
+            parts.append(("Pctile", f'{num(pctile, 0)}', tone,
+                          f"Where that range sits among the last {n} "
+                          f"completed {hz.lower()}s."))
+        vol = ('<div class="chips">' + "".join(
+            f'<span class="chip" title="{esc(tip)}"'
+            f'{f' style="color:{t}"' if t else ""}>'
+            f'<span style="color:{C["faint"]}">{esc(k)}</span> {esc(str(v))}'
+            f'</span>' for k, v, t, tip in parts if v is not None) + "</div>")
+
     dash = "—"
     pos = dash if c.get("pos") is None else f'{num(c["pos"], 0)}%'
     rr = dash if c.get("rr_retrace") is None else num(c["rr_retrace"], 2)
@@ -296,6 +331,7 @@ def technical_levels(d: dict, code: str, hz: str, dec: int) -> str:
                  f' / {esc(c.get("retrace", dash))}'
                  f' / {esc(c.get("trend", dash))}) · position {pos} of '
                  f'prior range · R:R to band {rr}')
+            + vol
             + eyebrow("Levels")
             + table('<th class="l">Level</th><th>Price</th>', lv))
 
