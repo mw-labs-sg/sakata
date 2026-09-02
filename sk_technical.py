@@ -200,6 +200,46 @@ def read_bias(r) -> dict:
             "score": score, "bias": bias}
 
 
+def read_bands(cur: pd.DataFrame, r) -> dict:
+    """Did the retrace vote flip inside this segment, and which way.
+
+    The obvious version of this — did a wick reach the band — is worthless,
+    and measurably so: it marked 94% of the grid. The bands are built FROM
+    the current segment's own extremes (rb is the midpoint of its high and
+    the prior low, rs the midpoint of its low and the prior high), so any
+    segment whose range is comparable to the one before it brackets both of
+    them by construction. Touching a level that is drawn inside your own
+    range is not an event, and no threshold rescues it, because the problem
+    is the definition rather than the size.
+
+    What is an event is a CLOSE beyond a band that has since been given back.
+    That is the band-tier twin of the failed break: the retrace vote was Bull
+    earlier this segment and is not now, so the sell band was reached and
+    rejected; or it was Bear and is not now, so the buy band was lost and
+    reclaimed. Closes only, and strictly earlier bars — the current one is
+    the outcome, not the evidence.
+    """
+    blank = {"leftBull": False, "leftBear": False, "bandNote": None}
+    if cur is None or len(cur) < 2:
+        return blank
+    hi = cur[["rb", "rs"]].max(axis=1)
+    lo = cur[["rb", "rs"]].min(axis=1)
+    past = cur["close"].iloc[:-1]
+    was_bull = bool((past > hi.iloc[:-1]).any())
+    was_bear = bool((past < lo.iloc[:-1]).any())
+    now_bull = bool(r.close > max(r.rb, r.rs))
+    now_bear = bool(r.close < min(r.rb, r.rs))
+    left_bull = was_bull and not now_bull
+    left_bear = was_bear and not now_bear
+    said = []
+    if left_bull:
+        said.append("rejected at the sell band")
+    if left_bear:
+        said.append("reclaimed the buy band")
+    return {"leftBull": left_bull, "leftBear": left_bear,
+            "bandNote": ", ".join(said) or None}
+
+
 def read_rr(r) -> dict:
     """Reward:risk to the retrace band and to the full prior range."""
     if not (0 <= r.pos <= 100):
@@ -245,6 +285,7 @@ def build_technical(frames_by_bar: dict) -> dict:
                 "pos": _r(r.pos, 1),
                 "rngpct": _r((r.prev_high - r.prev_low) / r.prev_low * 100, 2),
                 **read_bias(r), **read_rr(r),
+                **read_bands(o[o["seg"] == r.seg], r),
                 **read_range(_seg_ranges(df, cfg["seg"])),
             }
         if per_h:

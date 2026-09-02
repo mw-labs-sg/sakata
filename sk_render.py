@@ -114,11 +114,39 @@ STRUCT_MARK = {
 # gave it back has not earned the top of the table.
 BREAK_VOTE = {"Breakout": 1, "Breakdown": -1}
 
-MARK_LEGEND = (
-    "▲ broke the prior high and held · △ broke it and came "
-    "back · ▴ inside, above the retrace bands · ▾ below "
-    "them · ▽ broke the prior low and came back · ▼ "
-    "broke it and held · no mark, between the bands.")
+# A legend is a lookup, not a paragraph. Written as prose it ran four lines
+# under the table and had to be re-parsed every time, because a sentence is
+# read start to finish while a key is read by finding the one row you want.
+MARK_KEYS = (
+    ("▲", "Holding breakout", 1), ("△", "Failed breakout", 1),
+    ("▴", "Above retrace", 1), ("", "Mid", 0),
+    ("▾", "Below retrace", -1), ("▽", "Failed breakdown", -1),
+    ("▼", "Holding breakdown", -1),
+)
+# A band that was reached and given back is a line on the side it happened:
+# over the cell for the sell band above it, under the cell for the buy band
+# below. A line renders at 13px where a small hollow triangle does not —
+# measured, ▵ against ▴ is the same mark at this size — costs
+# no width, and stays orthogonal to the glyph, which is still free to say
+# where the close ended up rather than where it has been.
+BAND_DECO = "text-decoration:%s;text-underline-offset:3px;"
+
+
+def _mark_legend() -> str:
+    items = ""
+    for glyph, label, side in MARK_KEYS:
+        col = BIAS_COL["3"] if side > 0 else (
+            BIAS_COL["-3"] if side < 0 else C["faint"])
+        mark = (f'<span style="color:{col};font-weight:700">{glyph}</span>'
+                if glyph else f'<span style="color:{C["faint"]}">–</span>')
+        items += f'<span class="key">{mark}&nbsp;&nbsp;{esc(label)}</span>'
+    for deco, label in (("overline", "Rejected at sell band"),
+                        ("underline", "Reclaimed buy band")):
+        items += (f'<span class="key"><span style="{BAND_DECO % deco}'
+                  f'color:{C["mute"]};font-weight:700">+1</span>'
+                  f'&nbsp;&nbsp;{esc(label)}</span>')
+    return ('<div class="legend" style="margin:12px 0 0;gap:12px 18px">'
+            f'{items}</div>')
 
 
 def _break_line(label, items, colour, faint) -> str:
@@ -225,10 +253,15 @@ def technical_matrix(d: dict, code: str, hz: str) -> str:
             # reader before, and now it is named in the mark and again
             # in the tooltip that explains the mark.
             struct = c.get("structure", c["regime"])
+            lines = (("overline " if c.get("leftBull") else "")
+                     + ("underline" if c.get("leftBear") else "")).strip()
+            deco = BAND_DECO % lines if lines else ""
+            note_ = c.get("bandNote")
             title = (f'{s["code"]} {U.NAME[s["code"]]} · {h} · '
                      f'{c["bias"]} · {struct} · {c["regime"]} / '
-                     f'{c["retrace"]} / {c["trend"]}')
-            cells += (f'<td style="{bg}color:{BIAS_COL[str(c["score"])]};'
+                     f'{c["retrace"]} / {c["trend"]}'
+                     + (f' · {note_}' if note_ else ""))
+            cells += (f'<td style="{bg}{deco}color:{BIAS_COL[str(c["score"])]};'
                       f'font-weight:{700 if on or sel else 600}" '
                       f'title="{esc(title)}">{STRUCT_MARK.get(struct, "")}'
                       f'{"+" if c["score"] > 0 else ""}{c["score"]}</td>')
@@ -258,15 +291,12 @@ def technical_matrix(d: dict, code: str, hz: str) -> str:
             # The explainer sits UNDER the table it explains. Four lines of
             # prose above the matrix pushed the one thing worth seeing first
             # down the page, and a legend is read once and then never again.
-            + note(f"<b>Where the mark says price is.</b> {MARK_LEGEND}"
-                   " Large is the prior range's edge, small is the retrace "
-                   "band, hollow means it went and came back.<br>"
-                   "<b>How many agree.</b> The number is three votes — "
-                   "<b>range</b>, <b>retrace</b>, <b>trend</b> — summed "
-                   "between −3 and +3, so +3 is all three long and "
-                   "−3 all three short. Columns run most-broken first "
-                   "rather than by sector, and Σ totals the ladder.",
-                   wide=True))
+            + _mark_legend()
+            + note("Large is the prior range’s edge, small the retrace "
+                   "band, hollow means it went and came back. The number is "
+                   "the bias: <b>range</b>, <b>retrace</b> and <b>trend</b>, "
+                   "one vote each, summed −3 to +3. Columns run "
+                   "most-broken first; Σ totals the ladder.", wide=True))
 
 
 def technical_levels(d: dict, code: str, hz: str, dec: int) -> str:
@@ -330,7 +360,9 @@ def technical_levels(d: dict, code: str, hz: str, dec: int) -> str:
                  f'{esc(c.get("bias", dash))} ({esc(c.get("regime", dash))}'
                  f' / {esc(c.get("retrace", dash))}'
                  f' / {esc(c.get("trend", dash))}) · position {pos} of '
-                 f'prior range · R:R to band {rr}')
+                 f'prior range · R:R to band {rr}'
+                 + (f' · <b>{esc(c["bandNote"])}</b>'
+                    if c.get("bandNote") else ""))
             + vol
             + eyebrow("Levels")
             + table('<th class="l">Level</th><th>Price</th>', lv))
