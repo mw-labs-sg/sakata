@@ -81,8 +81,56 @@ def board(d: dict, hz: str = "Day") -> str:
 
 
 # -------------------------------------------------------------- Technical
+# Only the exceptions carry a mark. Most cells on most days sit inside their
+# prior range, so a glyph on every one of them would be a pattern with no
+# signal in it — the two states that matter get drawn, and the eye lands on
+# what broke before it reads a single number.
+REGIME_MARK = {"Breakout": "▲", "Breakdown": "▼"}
+BREAK_VOTE = {"Breakout": 1, "Breakdown": -1}
+
+
+def _break_line(label, items, colour, faint) -> str:
+    """One row of chips: what is through its edge, furthest through first."""
+    if not items:
+        return ""
+    body = "".join(
+        f'<span class="chip" style="color:{colour}">{esc(k)} '
+        f'{"—" if p is None else num(p, 0) + "%"}</span>'
+        for k, p in items)
+    return (f'<div class="chips"><span style="margin-right:10px;'
+            f'font-family:var(--sans);font-size:10.5px;font-weight:600;'
+            f'text-transform:uppercase;letter-spacing:.08em;color:{faint}">'
+            f'{esc(label)}</span>{body}</div>')
+
+
 def technical(d: dict, code: str, hz: str, dec: int) -> str:
     order, grid = d["order"], d["grid"]
+
+    # Breaking now, before anything else. The tab's first question is "what is
+    # outside its range", and the matrix answered it only to a reader willing
+    # to decode a signed number in nineteen rows. Position rides with the code
+    # because 101% and 140% of the prior range are not the same break.
+    out_up, out_dn = [], []
+    for u_code in U.CODES:
+        c = grid.get(u_code, {}).get(hz)
+        if not c:
+            continue
+        if c["regime"] == "Breakout":
+            out_up.append((u_code, c.get("pos")))
+        elif c["regime"] == "Breakdown":
+            out_dn.append((u_code, c.get("pos")))
+    out_up.sort(key=lambda x: -(x[1] if x[1] is not None else 0))
+    out_dn.sort(key=lambda x: (x[1] if x[1] is not None else 0))
+
+    if out_up or out_dn:
+        strip = (_break_line("Above prior high", out_up, C["teal"], C["faint"])
+                 + _break_line("Below prior low", out_dn, C["amber"],
+                               C["faint"]))
+    else:
+        strip = note(f"Nothing is outside its prior <b>{esc(hz)}</b> range — "
+                     "every instrument on the ladder is trading between the "
+                     "high and the low it made last period.")
+
     # The selected horizon takes the same weight the Board gives it. Two
     # dropdowns sit above this matrix and neither of them used to be visible
     # in it: the reader picked a horizon and an instrument, and then had to
@@ -93,52 +141,64 @@ def technical(d: dict, code: str, hz: str, dec: int) -> str:
             + '<th title="Ladder total: every horizon’s bias for this '
               'instrument, added up, so a column that agrees with itself '
               'reads far from zero.">Σ</th>')
-    body, legend, seen = "", "", []
+
+    # A sector is a swatch on the row, not a row of its own. Eight sub-headers
+    # spent eight lines of table height saying what an 8px square says beside
+    # the code. The legend is built from the universe order rather than the row
+    # order, because the rows are now sorted by what is breaking and a legend
+    # that followed them would reshuffle itself on every fetch.
+    legend, seen = "", []
+    for u_code in U.CODES:
+        sec = U.SECTOR[u_code]
+        if grid.get(u_code) and sec not in seen:
+            seen.append(sec)
+            legend += f'<span class="key">{swatch(sec)}{esc(sec)}</span>'
+
+    rows = []
     for u_code in U.CODES:
         g = grid.get(u_code)
         if not g:
             continue
-        # A sector is a swatch on the row, not a row of its own. Eight
-        # sub-headers spent eight lines of table height saying what an 8px
-        # square says beside the code — and they said it in the Instrument
-        # column, where the eye is already reading instrument names.
-        sec = U.SECTOR[u_code]
-        if sec not in seen:
-            seen.append(sec)
-            legend += f'<span class="key">{swatch(sec)}{esc(sec)}</span>'
-        tot, cells = 0, ""
+        tot, breaks, cells = 0, 0, ""
         for h in order:
             c = g.get(h)
             if not c:
                 cells += '<td class="faint">—</td>'
                 continue
             tot += c["score"]
-            title = f'{c["bias"]} · {c["regime"]} / {c["retrace"]} / {c["trend"]}'
+            breaks += BREAK_VOTE.get(c["regime"], 0)
+            mark = REGIME_MARK.get(c["regime"], "")
+            title = (f'{c["bias"]} · {c["regime"]} / {c["retrace"]}'
+                     f' / {c["trend"]}')
             cells += (f'<td{" class=\"on\"" if h == hz else ""} '
                       f'style="color:{BIAS_COL[str(c["score"])]};'
                       f'font-weight:{700 if h == hz else 600}" '
-                      f'title="{esc(title)}">'
+                      f'title="{esc(title)}">{mark}'
                       f'{"+" if c["score"] > 0 else ""}{c["score"]}</td>')
-        # The row the chart below is drawn from takes the raised band. It is
-        # the only thing on the tab that connects nineteen rows of scores to
-        # the one candlestick chart underneath them.
-        body += (f'<tr{" class=\"out\"" if u_code == code else ""}>'
-                 f'<td class="l">{swatch(sec)}{esc(u_code)} '
-                 f'<span class="nm">{esc(U.NAME[u_code])}</span></td>{cells}'
-                 f'<td style="color:{C["pos"] if tot >= 0 else C["amber"]};'
-                 f'font-weight:700">{"+" if tot > 0 else ""}{tot}</td></tr>')
+        rows.append({"code": u_code, "cells": cells, "tot": tot,
+                     "breaks": breaks})
 
-    g = grid.get(code, {})
-    c = g.get(hz, {})
-    chart = ('<div class="skel">no series</div>' if not c.get("t") else
-             CH.candles(c["t"], c["o"], c["h"], c["l"], c["c"], [
-                 {"k": "PH", "v": c["ph"], "c": C["down"], "dash": "4 3"},
-                 {"k": "PL", "v": c["pl"], "c": C["up"], "dash": "4 3"},
-                 {"k": "Mid", "v": c["md"], "c": C["faint"], "dash": "2 4"},
-                 {"k": "RB", "v": c["vb"], "c": C["deep"]},
-                 {"k": "RS", "v": c["vs"], "c": C["amber"]},
-             ], h=300, dec=dec))
+    # Breakout first, literally: the net break count across the ladder orders
+    # the table, the bias total settles ties, and the universe order settles
+    # the rest so a quiet day still renders in a stable, repeatable order.
+    rank = {c: i for i, c in enumerate(U.CODES)}
+    rows.sort(key=lambda r: (-r["breaks"], -r["tot"], rank[r["code"]]))
 
+    body = ""
+    for r in rows:
+        sec = U.SECTOR[r["code"]]
+        # The row the readout below is drawn from takes the raised band. With
+        # the rows re-ordered it is the only way to find the instrument the
+        # dropdown chose without reading nineteen codes.
+        body += (f'<tr{" class=\"out\"" if r["code"] == code else ""}>'
+                 f'<td class="l">{swatch(sec)}{esc(r["code"])} '
+                 f'<span class="nm">{esc(U.NAME[r["code"]])}</span></td>'
+                 f'{r["cells"]}'
+                 f'<td style="color:{C["pos"] if r["tot"] >= 0 else C["amber"]};'
+                 f'font-weight:700">{"+" if r["tot"] > 0 else ""}'
+                 f'{r["tot"]}</td></tr>')
+
+    c = grid.get(code, {}).get(hz, {})
     lv = "".join(
         f'<tr><td class="l">{k}</td>{cell(v, dec)}</tr>' for k, v in [
             ("Prior high", c.get("high")), ("RS target", c.get("rs")),
@@ -146,20 +206,26 @@ def technical(d: dict, code: str, hz: str, dec: int) -> str:
             ("Prior low", c.get("low")), ("Close", c.get("close")),
             ("MA100", c.get("ma100")), ("MA200", c.get("ma200"))])
 
-    pos = "—" if c.get("pos") is None else f'{num(c["pos"], 0)}%'
-    rr = "—" if c.get("rr_retrace") is None else num(c["rr_retrace"], 2)
+    dash = "—"
+    pos = dash if c.get("pos") is None else f'{num(c["pos"], 0)}%'
+    rr = dash if c.get("rr_retrace") is None else num(c["rr_retrace"], 2)
     return (note("Range Levels: prior-segment high/low with the RB/RS retrace "
-                 "bands. Each horizon votes <b>range</b>, <b>retrace</b> and "
-                 "<b>trend</b>, summing to a bias between −3 and +3. Σ is the "
+                 "bands. A cell is marked <b>▲</b> once price has cleared "
+                 "the prior high and <b>▼</b> once it has lost the prior "
+                 "low; the number beside it is the bias — three votes, "
+                 "<b>range</b>, <b>retrace</b> and <b>trend</b>, summed "
+                 "between −3 and +3. Rows are ordered by how much of the "
+                 "ladder is broken rather than by sector, and Σ is the "
                  "ladder total.")
-            + eyebrow("Bias matrix",
-                      f'<span class="legend">{legend}</span>')
+            + eyebrow(f"Breaking now · {hz}")
+            + strip
+            + eyebrow("Bias matrix", f'<span class="legend">{legend}</span>')
             + table(head, body)
-            + note(f'<b>{esc(code)} · {esc(hz)}</b> — {esc(c.get("bias", "—"))} '
-                   f'({esc(c.get("regime", "—"))} / {esc(c.get("retrace", "—"))} '
-                   f'/ {esc(c.get("trend", "—"))}) · position {pos} of prior '
-                   f'range · R:R to band {rr}')
-            + f'<div class="plot">{chart}</div>'
+            + note(f'<b>{esc(code)} · {esc(hz)}</b> — '
+                   f'{esc(c.get("bias", dash))} ({esc(c.get("regime", dash))}'
+                   f' / {esc(c.get("retrace", dash))}'
+                   f' / {esc(c.get("trend", dash))}) · position {pos} of '
+                   f'prior range · R:R to band {rr}')
             + eyebrow("Levels")
             + table('<th class="l">Level</th><th>Price</th>', lv))
 

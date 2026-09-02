@@ -9,10 +9,9 @@ import numpy as np
 import pandas as pd
 
 import sk_universe as U
-from sk_fmt import r as _r, sig as _sig
+from sk_fmt import r as _r
 
 MA1, MA2 = 100, 200
-DETAIL_BARS = 100       # bars of level history shipped per instrument/horizon
 
 
 MIN_SEG_FRACTION = 0.4   # a segment must carry this share of the median bar
@@ -118,7 +117,13 @@ def read_rr(r) -> dict:
 
 
 def build_technical(frames_by_bar: dict) -> dict:
-    """{code: {horizon: {...levels, bias, series}}} across the whole ladder."""
+    """{code: {horizon: {...levels, bias}}} across the whole ladder.
+
+    No OHLC series ride along. They existed for a drill-down candle chart on
+    the Technical tab; that chart is gone, and shipping a hundred bars across
+    five fields for nineteen instruments on five rungs cost the grid real time
+    and memory to build something nothing read.
+    """
     out, missing = {}, []
     for code in U.CODES:
         per_h = {}
@@ -134,7 +139,6 @@ def build_technical(frames_by_bar: dict) -> dict:
             r = o.iloc[-1]
             chg = ((o.close.iloc[-1] / o.close.iloc[-2] - 1) * 100
                    if len(o) >= 2 else None)
-            tail = o.tail(DETAIL_BARS)
             per_h[h] = {
                 "note": cfg["note"], "bar": cfg["bar"],
                 "close": _r(r.close, 6), "chg": _r(chg, 2),
@@ -144,17 +148,6 @@ def build_technical(frames_by_bar: dict) -> dict:
                 "pos": _r(r.pos, 1),
                 "rngpct": _r((r.prev_high - r.prev_low) / r.prev_low * 100, 2),
                 **read_bias(r), **read_rr(r),
-                # compact series for the drill-down chart: one array per field
-                "t": [d.strftime("%Y-%m-%d %H:%M") for d in tail.index],
-                "o": [_sig(v) for v in tail.open],
-                "h": [_sig(v) for v in tail.high],
-                "l": [_sig(v) for v in tail.low],
-                "c": [_sig(v) for v in tail.close],
-                "ph": [_sig(v) for v in tail.prev_high],
-                "pl": [_sig(v) for v in tail.prev_low],
-                "md": [_sig(v) for v in tail.mid],
-                "vb": [_sig(v) for v in tail.rb],
-                "vs": [_sig(v) for v in tail.rs],
             }
         if per_h:
             out[code] = per_h
