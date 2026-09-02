@@ -255,14 +255,7 @@ def _hv_matrix(cols: list, order: list, code: str, hz: str, head: str,
                      f'<td class="l">{esc(h)}</td>{cells}</tr>')
     if not rows:
         return ""
-    return (eyebrow("Volatility percentile")
-            + table(head, rows)
-            + note("Annualised volatility of segment-to-segment closes over "
-                   "the last 20 segments, ranked against every earlier "
-                   "reading of the same measure, up to 52. Low is a "
-                   "market that has stopped moving, high one that is "
-                   "being paid to. Hover for the level, and the sample "
-                   "it was ranked against.", wide=True))
+    return eyebrow("Volatility percentile") + table(head, rows)
 
 
 def technical_matrix(d: dict, code: str, hz: str) -> str:
@@ -394,12 +387,9 @@ def technical_matrix(d: dict, code: str, hz: str) -> str:
             # prose above the matrix pushed the one thing worth seeing first
             # down the page, and a legend is read once and then never again.
             + _mark_legend()
-            + note("A triangle is the prior range’s edge, hollow "
-                   "when it went and came back. The rules are the retrace "
-                   "bands, drawn on the side each one sits. The number is "
-                   "the bias: <b>range</b>, <b>retrace</b> and <b>trend</b>, "
-                   "one vote each, summed −3 to +3. Columns run "
-                   "most-broken first; Σ totals the ladder.", wide=True)
+            # No caption. The legend is the key and the tooltips carry the
+            # rest; a paragraph under a table is read once and then skipped
+            # forever, while still costing four lines on every later visit.
             + _hv_matrix(cols, order, code, hz, head, TIGHT))
 
 
