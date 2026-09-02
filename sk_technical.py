@@ -17,6 +17,16 @@ MA1, MA2 = 100, 200
 MIN_SEG_FRACTION = 0.4   # a segment must carry this share of the median bar
                          # count to count as a prior segment
 
+# How far past the prior edge an excursion must reach, as a share of the
+# prior range, before giving it back counts as a FAILED break rather than
+# noise. Measured without it on the Day rung: twelve of nineteen columns
+# flagged a failure, because a session dipping a tick or two under
+# yesterday's low and recovering is what most sessions do. At that rate
+# the mark says nothing, and worse, it crowded out the band position it
+# was drawn on top of. A tenth of the range is a move somebody had to
+# mean; below that the close is the only thing worth reading.
+MIN_POKE = 0.10
+
 
 def _prior(agg: pd.Series, sizes: pd.Series) -> pd.Series:
     """Previous SUBSTANTIVE segment's value, per segment.
@@ -62,7 +72,10 @@ def levels(df: pd.DataFrame, seg: str) -> pd.DataFrame:
 
 
 def read_bias(r) -> dict:
-    """Three independent votes — range, retrace, trend — summed to -3..+3."""
+    """Three independent votes — range, retrace, trend — summed to -3..+3,
+    plus the one thing the sum cannot express: where in the structure the
+    close actually is.
+    """
     if r.pos > 100:
         regime, s_rng = "Breakout", 1
     elif r.pos < 0:
@@ -76,6 +89,41 @@ def read_bias(r) -> dict:
         retrace, s_ret = "Bear", -1
     else:
         retrace, s_ret = "Neutral", 0
+    # Where price sits in the structure, which the score cannot carry. A sum
+    # of three votes says how MANY agree and never WHICH, so a +1 through the
+    # prior high read identically to a +1 drifting mid-range.
+    #
+    # cur_high and cur_low are the current segment's running extremes, so a
+    # poke that has since been given back is visible here and nowhere else.
+    # The score is right to call that Range — the break did not hold, and the
+    # range vote is about the close — and equally right to be unable to say
+    # it was a failure rather than a quiet day inside the range. Those are
+    # not the same market, and on ES this week they were the whole story.
+    span = r.prev_high - r.prev_low
+    if span > 0:
+        over = (r.cur_high - r.prev_high) / span
+        under = (r.prev_low - r.cur_low) / span
+    else:                       # a prior segment with no range at all
+        over = under = 0.0
+    poke_hi = over >= MIN_POKE
+    poke_lo = under >= MIN_POKE
+    if regime != "Range":
+        structure = regime
+    elif poke_hi and poke_lo:
+        # An outside segment that took both ends. The bigger excursion is the
+        # one that mattered; the smaller one it merely brushed.
+        structure = "Failed breakout" if over >= under else "Failed breakdown"
+    elif poke_hi:
+        structure = "Failed breakout"
+    elif poke_lo:
+        structure = "Failed breakdown"
+    elif retrace == "Bull":
+        structure = "Above bands"
+    elif retrace == "Bear":
+        structure = "Below bands"
+    else:
+        structure = "Mid"
+
     a100 = r.close > r.ma1 if np.isfinite(r.ma1) else None
     a200 = r.close > r.ma2 if np.isfinite(r.ma2) else None
     if a100 and a200:
@@ -98,7 +146,8 @@ def read_bias(r) -> dict:
     def side(v):
         return None if v is None else ("above" if v else "below")
 
-    return {"regime": regime, "retrace": retrace, "trend": trend,
+    return {"regime": regime, "structure": structure,
+            "retrace": retrace, "trend": trend,
             "ma100Side": side(a100), "ma200Side": side(a200),
             "score": score, "bias": bias}
 

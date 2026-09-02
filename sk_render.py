@@ -81,12 +81,37 @@ def board(d: dict, hz: str = "Day") -> str:
 
 
 # -------------------------------------------------------------- Technical
-# Only the exceptions carry a mark. Most cells on most days sit inside their
-# prior range, so a glyph on every one of them would be a pattern with no
-# signal in it — the two states that matter get drawn, and the eye lands on
-# what broke before it reads a single number.
-REGIME_MARK = {"Breakout": "▲", "Breakdown": "▼"}
+# The mark says WHERE, the number says HOW MANY AGREE. A summed score can
+# only ever be the second: +1 through the prior high and +1 drifting the
+# middle of it are the same digit and not the same market. So the glyph
+# leads and carries position, and it is a grammar rather than seven
+# arbitrary symbols — which is what lets it be read without the legend
+# after the first day:
+#
+#   size   how far out     large = past the prior range's edge
+#                          small = past the retrace bands, still inside
+#   fill   did it hold     solid = price is still there
+#                          hollow = it went and came back
+#   dot    nothing to say  between the bands, the middle of the range
+#
+# Failure needed the hollow pair because it has nowhere else to live. It is
+# not a fourth vote and it does not move the score — a break that was given
+# back SHOULD score as Range — so until now it was invisible in a cell and
+# recoverable only by opening a chart.
+STRUCT_MARK = {
+    "Breakout": "▲", "Failed breakout": "△", "Above bands": "▴",
+    "Mid": "·",
+    "Below bands": "▾", "Failed breakdown": "▽", "Breakdown": "▼",
+}
+# Sorting still counts only the breaks that held. A column that poked and
+# gave it back has not earned the top of the table.
 BREAK_VOTE = {"Breakout": 1, "Breakdown": -1}
+
+MARK_LEGEND = (
+    "▲ broke the prior high and held · △ broke it and came "
+    "back · ▴ inside, above the retrace bands · · between "
+    "them · ▾ below them · ▽ broke the prior low and came "
+    "back · ▼ broke it and held.")
 
 
 def _break_line(label, items, colour, faint) -> str:
@@ -189,12 +214,16 @@ def technical_matrix(d: dict, code: str, hz: str) -> str:
             if not c:
                 cells += f'<td class="faint" style="{bg}">\u2014</td>'
                 continue
-            title = (f'{s["code"]} {U.NAME[s["code"]]} \u00b7 {h} \u00b7 '
-                     f'{c["bias"]} \u00b7 {c["regime"]} / {c["retrace"]}'
-                     f' / {c["trend"]}')
+            # structure, not regime: a failure had no way to reach the
+            # reader before, and now it is named in the mark and again
+            # in the tooltip that explains the mark.
+            struct = c.get("structure", c["regime"])
+            title = (f'{s["code"]} {U.NAME[s["code"]]} · {h} · '
+                     f'{c["bias"]} · {struct} · {c["regime"]} / '
+                     f'{c["retrace"]} / {c["trend"]}')
             cells += (f'<td style="{bg}color:{BIAS_COL[str(c["score"])]};'
                       f'font-weight:{700 if on or sel else 600}" '
-                      f'title="{esc(title)}">{REGIME_MARK.get(c["regime"], "")}'
+                      f'title="{esc(title)}">{STRUCT_MARK.get(struct, "")}'
                       f'{"+" if c["score"] > 0 else ""}{c["score"]}</td>')
         body += (f'<tr{" class=\"out\"" if on else ""}>'
                  f'<td class="l">{esc(h)}</td>{cells}</tr>')
@@ -222,15 +251,15 @@ def technical_matrix(d: dict, code: str, hz: str) -> str:
             # The explainer sits UNDER the table it explains. Four lines of
             # prose above the matrix pushed the one thing worth seeing first
             # down the page, and a legend is read once and then never again.
-            + note("Range Levels: prior-segment high/low with the RB/RS "
-                   "retrace bands. A cell is marked <b>▲</b> once price "
-                   "has cleared the prior high and <b>▼</b> once it has "
-                   "lost the prior low; the number beside it is the bias "
-                   "— three votes, <b>range</b>, <b>retrace</b> and "
-                   "<b>trend</b>, summed between −3 and +3, so +3 is all "
-                   "three long and −3 all three short. Columns run "
-                   "most-broken first rather than by sector, and Σ "
-                   "totals the ladder.", wide=True))
+            + note(f"<b>Where the mark says price is.</b> {MARK_LEGEND}"
+                   " Large is the prior range's edge, small is the retrace "
+                   "band, hollow means it went and came back.<br>"
+                   "<b>How many agree.</b> The number is three votes — "
+                   "<b>range</b>, <b>retrace</b>, <b>trend</b> — summed "
+                   "between −3 and +3, so +3 is all three long and "
+                   "−3 all three short. Columns run most-broken first "
+                   "rather than by sector, and Σ totals the ladder.",
+                   wide=True))
 
 
 def technical_levels(d: dict, code: str, hz: str, dec: int) -> str:
@@ -253,7 +282,9 @@ def technical_levels(d: dict, code: str, hz: str, dec: int) -> str:
     dash = "—"
     pos = dash if c.get("pos") is None else f'{num(c["pos"], 0)}%'
     rr = dash if c.get("rr_retrace") is None else num(c["rr_retrace"], 2)
+    struct = c.get("structure", c.get("regime", dash))
     return (note(f'<b>{esc(code)} · {esc(hz)}</b> — '
+                 f'{STRUCT_MARK.get(struct, "")} {esc(struct)} · '
                  f'{esc(c.get("bias", dash))} ({esc(c.get("regime", dash))}'
                  f' / {esc(c.get("retrace", dash))}'
                  f' / {esc(c.get("trend", dash))}) · position {pos} of '
