@@ -202,8 +202,11 @@ def technical(d: dict, code: str, hz: str, dec: int) -> str:
     for s in cols:
         sel = s["code"] == code
         bg = TIGHT + ("background:var(--raised);" if sel else "")
+        # The footing takes the ends of the ladder, not the middle of it: a
+        # short column should close as loudly as a long one does, and base
+        # amber against a bright green did not.
         tot_cells += (f'<td style="{bg}color:'
-                      f'{C["pos"] if s["tot"] >= 0 else C["amber"]};'
+                      f'{C["pos"] if s["tot"] >= 0 else BIAS_COL["-3"]};'
                       f'font-weight:700">{"+" if s["tot"] > 0 else ""}'
                       f'{s["tot"]}</td>')
     body += ('<tr><td class="l" title="Ladder total: every horizon\u2019s bias '

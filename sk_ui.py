@@ -148,16 +148,36 @@ def _palette(dark: bool) -> None:
     # stronger the further it goes without the score column looking like an
     # alarm. sakata.css keeps its own biasn tokens for the static site; this
     # only re-points the Python palette.
-    ar, ag, ab = _rgb(C["amber"])
+    #
+    # Those three steps used to be one amber at 0.60 / 0.82 / 1 alpha, and the
+    # two halves of the ladder were then built by different rules. The long
+    # side is three SEPARATE colours that get lighter as they get stronger:
+    # #189d92, #2dd4bf, #8ff0e2 on dark, each one further from the card than
+    # the last. The short side only ever faded a single colour toward the
+    # background, so -1 composited to a dull brown at roughly a third of +1's
+    # contrast and -3 could never be brighter than the base amber, while +3
+    # was far brighter than the base teal. A grid of nineteen instruments then
+    # read as "longs, and some smudges".
+    #
+    # So the short ramp is built the way the long one is: -2 is the theme's
+    # amber, -1 steps once toward the card, -3 once toward the text, all at
+    # full opacity. Mixing rather than fading also makes it theme-agnostic —
+    # on light the same rule runs pale to deep, because "toward the card" and
+    # "toward the text" swap ends with the theme.
+    def _mix(a, b, t):
+        """`t` of the way from colour a to colour b, as #rrggbb."""
+        ca, cb = _rgb(a), _rgb(b)
+        return "#%02x%02x%02x" % tuple(
+            round(x + (y - x) * t) for x, y in zip(ca, cb))
 
-    def amber(alpha):
-        return f"rgba({ar},{ag},{ab},{alpha})"
-
+    amber = C["amber"]
     BIAS_COL.clear()
     BIAS_COL.update({
         "3": v("bias3", "#0d5f58"), "2": v("bias2", "#0d9488"),
         "1": v("bias1", "#5fbcb1"), "0": v("bias0", "#9aa4ad"),
-        "-1": amber(0.60), "-2": amber(0.82), "-3": amber(1),
+        "-1": _mix(amber, C["surface"], 0.30),
+        "-2": amber,
+        "-3": _mix(amber, C["ink"], 0.35),
     })
 
 
