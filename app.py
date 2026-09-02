@@ -73,7 +73,11 @@ def _stale() -> list:
             ("sk_spreads.build_spreads", SP.build_spreads, ("chart_keys",)),
             ("sk_spreads.window_closes", SP.window_closes, ("by_bar",)),
             ("sk_ui.note", UI.note, ("wide",)))
-    behind = []
+    # Signatures only catch a function that still exists. Splitting one is a
+    # rename to an old module, which surfaces as AttributeError at the call
+    # rather than here, so the names are checked as names first.
+    behind = [f"sk_render has no {n}" for n in
+              ("technical_matrix", "technical_levels") if not hasattr(R, n)]
     for name, fn, params in want:
         try:
             have = set(inspect.signature(fn).parameters)
@@ -680,16 +684,25 @@ with t[6]:
     if not codes:
         st.error("No technical grid — not enough price history.")
     else:
+        # The matrix claims its place before the selectors are drawn and is
+        # filled after, so it renders above controls whose values it needs.
+        # Reading st.session_state for those values instead would work right
+        # up until a default changed on one side and not the other.
+        survey = st.container()
         tc = st.columns(5)
         code = tc[0].selectbox("Instrument", codes, key="tech_code",
                                format_func=lambda c: f"{c}  {U.NAME[c]}",
-                               help="Which contract the grid is drawn for.")
+                               help="Which contract the levels below are"
+                                    " drawn for. The matrix above raises its"
+                                    " column.")
         avail = [h for h in grid["order"] if h in grid["grid"][code]]
         hzt = tc[1].selectbox("Horizon", avail, key="tech_hz",
                               help="Bar size the indicators are computed on."
                                    " A horizon is only listed when this"
                                    " instrument has the history to fill it.")
-        UI.md(R.technical(grid, code, hzt, U.DEC[code]))
+        with survey:
+            UI.md(R.technical_matrix(grid, code, hzt))
+        UI.md(R.technical_levels(grid, code, hzt, U.DEC[code]))
 
 # ------------------------------------------------------------- Portfolio
 with t[5]:

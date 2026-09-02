@@ -103,7 +103,8 @@ def _break_line(label, items, colour, faint) -> str:
             f'{esc(label)}</span>{body}</div>')
 
 
-def technical(d: dict, code: str, hz: str, dec: int) -> str:
+def technical_matrix(d: dict, code: str, hz: str) -> str:
+    """The survey half: what is breaking, and the whole ladder."""
     order, grid = d["order"], d["grid"]
 
     # Breaking now, before anything else. The tab's first question is "what is
@@ -214,6 +215,33 @@ def technical(d: dict, code: str, hz: str, dec: int) -> str:
              'itself reads far from zero.">\u03a3</td>'
              f'{tot_cells}</tr>')
 
+    return (eyebrow(f"Breaking now · {hz}")
+            + strip
+            + eyebrow("Bias matrix", f'<span class="legend">{legend}</span>')
+            + table(head, body)
+            # The explainer sits UNDER the table it explains. Four lines of
+            # prose above the matrix pushed the one thing worth seeing first
+            # down the page, and a legend is read once and then never again.
+            + note("Range Levels: prior-segment high/low with the RB/RS "
+                   "retrace bands. A cell is marked <b>▲</b> once price "
+                   "has cleared the prior high and <b>▼</b> once it has "
+                   "lost the prior low; the number beside it is the bias "
+                   "— three votes, <b>range</b>, <b>retrace</b> and "
+                   "<b>trend</b>, summed between −3 and +3, so +3 is all "
+                   "three long and −3 all three short. Columns run "
+                   "most-broken first rather than by sector, and Σ "
+                   "totals the ladder.", wide=True))
+
+
+def technical_levels(d: dict, code: str, hz: str, dec: int) -> str:
+    """The drill-down half: the pair the selectors chose, and its levels.
+
+    Split from the matrix so the two selectors can sit between them. They
+    steer this half and only highlight the other, so above both they read as
+    controls on the whole tab; here they read as what they are, and the
+    matrix gets the top of the page.
+    """
+    grid = d["grid"]
     c = grid.get(code, {}).get(hz, {})
     lv = "".join(
         f'<tr><td class="l">{k}</td>{cell(v, dec)}</tr>' for k, v in [
@@ -225,23 +253,11 @@ def technical(d: dict, code: str, hz: str, dec: int) -> str:
     dash = "—"
     pos = dash if c.get("pos") is None else f'{num(c["pos"], 0)}%'
     rr = dash if c.get("rr_retrace") is None else num(c["rr_retrace"], 2)
-    return (note("Range Levels: prior-segment high/low with the RB/RS retrace "
-                 "bands. A cell is marked <b>▲</b> once price has cleared "
-                 "the prior high and <b>▼</b> once it has lost the prior "
-                 "low; the number beside it is the bias — three votes, "
-                 "<b>range</b>, <b>retrace</b> and <b>trend</b>, summed "
-                 "between −3 and +3 — +3 is all three votes long, −3 all "
-                 "three short. Columns run most-broken first rather than "
-                 "by sector, and Σ totals the ladder.")
-            + eyebrow(f"Breaking now · {hz}")
-            + strip
-            + eyebrow("Bias matrix", f'<span class="legend">{legend}</span>')
-            + table(head, body)
-            + note(f'<b>{esc(code)} · {esc(hz)}</b> — '
-                   f'{esc(c.get("bias", dash))} ({esc(c.get("regime", dash))}'
-                   f' / {esc(c.get("retrace", dash))}'
-                   f' / {esc(c.get("trend", dash))}) · position {pos} of '
-                   f'prior range · R:R to band {rr}')
+    return (note(f'<b>{esc(code)} · {esc(hz)}</b> — '
+                 f'{esc(c.get("bias", dash))} ({esc(c.get("regime", dash))}'
+                 f' / {esc(c.get("retrace", dash))}'
+                 f' / {esc(c.get("trend", dash))}) · position {pos} of '
+                 f'prior range · R:R to band {rr}')
             + eyebrow("Levels")
             + table('<th class="l">Level</th><th>Price</th>', lv))
 
