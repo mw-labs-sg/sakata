@@ -108,8 +108,8 @@ def technical(d: dict, code: str, hz: str, dec: int) -> str:
 
     # Breaking now, before anything else. The tab's first question is "what is
     # outside its range", and the matrix answered it only to a reader willing
-    # to decode a signed number in nineteen rows. Position rides with the code
-    # because 101% and 140% of the prior range are not the same break.
+    # to decode a signed number in ninety-five cells. Position rides with the
+    # code because 101% and 140% of the prior range are not the same break.
     out_up, out_dn = [], []
     for u_code in U.CODES:
         c = grid.get(u_code, {}).get(hz)
@@ -131,22 +131,12 @@ def technical(d: dict, code: str, hz: str, dec: int) -> str:
                      "every instrument on the ladder is trading between the "
                      "high and the low it made last period.")
 
-    # The selected horizon takes the same weight the Board gives it. Two
-    # dropdowns sit above this matrix and neither of them used to be visible
-    # in it: the reader picked a horizon and an instrument, and then had to
-    # find the cell those two chose by counting columns.
-    head = ('<th class="l">Instrument</th>'
-            + "".join(f'<th{" class=\"on\"" if h == hz else ""}>{esc(h)}</th>'
-                      for h in order)
-            + '<th title="Ladder total: every horizon’s bias for this '
-              'instrument, added up, so a column that agrees with itself '
-              'reads far from zero.">Σ</th>')
-
-    # A sector is a swatch on the row, not a row of its own. Eight sub-headers
-    # spent eight lines of table height saying what an 8px square says beside
-    # the code. The legend is built from the universe order rather than the row
-    # order, because the rows are now sorted by what is breaking and a legend
-    # that followed them would reshuffle itself on every fetch.
+    # Instruments across the top, the ladder down the side. A column is now
+    # one instrument read top to bottom, which is the shape the question has:
+    # "is this thing broken on more than one rung" is a glance down a column,
+    # where before it was a scan across a row of five while nineteen other
+    # rows pulled the eye sideways. Nineteen short codes fit a header; the
+    # names did not, and they were the widest thing in the old table.
     legend, seen = "", []
     for u_code in U.CODES:
         sec = U.SECTOR[u_code]
@@ -154,49 +144,72 @@ def technical(d: dict, code: str, hz: str, dec: int) -> str:
             seen.append(sec)
             legend += f'<span class="key">{swatch(sec)}{esc(sec)}</span>'
 
-    rows = []
+    cols = []
     for u_code in U.CODES:
         g = grid.get(u_code)
         if not g:
             continue
-        tot, breaks, cells = 0, 0, ""
-        for h in order:
-            c = g.get(h)
-            if not c:
-                cells += '<td class="faint">—</td>'
-                continue
-            tot += c["score"]
-            breaks += BREAK_VOTE.get(c["regime"], 0)
-            mark = REGIME_MARK.get(c["regime"], "")
-            title = (f'{c["bias"]} · {c["regime"]} / {c["retrace"]}'
-                     f' / {c["trend"]}')
-            cells += (f'<td{" class=\"on\"" if h == hz else ""} '
-                      f'style="color:{BIAS_COL[str(c["score"])]};'
-                      f'font-weight:{700 if h == hz else 600}" '
-                      f'title="{esc(title)}">{mark}'
-                      f'{"+" if c["score"] > 0 else ""}{c["score"]}</td>')
-        rows.append({"code": u_code, "cells": cells, "tot": tot,
-                     "breaks": breaks})
+        tot = sum(c["score"] for c in g.values())
+        breaks = sum(BREAK_VOTE.get(c["regime"], 0) for c in g.values())
+        cols.append({"code": u_code, "by_h": g, "tot": tot, "breaks": breaks})
 
     # Breakout first, literally: the net break count across the ladder orders
-    # the table, the bias total settles ties, and the universe order settles
-    # the rest so a quiet day still renders in a stable, repeatable order.
+    # the columns left to right, the bias total settles ties, and the universe
+    # order settles the rest so a quiet day still renders in a stable order.
     rank = {c: i for i, c in enumerate(U.CODES)}
-    rows.sort(key=lambda r: (-r["breaks"], -r["tot"], rank[r["code"]]))
+    cols.sort(key=lambda s: (-s["breaks"], -s["tot"], rank[s["code"]]))
+
+    # The instrument the dropdown chose takes a raised column, the horizon it
+    # chose a raised row, and the cell where they cross goes one tone darker.
+    # Two selectors sit above this table and neither of them used to be
+    # visible in it: the reader picked a pair and then hunted for the cell.
+    # Nineteen columns overran a 1280px window by 73px, which clipped ZB and
+    # ZN — the two most broken-down instruments on the board, and the last
+    # thing a wide table should hide. Four pixels off each side of every cell
+    # buys 152px and costs nothing a reader can see.
+    TIGHT = "padding-left:8px;padding-right:8px;"
+    head = ('<th class="l">Horizon</th>'
+            + "".join(
+                f'<th{" class=\"on\"" if s["code"] == code else ""}'
+                f' style="{TIGHT}" title="{esc(U.NAME[s["code"]])}">'
+                f'{swatch(U.SECTOR[s["code"]])}{esc(s["code"])}</th>'
+                for s in cols))
 
     body = ""
-    for r in rows:
-        sec = U.SECTOR[r["code"]]
-        # The row the readout below is drawn from takes the raised band. With
-        # the rows re-ordered it is the only way to find the instrument the
-        # dropdown chose without reading nineteen codes.
-        body += (f'<tr{" class=\"out\"" if r["code"] == code else ""}>'
-                 f'<td class="l">{swatch(sec)}{esc(r["code"])} '
-                 f'<span class="nm">{esc(U.NAME[r["code"]])}</span></td>'
-                 f'{r["cells"]}'
-                 f'<td style="color:{C["pos"] if r["tot"] >= 0 else C["amber"]};'
-                 f'font-weight:700">{"+" if r["tot"] > 0 else ""}'
-                 f'{r["tot"]}</td></tr>')
+    for h in order:
+        on = h == hz
+        cells = ""
+        for s in cols:
+            sel = s["code"] == code
+            bg = TIGHT + ("background:var(--hair);" if sel and on
+                          else "background:var(--raised);"
+                          if sel else "")
+            c = s["by_h"].get(h)
+            if not c:
+                cells += f'<td class="faint" style="{bg}">\u2014</td>'
+                continue
+            title = (f'{s["code"]} {U.NAME[s["code"]]} \u00b7 {h} \u00b7 '
+                     f'{c["bias"]} \u00b7 {c["regime"]} / {c["retrace"]}'
+                     f' / {c["trend"]}')
+            cells += (f'<td style="{bg}color:{BIAS_COL[str(c["score"])]};'
+                      f'font-weight:{700 if on or sel else 600}" '
+                      f'title="{esc(title)}">{REGIME_MARK.get(c["regime"], "")}'
+                      f'{"+" if c["score"] > 0 else ""}{c["score"]}</td>')
+        body += (f'<tr{" class=\"out\"" if on else ""}>'
+                 f'<td class="l">{esc(h)}</td>{cells}</tr>')
+
+    tot_cells = ""
+    for s in cols:
+        sel = s["code"] == code
+        bg = TIGHT + ("background:var(--raised);" if sel else "")
+        tot_cells += (f'<td style="{bg}color:'
+                      f'{C["pos"] if s["tot"] >= 0 else C["amber"]};'
+                      f'font-weight:700">{"+" if s["tot"] > 0 else ""}'
+                      f'{s["tot"]}</td>')
+    body += ('<tr><td class="l" title="Ladder total: every horizon\u2019s bias '
+             'for this instrument, added up, so a column that agrees with '
+             'itself reads far from zero.">\u03a3</td>'
+             f'{tot_cells}</tr>')
 
     c = grid.get(code, {}).get(hz, {})
     lv = "".join(
@@ -214,9 +227,9 @@ def technical(d: dict, code: str, hz: str, dec: int) -> str:
                  "the prior high and <b>▼</b> once it has lost the prior "
                  "low; the number beside it is the bias — three votes, "
                  "<b>range</b>, <b>retrace</b> and <b>trend</b>, summed "
-                 "between −3 and +3. Rows are ordered by how much of the "
-                 "ladder is broken rather than by sector, and Σ is the "
-                 "ladder total.")
+                 "between −3 and +3 — +3 is all three votes long, −3 all "
+                 "three short. Columns run most-broken first rather than "
+                 "by sector, and Σ totals the ladder.")
             + eyebrow(f"Breaking now · {hz}")
             + strip
             + eyebrow("Bias matrix", f'<span class="legend">{legend}</span>')
