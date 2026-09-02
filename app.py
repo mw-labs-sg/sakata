@@ -688,6 +688,16 @@ with t[6]:
         # filled after, so it renders above controls whose values it needs.
         # Reading st.session_state for those values instead would work right
         # up until a default changed on one side and not the other.
+        # Sort sits above the tables it reorders and apart from the two
+        # selectors below, which steer the drill-down instead. Three controls
+        # in one row would have said they all did the same kind of thing.
+        sc = st.columns(5)
+        sort_by = sc[0].selectbox("Sort", ["Structure", "Volatility"],
+                                  key="tech_sort",
+                                  help="Column order for both tables. Structure"
+                                       " puts the most-broken instrument first;"
+                                       " Volatility puts the loudest first, on"
+                                       " the horizon chosen below.")
         survey = st.container()
         tc = st.columns(5)
         code = tc[0].selectbox("Instrument", codes, key="tech_code",
@@ -701,7 +711,7 @@ with t[6]:
                                    " A horizon is only listed when this"
                                    " instrument has the history to fill it.")
         with survey:
-            UI.md(R.technical_matrix(grid, code, hzt))
+            UI.md(R.technical_matrix(grid, code, hzt, sort_by))
         UI.md(R.technical_levels(grid, code, hzt, U.DEC[code]))
 
 # ------------------------------------------------------------- Portfolio

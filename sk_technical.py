@@ -34,7 +34,10 @@ MIN_POKE = 0.10
 # segment's, and the average to read it against is an average of segments.
 # It also makes the reading follow the Horizon dropdown for free — prior day
 # on Day, prior week on Week — instead of needing its own timeframe control.
-SEG_RANK_WIN = 52       # completed segments to rank the prior one against
+SEG_RANK_WIN = 100      # completed segments to rank the prior one against,
+                        # matching the Margin tab's slow window. Clamped to
+                        # what a rung actually holds, which is 100 on Day
+                        # and Week and about 24 and 40 on Month and Qtr.
 SEG_RANK_MIN = 8        # below this a percentile is theatre, not a statistic
 ATR_SEGS = 20           # segments in the average range
 
@@ -63,7 +66,8 @@ def _seg_ranges(df: pd.DataFrame, seg: str) -> pd.Series:
 # cannot be annualised, and printing a number there would be arithmetic
 # rather than a measurement.
 SEG_PER_YEAR = {"D": 252, "W": 52, "M": 12, "Q": 4}
-HV_SEGS = 20
+HV_SEGS = 20            # the measure itself
+HV_SLOW = 100           # the base rate beside it, as the Margin tab does
 
 
 def read_hv(df: pd.DataFrame, seg: str) -> dict:
@@ -85,14 +89,22 @@ def read_hv(df: pd.DataFrame, seg: str) -> dict:
     ret = closes.pct_change().dropna()
     per_year = SEG_PER_YEAR.get(str(seg)[0].upper())
     if per_year is None or len(ret) < SEG_RANK_MIN:
-        return {"segHv": None, "segHvPct": None, "segHvN": 0}
+        return {"segHv": None, "segHv100": None, "segHvPct": None, "segHvN": 0}
     # Rolled rather than taken once, so the level and its rank come off the
     # same series. A vol quoted beside a percentile computed some other way
     # is two answers to one question, and the reader has no way to see it.
     roll = ret.rolling(min(HV_SEGS, len(ret))).std().dropna()
     if roll.empty:
-        return {"segHv": None, "segHvPct": None, "segHvN": 0}
-    hv = float(roll.iloc[-1]) * (per_year ** 0.5) * 100
+        return {"segHv": None, "segHv100": None, "segHvPct": None, "segHvN": 0}
+    ann = per_year ** 0.5
+    hv = float(roll.iloc[-1]) * ann * 100
+    # The slow reading is the base rate the fast one is judged against, and it
+    # is left blank rather than approximated when a rung has not got a hundred
+    # segments. A "100-segment vol" computed over twenty-four is a different
+    # measure wearing the same label, which is worse than an em dash.
+    hv_slow = None
+    if len(ret) >= HV_SLOW:
+        hv_slow = float(ret.tail(HV_SLOW).std()) * ann * 100
     pct, n = None, 0
     if len(roll) >= SEG_RANK_MIN:
         tail = roll.tail(SEG_RANK_WIN)
@@ -103,7 +115,8 @@ def read_hv(df: pd.DataFrame, seg: str) -> dict:
     # and a Qtr rung forty, so their percentiles land on multiples of 4 and
     # 2.5 — still a rank, but one whose tooltip must not claim a year of
     # weeks it never had.
-    return {"segHv": _r(hv, 1), "segHvPct": _r(pct, 0), "segHvN": n}
+    return {"segHv": _r(hv, 1), "segHv100": _r(hv_slow, 1),
+            "segHvPct": _r(pct, 0), "segHvN": n}
 
 
 def read_range(rng: pd.Series) -> dict:

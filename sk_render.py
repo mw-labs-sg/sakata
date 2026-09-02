@@ -207,16 +207,20 @@ def _break_line(label, items, colour, faint) -> str:
 # digits. Amber throughout because vol has no direction — a 95th percentile
 # is not bullish or bearish, it is loud, and colouring it teal would say
 # otherwise beside a matrix where teal means long.
+# Five steps off the bias ladder's own two ramps, so quiet reads teal and
+# loud reads amber with the neutral grey in between. Borrowing that ladder
+# means teal is not saying "long" here — it is saying the same thing it says
+# there, which is that nothing needs attention.
+HV_HEAT = (("3", 20), ("2", 40), ("0", 60), ("-2", 80), ("-3", 101))
+
+
 def _hv_heat(pct):
     if pct is None:
         return C["faint"]
-    if pct >= 80:
-        return BIAS_COL["-3"]
-    if pct >= 60:
-        return BIAS_COL["-2"]
-    if pct <= 20:
-        return C["faint"]
-    return C["mute"]
+    for key, ceiling in HV_HEAT:
+        if pct < ceiling:
+            return BIAS_COL[key]
+    return BIAS_COL["-3"]
 
 
 def _hv_matrix(cols: list, order: list, code: str, hz: str, head: str,
@@ -255,10 +259,16 @@ def _hv_matrix(cols: list, order: list, code: str, hz: str, head: str,
                      f'<td class="l">{esc(h)}</td>{cells}</tr>')
     if not rows:
         return ""
-    return eyebrow("Volatility percentile") + table(head, rows)
+    return (eyebrow("Volatility Table") + table(head, rows)
+            # The Instrument selector sits immediately under
+            # this table and read as part of it. Streamlit
+            # gives a widget no top margin worth the name, so
+            # the gap has to come from the block above it.
+            + '<div style="height:14px"></div>')
 
 
-def technical_matrix(d: dict, code: str, hz: str) -> str:
+def technical_matrix(d: dict, code: str, hz: str,
+                     sort: str = "Structure") -> str:
     """The survey half: what is breaking, and the whole ladder."""
     order, grid = d["order"], d["grid"]
 
@@ -312,8 +322,20 @@ def technical_matrix(d: dict, code: str, hz: str) -> str:
     # Breakout first, literally: the net break count across the ladder orders
     # the columns left to right, the bias total settles ties, and the universe
     # order settles the rest so a quiet day still renders in a stable order.
+    #
+    # Sorting on volatility instead reorders BOTH tables, which is the point —
+    # they share a column order so a reader can carry an instrument between
+    # them, and letting one of them re-sort alone would break exactly that.
+    # It ranks on the selected horizon's percentile, because "most volatile"
+    # is not a question you can ask of a whole ladder at once.
     rank = {c: i for i, c in enumerate(U.CODES)}
-    cols.sort(key=lambda s: (-s["breaks"], -s["tot"], rank[s["code"]]))
+    if sort == "Volatility":
+        def vol_key(s):
+            v = (s["by_h"].get(hz) or {}).get("segHvPct")
+            return (0 if v is None else -v, -s["tot"], rank[s["code"]])
+        cols.sort(key=vol_key)
+    else:
+        cols.sort(key=lambda s: (-s["breaks"], -s["tot"], rank[s["code"]]))
 
     # The instrument the dropdown chose takes a raised column, the horizon it
     # chose a raised row, and the cell where they cross goes one tone darker.
@@ -381,7 +403,8 @@ def technical_matrix(d: dict, code: str, hz: str) -> str:
 
     return (eyebrow(f"Breaking now · {hz}")
             + strip
-            + eyebrow("Bias matrix", f'<span class="legend">{legend}</span>')
+            + eyebrow("Structure Table",
+                      f'<span class="legend">{legend}</span>')
             + table(head, body)
             # The explainer sits UNDER the table it explains. Four lines of
             # prose above the matrix pushed the one thing worth seeing first
@@ -419,6 +442,7 @@ def _range_table(g: dict, order: list, hz: str, dec: int) -> str:
                  + (f'<td style="color:{tone}">{num(pctile, 0)}</td>'
                     if tone else cell(pctile, 0))
                  + cell(c.get("segHv"), 1)
+                 + cell(c.get("segHv100"), 1)
                  + (f'<td style="color:{_hv_tone(c.get("segHvPct"))}">'
                     f'{num(c["segHvPct"], 0)}</td>'
                     if c.get("segHvPct") is not None and _hv_tone(c["segHvPct"])
@@ -435,12 +459,15 @@ def _range_table(g: dict, order: list, hz: str, dec: int) -> str:
             '<th title="The prior range over that average. Above 1 is a wider '
             'period than usual, below 1 a quieter one.">\u00d7 ATR</th>'
             '<th title="Where the prior range sits among the completed '
-            'segments before it, up to 52.">Pctile</th>'
+            'segments before it, up to 100.">Pctile</th>'
             '<th title="Annualised volatility of segment-to-segment closes '
             'over the last 20 segments. A year cannot be annualised from one '
-            'observation, so the Year rung is blank.">HV %</th>'
+            'observation, so the Year rung is blank.">HV 20</th>'
+            '<th title="The same measure over 100 segments — the base rate the '
+            'fast one is read against. Blank on a rung that has not got a '
+            'hundred completed segments.">HV 100</th>'
             '<th title="Where that volatility sits among the readings '
-            'before it, up to 52.">HV pctile</th>')
+            'before it, up to 100.">HV pctile</th>')
     return eyebrow("Range and volatility") + table(head, rows)
 
 
@@ -474,6 +501,9 @@ def technical_levels(d: dict, code: str, hz: str, dec: int) -> str:
     pos = dash if c.get("pos") is None else f'{num(c["pos"], 0)}%'
     rr = dash if c.get("rr_retrace") is None else num(c["rr_retrace"], 2)
     struct = c.get("structure", c.get("regime", dash))
+    # wide: the readout is one sentence of facts and the 74ch measure broke it
+    # over two lines, which put a hanging fragment between two tables and read
+    # as a third one starting.
     return (note(f'<b>{esc(code)} · {esc(hz)}</b> — '
                  f'{STRUCT_MARK.get(struct, "")} {esc(struct)} · '
                  f'{esc(c.get("bias", dash))} ({esc(c.get("regime", dash))}'
@@ -481,7 +511,7 @@ def technical_levels(d: dict, code: str, hz: str, dec: int) -> str:
                  f' / {esc(c.get("trend", dash))}) · position {pos} of '
                  f'prior range · R:R to band {rr}'
                  + (f' · <b>{esc(c["bandNote"])}</b>'
-                    if c.get("bandNote") else ""))
+                    if c.get("bandNote") else ""), wide=True)
             + vol
             + eyebrow("Levels")
             + table('<th class="l">Level</th><th>Price</th>', lv))
