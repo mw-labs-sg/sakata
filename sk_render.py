@@ -92,7 +92,14 @@ def board(d: dict, hz: str = "Day") -> str:
 #                          small = past the retrace bands, still inside
 #   fill   did it hold     solid = price is still there
 #                          hollow = it went and came back
-#   dot    nothing to say  between the bands, the middle of the range
+#   none   nothing to say  between the bands, the middle of the range
+#
+# Mid is blank rather than a dot. Drawn as "·" it was a speck at 13px
+# sitting beside "▴" and "▾", which are also specks, and the one
+# discrimination the eye cannot make in a dense grid is small-mark against
+# other-small-mark. Absence against presence is the easiest it can make. The
+# middle of a range is also the cell with the least to say, so spending the
+# most delicate mark on it had it backwards twice.
 #
 # Failure needed the hollow pair because it has nowhere else to live. It is
 # not a fourth vote and it does not move the score — a break that was given
@@ -100,7 +107,7 @@ def board(d: dict, hz: str = "Day") -> str:
 # recoverable only by opening a chart.
 STRUCT_MARK = {
     "Breakout": "▲", "Failed breakout": "△", "Above bands": "▴",
-    "Mid": "·",
+    "Mid": "",
     "Below bands": "▾", "Failed breakdown": "▽", "Breakdown": "▼",
 }
 # Sorting still counts only the breaks that held. A column that poked and
@@ -109,9 +116,9 @@ BREAK_VOTE = {"Breakout": 1, "Breakdown": -1}
 
 MARK_LEGEND = (
     "▲ broke the prior high and held · △ broke it and came "
-    "back · ▴ inside, above the retrace bands · · between "
-    "them · ▾ below them · ▽ broke the prior low and came "
-    "back · ▼ broke it and held.")
+    "back · ▴ inside, above the retrace bands · ▾ below "
+    "them · ▽ broke the prior low and came back · ▼ "
+    "broke it and held · no mark, between the bands.")
 
 
 def _break_line(label, items, colour, faint) -> str:
