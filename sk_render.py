@@ -124,10 +124,9 @@ MARK_KEYS = (
     ("▼", "Holding breakdown", -1),
 )
 # The band mark trails the score, smaller, in the chart's own colours for the
-# two levels: orange for the sell band, cyan for the buy band. The arrow is
-# the REACTION rather than the position — down out of the sell band, up off
-# the buy band — so colour and direction agree, and the mark needs no
-# reconciling with the score sitting beside it.
+# two levels: orange for RS, cyan for RB. The arrow is the REACTION rather
+# than the position — down out of RS, up off RB — so colour and direction
+# agree, and the mark needs no reconciling with the score sitting beside it.
 #
 # It marks only the give-back. An arrow for "currently beyond the band" was
 # drawn first and was pure duplication: the glyph three characters to the
@@ -155,8 +154,8 @@ def _mark_legend() -> str:
                 if glyph else f'<span style="color:{C["faint"]}">–</span>')
         items += f'<span class="key">{mark}&nbsp;&nbsp;{esc(label)}</span>'
     for key, col, label in (
-            ("rejected", C["amber"], "Rejected at sell band"),
-            ("reclaimed", C["teal"], "Reclaimed buy band")):
+            ("rejected", C["amber"], "Rejected at RS"),
+            ("reclaimed", C["teal"], "Reclaimed RB")):
         items += (f'<span class="key"><span style="color:{col};'
                   f'font-weight:700">{BAND_MARK[key]}</span>'
                   f'&nbsp;&nbsp;{esc(label)}</span>')

@@ -249,9 +249,9 @@ def read_bands(cur: pd.DataFrame, r) -> dict:
         return blank
     # Against BOTH bands, not each one alone. rb and rs cross — a segment
     # that rallies hard drags rb up through rs — and read separately that
-    # puts a cell above the sell band and below the buy band at the same
-    # time. Measured: nine cells in ten carried a mark, which is a mark on
-    # none of them. max/min is what the retrace vote already uses, for this.
+    # puts a cell above RS and below RB at the same time. Measured: nine
+    # cells in ten carried a mark, which is a mark on none of them. max/min
+    # is what the retrace vote already uses, for exactly this reason.
     past = cur["close"].iloc[:-1]
     hi = cur[["rb", "rs"]].max(axis=1).iloc[:-1]
     lo = cur[["rb", "rs"]].min(axis=1).iloc[:-1]
@@ -263,9 +263,9 @@ def read_bands(cur: pd.DataFrame, r) -> dict:
     reclaimed = bool((past < lo).any()) and r.close >= now_lo
     said = []
     if rejected:
-        said.append("rejected at the sell band")
+        said.append("rejected at RS")
     if reclaimed:
-        said.append("reclaimed the buy band")
+        said.append("reclaimed RB")
     return {"rsMark": "rejected" if rejected else None,
             "rbMark": "reclaimed" if reclaimed else None,
             "bandNote": " \u00b7 ".join(said) or None}
