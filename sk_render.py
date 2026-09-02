@@ -106,10 +106,27 @@ def board(d: dict, hz: str = "Day") -> str:
 # back SHOULD score as Range — so until now it was invisible in a cell and
 # recoverable only by opening a chart.
 STRUCT_MARK = {
-    "Breakout": "▲", "Failed breakout": "△", "Above bands": "▴",
-    "Mid": "",
-    "Below bands": "▾", "Failed breakdown": "▽", "Breakdown": "▼",
+    "Breakout": "▲", "Failed breakout": "△",
+    "Failed breakdown": "▽", "Breakdown": "▼",
+    # The three inside-the-range states draw no glyph. They are the rails
+    # below instead: where the bands sit is a spatial fact, and a rule above
+    # or under the number puts it where it belongs rather than naming it with
+    # a triangle that then has to be looked up.
+    "Above bands": "", "Below bands": "", "Mid": "",
 }
+
+
+# A rail is drawn on the side a band sits: over the number when one is
+# overhead, under it when one is beneath. Between the bands the number is
+# boxed by both, above them it stands on a floor, below them it hangs from a
+# ceiling — and the three read apart at a glance without being read at all,
+# which the small triangles never did.
+def _rails(c: dict) -> str:
+    over = "overline" if c.get("retrace") != "Bull" else ""
+    under = "underline" if c.get("retrace") != "Bear" else ""
+    both = " ".join(x for x in (over, under) if x)
+    return (f"text-decoration:{both};text-underline-offset:3.5px;"
+            "text-decoration-thickness:1px;") if both else ""
 # Sorting still counts only the breaks that held. A column that poked and
 # gave it back has not earned the top of the table.
 BREAK_VOTE = {"Breakout": 1, "Breakdown": -1}
@@ -119,9 +136,12 @@ BREAK_VOTE = {"Breakout": 1, "Breakdown": -1}
 # read start to finish while a key is read by finding the one row you want.
 MARK_KEYS = (
     ("▲", "Holding breakout", 1), ("△", "Failed breakout", 1),
-    ("▴", "Above retrace", 1), ("", "Mid", 0),
-    ("▾", "Below retrace", -1), ("▽", "Failed breakdown", -1),
-    ("▼", "Holding breakdown", -1),
+    ("▽", "Failed breakdown", -1), ("▼", "Holding breakdown", -1),
+)
+RAIL_KEYS = (
+    ("underline", "Above both bands"),
+    ("overline underline", "Between the bands"),
+    ("overline", "Below both bands"),
 )
 # The band mark trails the score, smaller, in the chart's own colours for the
 # two levels: orange for RS, cyan for RB. The arrow is the REACTION rather
@@ -153,6 +173,10 @@ def _mark_legend() -> str:
         mark = (f'<span style="color:{col};font-weight:700">{glyph}</span>'
                 if glyph else f'<span style="color:{C["faint"]}">–</span>')
         items += f'<span class="key">{mark}&nbsp;&nbsp;{esc(label)}</span>'
+    for deco, label in RAIL_KEYS:
+        items += (f'<span class="key"><span style="text-decoration:{deco};'
+                  f'text-underline-offset:3.5px;color:{C["mute"]};'
+                  f'font-weight:700">+1</span>&nbsp;&nbsp;{esc(label)}</span>')
     for key, col, label in (
             ("rejected", C["amber"], "Rejected at RS"),
             ("reclaimed", C["teal"], "Reclaimed RB")):
@@ -274,8 +298,10 @@ def technical_matrix(d: dict, code: str, hz: str) -> str:
                      + (f' · {note_}' if note_ else ""))
             cells += (f'<td style="{bg}color:{BIAS_COL[str(c["score"])]};'
                       f'font-weight:{700 if on or sel else 600}" '
-                      f'title="{esc(title)}">{STRUCT_MARK.get(struct, "")}'
-                      f'{"+" if c["score"] > 0 else ""}{c["score"]}'
+                      f'title="{esc(title)}">'
+                      f'<span style="{_rails(c)}">'
+                      f'{STRUCT_MARK.get(struct, "")}'
+                      f'{"+" if c["score"] > 0 else ""}{c["score"]}</span>'
                       f'{_band_marks(c)}</td>')
         body += (f'<tr{" class=\"out\"" if on else ""}>'
                  f'<td class="l">{esc(h)}</td>{cells}</tr>')
@@ -304,11 +330,21 @@ def technical_matrix(d: dict, code: str, hz: str) -> str:
             # prose above the matrix pushed the one thing worth seeing first
             # down the page, and a legend is read once and then never again.
             + _mark_legend()
-            + note("Large is the prior range’s edge, small the retrace "
-                   "band, hollow means it went and came back. The number is "
+            + note("A triangle is the prior range’s edge, hollow "
+                   "when it went and came back. The rules are the retrace "
+                   "bands, drawn on the side each one sits. The number is "
                    "the bias: <b>range</b>, <b>retrace</b> and <b>trend</b>, "
                    "one vote each, summed −3 to +3. Columns run "
                    "most-broken first; Σ totals the ladder.", wide=True))
+
+
+def _hv_tone(pct):
+    """Only the ends of the distribution take a colour, as the range rank
+    does. A 40th-percentile vol is the market being ordinary."""
+    if pct is None:
+        return None
+    return (BIAS_COL["-3"] if pct >= 80
+            else C["faint"] if pct <= 20 else None)
 
 
 def _range_table(g: dict, order: list, hz: str, dec: int) -> str:
@@ -327,7 +363,11 @@ def _range_table(g: dict, order: list, hz: str, dec: int) -> str:
                     else '<td class="faint">\u2014</td>')
                  + (f'<td style="color:{tone}">{num(pctile, 0)}</td>'
                     if tone else cell(pctile, 0))
-                 + cell(c.get("segHv"), 1))
+                 + cell(c.get("segHv"), 1)
+                 + (f'<td style="color:{_hv_tone(c.get("segHvPct"))}">'
+                    f'{num(c["segHvPct"], 0)}</td>'
+                    if c.get("segHvPct") is not None and _hv_tone(c["segHvPct"])
+                    else cell(c.get("segHvPct"), 0)))
         rows += (f'<tr{" class=\"out\"" if h == hz else ""}>'
                  f'<td class="l">{esc(h)}</td>{cells}</tr>')
     if not rows:
@@ -343,7 +383,9 @@ def _range_table(g: dict, order: list, hz: str, dec: int) -> str:
             'completed segments.">Pctile</th>'
             '<th title="Annualised volatility of segment-to-segment closes '
             'over the last 20 segments. A year cannot be annualised from one '
-            'observation, so the Year rung is blank.">HV %</th>')
+            'observation, so the Year rung is blank.">HV %</th>'
+            '<th title="Where that volatility sits among the last 52 readings '
+            'of the same measure.">HV pctile</th>')
     return eyebrow("Range and volatility") + table(head, rows)
 
 

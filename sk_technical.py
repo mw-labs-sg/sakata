@@ -85,9 +85,19 @@ def read_hv(df: pd.DataFrame, seg: str) -> dict:
     ret = closes.pct_change().dropna()
     per_year = SEG_PER_YEAR.get(str(seg)[0].upper())
     if per_year is None or len(ret) < SEG_RANK_MIN:
-        return {"segHv": None}
-    sd = float(ret.tail(HV_SEGS).std())
-    return {"segHv": _r(sd * (per_year ** 0.5) * 100, 1)}
+        return {"segHv": None, "segHvPct": None}
+    # Rolled rather than taken once, so the level and its rank come off the
+    # same series. A vol quoted beside a percentile computed some other way
+    # is two answers to one question, and the reader has no way to see it.
+    roll = ret.rolling(min(HV_SEGS, len(ret))).std().dropna()
+    if roll.empty:
+        return {"segHv": None, "segHvPct": None}
+    hv = float(roll.iloc[-1]) * (per_year ** 0.5) * 100
+    pct = None
+    if len(roll) >= SEG_RANK_MIN:
+        tail = roll.tail(SEG_RANK_WIN)
+        pct = float((tail <= tail.iloc[-1]).mean() * 100)
+    return {"segHv": _r(hv, 1), "segHvPct": _r(pct, 0)}
 
 
 def read_range(rng: pd.Series) -> dict:
