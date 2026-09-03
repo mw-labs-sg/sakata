@@ -12,7 +12,10 @@ must never take the build down with it.
 import datetime as dt
 import io
 import json
+import pathlib
+import pickle
 import re
+import time
 
 import numpy as np
 import pandas as pd
@@ -20,6 +23,61 @@ import pandas as pd
 import sk_universe as U
 
 DRY = False          # set by build.py --dry; swaps prices for synthetic series
+
+# ------------------------------------------------------------- snapshots
+# Yahoo rate-limits by IP, and st.cache_data lives in the process, so every
+# restart of the app used to re-ask for all three price pulls. Fifteen
+# restarts in an hour is forty-five batch downloads from one address, and
+# once that trips the limiter the old fallback path made it worse rather
+# than better: a batch returning nothing sent nineteen single-ticker
+# requests after it, per interval. One throttled call became sixty.
+#
+# So a good pull is written to disk and a restart reads it back. The three
+# fetches are unchanged — this is not about how much is asked for, it is
+# about asking again for something already answered.
+CACHE_DIR = pathlib.Path(__file__).parent / "data" / "cache"
+SNAP_MAX_AGE = 900       # seconds a snapshot serves before the network is asked
+SINGLE_CAP = 6           # most instruments ever refetched one at a time
+
+
+def _snap_path(interval: str, period: str) -> pathlib.Path:
+    return CACHE_DIR / f"ohlc-{interval}-{period}.pkl"
+
+
+def _snap_read(interval: str, period: str):
+    """(frames, age in seconds), or (None, None) if there is nothing usable."""
+    p = _snap_path(interval, period)
+    try:
+        with p.open("rb") as fh:
+            blob = pickle.load(fh)
+        return blob["frames"], time.time() - blob["at"]
+    except Exception:        # missing, truncated, or written by another pandas
+        return None, None
+
+
+def _snap_write(interval: str, period: str, frames: dict) -> None:
+    try:
+        CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        tmp = _snap_path(interval, period).with_suffix(".tmp")
+        with tmp.open("wb") as fh:
+            pickle.dump({"at": time.time(), "frames": frames}, fh,
+                        protocol=pickle.HIGHEST_PROTOCOL)
+        tmp.replace(_snap_path(interval, period))
+    except Exception as e:   # a cache that cannot be written is not an error
+        print(f"    snapshot {interval} not written: {str(e)[:60]}")
+
+
+def drop_snapshots() -> int:
+    """Refresh means refetch. Without this the button would keep serving the
+    very snapshot the reader pressed it to get past."""
+    n = 0
+    try:
+        for p in CACHE_DIR.glob("ohlc-*.pkl"):
+            p.unlink()
+            n += 1
+    except Exception:
+        pass
+    return n
 
 _SESSION = None
 
@@ -81,19 +139,46 @@ def _tidy(h, interval):
     return h[~h.index.duplicated(keep="last")]
 
 
-def fetch_ohlc(interval: str, period: str) -> dict:
+def fetch_ohlc(interval: str, period: str, max_age: float = None) -> dict:
     """{code: DataFrame[open,high,low,close]} for the whole universe.
 
-    ONE batched request, not one per instrument. yfinance will take the full
-    ticker list and return a column-multiindexed frame, which is a single
-    HTTP round trip instead of nineteen. That matters more than it looks: a
-    rate limit or a flaky response is a per-request event, so nineteen serial
-    requests is nineteen chances to lose an instrument, and the failure is
-    silent — the tab just renders short. The per-ticker path survives only as
-    a fallback for whatever the batch did not return.
+    Disk first, network second, and the last good pull rather than nothing
+    when the network says no. Serving a fifteen-minute-old snapshot to a
+    reader who has just restarted is right on both counts: it is what they
+    were looking at a moment ago, and not asking is the only thing that ever
+    gets an address back off a rate limiter.
     """
     if DRY:
         return _synth(interval)
+    max_age = SNAP_MAX_AGE if max_age is None else max_age
+    snap, age = _snap_read(interval, period)
+    if snap and age is not None and age < max_age:
+        print(f"    {interval}: snapshot {int(age)}s old, not fetching")
+        return snap
+
+    fresh = _download_ohlc(interval, period)
+    if fresh:
+        _snap_write(interval, period, fresh)
+        return fresh
+    if snap:
+        # Stale beats empty. An empty dict renders every tab as an error and
+        # loses the reader the session they already had.
+        print(f"    {interval}: nothing came back, serving snapshot "
+              f"{int(age or 0)}s old")
+        return snap
+    return {}
+
+
+def _download_ohlc(interval: str, period: str) -> dict:
+    """ONE batched request, not one per instrument. yfinance will take the
+    full ticker list and return a column-multiindexed frame, which is a
+    single HTTP round trip instead of nineteen.
+
+    The per-ticker path is a patch for a batch that came back SHORT, never
+    for one that came back empty. Empty means the address is being refused,
+    and nineteen more requests is the worst available response to that — it
+    was how one throttled call turned into sixty and kept the limiter fed.
+    """
     import yfinance as yf
 
     tickers = [U.TICKER[c] for c in U.CODES]
@@ -123,6 +208,14 @@ def fetch_ohlc(interval: str, period: str) -> dict:
                 out[code] = t
 
     missing = [c for c in U.CODES if c not in out]
+    if not out:
+        print(f"    {interval}: batch returned nothing, not refetching "
+              f"{len(missing)} singly")
+        return {}
+    if len(missing) > SINGLE_CAP:
+        print(f"    {interval}: {len(missing)} missing, over the cap, "
+              f"taking what the batch gave")
+        return out
     for code in missing:
         try:
             h = yf.Ticker(U.TICKER[code], session=session()).history(

@@ -10,3 +10,7 @@ audits/
 # Local margin history for the day-over-day column. Machine state, not
 # source: committing it would dirty the tree on every run.
 data/maint.json
+
+# Price snapshots. A local read-through cache so a restart does not re-ask
+# Yahoo for something it answered ten minutes ago; regenerated on demand.
+data/cache/

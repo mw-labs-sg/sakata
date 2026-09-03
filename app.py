@@ -76,8 +76,17 @@ def _stale() -> list:
     # Signatures only catch a function that still exists. Splitting one is a
     # rename to an old module, which surfaces as AttributeError at the call
     # rather than here, so the names are checked as names first.
-    behind = [f"sk_render has no {n}" for n in
-              ("technical_matrix", "technical_levels") if not hasattr(R, n)]
+    behind = []
+    for _n, _ps in (("technical_matrix", ("sort", "brk")),
+                    ("technical_levels", ("market",))):
+        _fn = getattr(R, _n, None)
+        if _fn is None:
+            behind.append(f"sk_render has no {_n}")
+            continue
+        _miss = [p for p in _ps
+                 if p not in inspect.signature(_fn).parameters]
+        if _miss:
+            behind.append(f"sk_render.{_n} has no {', '.join(_miss)}")
     for name, fn, params in want:
         try:
             have = set(inspect.signature(fn).parameters)
@@ -500,6 +509,7 @@ def source(label: str, *caches, key: str = "", action: str = "") -> bool:
                    help="Refetch this tab"):
         for fn in caches:
             fn.clear()
+        S.drop_snapshots()      # or the button serves the snapshot it is for
         st.rerun()
     return bool(action) and c[1].button(action, key=f"go_{key}",
                                         type="primary")
@@ -524,6 +534,7 @@ with t[0]:
     if bc[0].button("Refresh", key="rf_board", help="Refetch this tab"):
         for fn in PRICE_CACHES:
             fn.clear()
+        S.drop_snapshots()
         st.rerun()
     hz = bc[1].selectbox("Horizon", R.HZ, key="board_hz",
                          help="Which return column the board is read on. Every"
@@ -698,6 +709,12 @@ with t[6]:
                                        " puts the most-broken instrument first;"
                                        " Volatility puts the loudest first, on"
                                        " the horizon chosen below.")
+        brk_hz = sc[1].selectbox("Range Breaks", grid["order"], key="tech_brk",
+                                 help="Which rung the breaks above are read"
+                                      " on. Separate from the Horizon below,"
+                                      " because the week's breaks are the"
+                                      " standing picture and the day's are"
+                                      " the live one.")
         survey = st.container()
         tc = st.columns(5)
         code = tc[0].selectbox("Instrument", codes, key="tech_code",
@@ -711,8 +728,16 @@ with t[6]:
                                    " A horizon is only listed when this"
                                    " instrument has the history to fill it.")
         with survey:
-            UI.md(R.technical_matrix(grid, code, hzt, sort_by))
-        UI.md(R.technical_levels(grid, code, hzt, U.DEC[code]))
+            UI.md(R.technical_matrix(grid, code, hzt, sort_by, brk_hz))
+        # News is already cached and already fetched for its own tab, so this
+        # is free after the first visit either way round. Guarded because a
+        # commentary provider being down should cost this tab a paragraph,
+        # not the levels underneath it.
+        try:
+            mkt = news_data().get("markets", {}).get(code)
+        except Exception:                       # noqa: BLE001 - any fetch fault
+            mkt = None
+        UI.md(R.technical_levels(grid, code, hzt, U.DEC[code], mkt))
 
 # ------------------------------------------------------------- Portfolio
 with t[5]:

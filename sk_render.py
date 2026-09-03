@@ -195,7 +195,8 @@ def _break_line(label, items, colour, faint) -> str:
         f'<span class="chip" style="color:{colour}">{esc(k)} '
         f'{"—" if p is None else num(p, 0) + "%"}</span>'
         for k, p in items)
-    return (f'<div class="chips"><span style="margin-right:10px;'
+    return (f'<div class="chips" style="margin-bottom:3px"><span '
+            f'style="margin-right:10px;'
             f'font-family:var(--sans);font-size:10.5px;font-weight:600;'
             f'text-transform:uppercase;letter-spacing:.08em;color:{faint}">'
             f'{esc(label)}</span>{body}</div>')
@@ -264,11 +265,11 @@ def _hv_matrix(cols: list, order: list, code: str, hz: str, head: str,
             # this table and read as part of it. Streamlit
             # gives a widget no top margin worth the name, so
             # the gap has to come from the block above it.
-            + '<div style="height:14px"></div>')
+            + '<div style="height:34px"></div>')
 
 
 def technical_matrix(d: dict, code: str, hz: str,
-                     sort: str = "Structure") -> str:
+                     sort: str = "Structure", brk: str = None) -> str:
     """The survey half: what is breaking, and the whole ladder."""
     order, grid = d["order"], d["grid"]
 
@@ -276,9 +277,14 @@ def technical_matrix(d: dict, code: str, hz: str,
     # outside its range", and the matrix answered it only to a reader willing
     # to decode a signed number in ninety-five cells. Position rides with the
     # code because 101% and 140% of the prior range are not the same break.
+    # Its own horizon. The ladder rung a reader wants for "what is out of
+    # range" is not the one they want the levels drawn on — the week's breaks
+    # are the standing picture while the day's are the live one, and tying
+    # both to a single selector made looking at one cost the other.
+    brk = brk or hz
     out_up, out_dn = [], []
     for u_code in U.CODES:
-        c = grid.get(u_code, {}).get(hz)
+        c = grid.get(u_code, {}).get(brk)
         if not c:
             continue
         if c["regime"] == "Breakout":
@@ -293,7 +299,7 @@ def technical_matrix(d: dict, code: str, hz: str,
                  + _break_line("Below prior low", out_dn, C["amber"],
                                C["faint"]))
     else:
-        strip = note(f"Nothing is outside its prior <b>{esc(hz)}</b> range — "
+        strip = note(f"Nothing is outside its prior <b>{esc(brk)}</b> range — "
                      "every instrument on the ladder is trading between the "
                      "high and the low it made last period.")
 
@@ -401,7 +407,7 @@ def technical_matrix(d: dict, code: str, hz: str,
              'itself reads far from zero.">\u03a3</td>'
              f'{tot_cells}</tr>')
 
-    return (eyebrow(f"Breaking now · {hz}")
+    return (eyebrow(f"Range Breaks · {brk}")
             + strip
             + eyebrow("Structure Table",
                       f'<span class="legend">{legend}</span>')
@@ -471,7 +477,8 @@ def _range_table(g: dict, order: list, hz: str, dec: int) -> str:
     return eyebrow("Range and volatility") + table(head, rows)
 
 
-def technical_levels(d: dict, code: str, hz: str, dec: int) -> str:
+def technical_levels(d: dict, code: str, hz: str, dec: int,
+                     market: dict = None) -> str:
     """The drill-down half: the pair the selectors chose, and its levels.
 
     Split from the matrix so the two selectors can sit between them. They
@@ -512,6 +519,13 @@ def technical_levels(d: dict, code: str, hz: str, dec: int) -> str:
                  f'prior range · R:R to band {rr}'
                  + (f' · <b>{esc(c["bandNote"])}</b>'
                     if c.get("bandNote") else ""), wide=True)
+            # The commentary belongs against the levels, not two tabs away.
+            # A reader who has just been told ES failed at RS wants to know
+            # whether anything happened, and had to leave the page to find
+            # out — by which point they have lost the row they were reading.
+            + (eyebrow("News")
+               + f'<div class="card">{_news_item(code, market, _tok())}</div>'
+               if market and market.get("blurb") else "")
             + vol
             + eyebrow("Levels")
             + table('<th class="l">Level</th><th>Price</th>', lv))
@@ -2134,6 +2148,38 @@ def knowledge(group: str = "All", last: dict = None) -> str:
 
 
 # ------------------------------------------------------------------- News
+def _news_item(code: str, m: dict, t: dict) -> str:
+    """One market's commentary. Factored out because the Technical tab shows
+    the selected instrument's blurb too, and two copies of this markup would
+    have drifted the first time either was touched."""
+    # Date and source are a footer, not a trailing sentence. Pushed to
+    # opposite ends of a hairline row so neither reads as part of the blurb.
+    # Styled inline because Streamlit's own link rule outranks a class
+    # selector here.
+    href = U.TE_PAGE.get(code, "")
+    link = (f'<a href="{esc(href)}" target="_blank" rel="noopener" '
+            f'style="color:{t.get("teal", "#0d8f83")};text-decoration:none;'
+            f'font-size:11px">source \u2197</a>' if href else "")
+    # The headline is shown because the blurb is whatever paragraph sits under
+    # it, and TE's market pages lead with a related-but-different story often
+    # enough that the reader needs to see what they are reading about.
+    # Off-topic is marked rather than hidden.
+    hl = esc(m.get("headline") or "")
+    off = ("" if m.get("onTopic", True) else
+           f'<span style="color:{t.get("amber", "#96701c")};font-size:10.5px;'
+           f'letter-spacing:.06em"> \u00b7 not {esc(code)}-specific</span>')
+    return (
+        f'<div class="mkt"><h6>{esc(code)}  {esc(U.NAME[code])}</h6>'
+        + (f'<div style="font-size:11.5px;color:{t.get("body", "#3a464e")};'
+           f'font-weight:600;margin:-4px 0 6px">{hl}{off}</div>' if hl else "")
+        + f'<p>{esc(m["blurb"])}</p>'
+        f'<div style="display:flex;justify-content:space-between;'
+        f'align-items:baseline;margin-top:10px;padding-top:8px;'
+        f'border-top:1px solid {t.get("line", "#e0e5e8")}">'
+        f'<span style="font-size:11px;color:{t.get("faint", "#97a2ab")}">'
+        f'{esc(m.get("date") or "")}</span>{link}</div></div>')
+
+
 def news(markets: dict, warn: str = "") -> str:
     """Fetched server-side now rather than through a CORS proxy in the browser.
     That removes the one tab that depended on a third party neither we nor the
@@ -2152,34 +2198,7 @@ def news(markets: dict, warn: str = "") -> str:
             m = markets.get(code)
             if not m:
                 continue
-            # Date and source are a footer, not a trailing sentence. Pushed to
-            # opposite ends of a hairline row so neither reads as part of the
-            # blurb. Styled inline because Streamlit's own link rule outranks
-            # a class selector here.
-            src = U.TE_PAGE.get(code, "")
-            link = (f'<a href="{esc(src)}" target="_blank" rel="noopener" '
-                    f'style="color:{t.get("teal", "#0d8f83")};text-decoration:none;'
-                    f'font-size:11px">source ↗</a>' if src else "")
-            # The headline is shown because the blurb is whatever paragraph sits
-            # under it, and TE's market pages lead with a related-but-different
-            # story often enough that the reader needs to see what they are
-            # reading about. Off-topic is marked rather than hidden.
-            hl = esc(m.get("headline") or "")
-            off = ("" if m.get("onTopic", True) else
-                   f'<span style="color:{t.get("amber", "#96701c")};'
-                   f'font-size:10.5px;'
-                   f'letter-spacing:.06em"> · not {esc(code)}-specific</span>')
-            items += (
-                f'<div class="mkt"><h6>{esc(code)}  {esc(U.NAME[code])}</h6>'
-                + (f'<div style="font-size:11.5px;color:{t.get("body", "#3a464e")};'
-                   f'font-weight:600;margin:-4px 0 6px">{hl}{off}</div>'
-                   if hl else "")
-                + f'<p>{esc(m["blurb"])}</p>'
-                f'<div style="display:flex;justify-content:space-between;'
-                f'align-items:baseline;margin-top:10px;padding-top:8px;'
-                f'border-top:1px solid {t.get("line", "#e0e5e8")}">'
-                f'<span style="font-size:11px;color:{t.get("faint", "#97a2ab")}">'
-                f'{esc(m.get("date") or "")}</span>{link}</div></div>')
+            items += _news_item(code, m, t)
         if items:
             cols += (f'<div>{eyebrow(group)}<div class="card">{items}</div>'
                      f"</div>")
