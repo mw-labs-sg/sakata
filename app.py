@@ -438,7 +438,7 @@ def news_data(v: str = CACHE_V) -> dict:
 # Yahoo fetch, so clearing a subset left them disagreeing about the same
 # instrument at the same moment: refreshing Board dropped `prices` but left
 # `by_bar` holding the older frames, so Board showed the new close while
-# Spreads and Technical still ranked the old one — and Spreads' own refresh
+# Spreads and Structure still ranked the old one — and Spreads' own refresh
 # rebuilt the field without touching technical_grid.
 #
 # News, Margins and Curve stay out of it deliberately. They hit slower sources
@@ -518,12 +518,12 @@ def source(label: str, *caches, key: str = "", action: str = "") -> bool:
 # is scheduled, then the analytical tabs, with the standing reference last.
 # Portfolio sits beside Trends because they are one question asked at two
 # sizes — Trends ranks the pairs, Portfolio holds a basket of them, and the
-# legs on one tab are the rows of the other. Technical follows, being the only
+# legs on one tab are the rows of the other. Structure follows, being the only
 # analytical tab that looks at a single instrument on its own.
 # Uppercased here rather than in CSS: which element holds the label has moved
 # between Streamlit versions, so a selector is a thing that breaks on upgrade.
 TABS = ["Board", "News", "Calendar", "Margin Vol", "Trends", "Portfolio",
-        "Technical", "Curve", "Knowledge", "Briefing"]
+        "Structure", "Curve", "Knowledge", "Briefing"]
 t = st.tabs([x.upper() for x in TABS])
 
 # ----------------------------------------------------------------- Board
@@ -682,7 +682,7 @@ with t[4]:
         if st.session_state.get("sp_auto"):
             autorefresh(stamp, TTL_FAST)
 
-# ------------------------------------------------------------- Technical
+# ------------------------------------------------------------- Structure
 with t[6]:
     # by_bar belongs in this list. Without it, clearing technical_grid and
     # prices left by_bar's 15-minute entry intact, so the grid was rebuilt from
@@ -941,8 +941,9 @@ with t[9]:
     ec = st.columns([2, 2, 6], vertical_alignment="bottom")
     brief_mode = ec[0].selectbox(
         "Detail", ["Focused", "Full"], key="brief_mode",
-        help="Focused keeps the selected spread window and technical contract. "
-             "Full includes every computed spread window and technical contract.")
+        help="Focused keeps the selected spread window and Structure "
+             "contract. Full includes every computed spread window "
+             "and Structure contract.")
     build_brief = ec[1].button("Build briefing", type="primary",
                                help="Refresh the downloadable snapshot from "
                                     "Sakata's current cached data.")

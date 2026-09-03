@@ -80,7 +80,7 @@ def board(d: dict, hz: str = "Day") -> str:
             + panel("Financials") + panel("Commodities") + "</div>")
 
 
-# -------------------------------------------------------------- Technical
+# -------------------------------------------------------------- Structure
 # The mark says WHERE, the number says HOW MANY AGREE. A summed score can
 # only ever be the second: +1 through the prior high and +1 drifting the
 # middle of it are the same digit and not the same market. So the glyph
@@ -2254,7 +2254,7 @@ def knowledge(group: str = "All", last: dict = None) -> str:
 
 # ------------------------------------------------------------------- News
 def _news_item(code: str, m: dict, t: dict) -> str:
-    """One market's commentary. Factored out because the Technical tab shows
+    """One market's commentary. Factored out because the Structure tab shows
     the selected instrument's blurb too, and two copies of this markup would
     have drifted the first time either was touched."""
     # Date and source are a footer, not a trailing sentence. Pushed to
