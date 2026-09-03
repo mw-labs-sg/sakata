@@ -183,8 +183,18 @@ def _download_ohlc(interval: str, period: str) -> dict:
 
     tickers = [U.TICKER[c] for c in U.CODES]
     raw, out = None, {}
+    # threads=False deliberately. yfinance 1.0's threaded path returns an
+    # empty frame for every ticker and prints "N Failed downloads" with a
+    # TypeError about NoneType — measured side by side, the same call for the
+    # same tickers over the same period gives 0 rows threaded and 2514
+    # single-threaded. It reads exactly like an IP block and is not one: the
+    # chart endpoint answers 200 with real data from this address throughout.
+    #
+    # The cost is wall time on one batched request, which is a batched
+    # request either way. The alternative was chasing a rate limit that was
+    # never there.
     kw = dict(period=period, interval=interval, group_by="ticker",
-              auto_adjust=True, threads=True, progress=False)
+              auto_adjust=True, threads=False, progress=False)
     for attempt in (dict(kw, session=session()), kw):
         try:
             raw = yf.download(tickers, **attempt)
