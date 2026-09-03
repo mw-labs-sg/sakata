@@ -77,7 +77,7 @@ def _stale() -> list:
     # rename to an old module, which surfaces as AttributeError at the call
     # rather than here, so the names are checked as names first.
     behind = []
-    for _n, _ps in (("technical_matrix", ("sort", "brk")),
+    for _n, _ps in (("technical_matrix", ("sort", "brk", "on")),
                     ("technical_levels", ("market",))):
         _fn = getattr(R, _n, None)
         if _fn is None:
@@ -709,7 +709,13 @@ with t[6]:
                                        " puts the most-broken instrument first;"
                                        " Volatility puts the loudest first, on"
                                        " the horizon chosen below.")
-        brk_hz = sc[1].selectbox("Range Breaks", grid["order"], key="tech_brk",
+        sort_on = sc[1].selectbox("Sort on", ["Ladder"] + list(grid["order"]),
+                                  key="tech_sort_on",
+                                  help="Which rung the sort reads. Ladder uses"
+                                       " the column total; a rung answers"
+                                       "'biggest breakout today' instead,"
+                                       " which a total cannot.")
+        brk_hz = sc[2].selectbox("Range Breaks", grid["order"], key="tech_brk",
                                  help="Which rung the breaks above are read"
                                       " on. Separate from the Horizon below,"
                                       " because the week's breaks are the"
@@ -728,7 +734,7 @@ with t[6]:
                                    " A horizon is only listed when this"
                                    " instrument has the history to fill it.")
         with survey:
-            UI.md(R.technical_matrix(grid, code, hzt, sort_by, brk_hz))
+            UI.md(R.technical_matrix(grid, code, hzt, sort_by, brk_hz, sort_on))
         # News is already cached and already fetched for its own tab, so this
         # is free after the first visit either way round. Guarded because a
         # commentary provider being down should cost this tab a paragraph,

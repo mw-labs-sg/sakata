@@ -116,6 +116,21 @@ STRUCT_MARK = {
 }
 
 
+def _glyph(struct: str, score: int) -> str:
+    """The mark, unless the number has already made it.
+
+    A score of +3 is three votes at +1 and one of the three IS the range
+    vote, so +3 cannot be anything but a holding breakout; -3 likewise.
+    Checked over all twenty-seven vote combinations: no counterexample. So
+    the triangle on those two is decoration, and they are the two most common
+    cells in the grid — dropping them takes a third of the marks off the
+    table without taking anything off it that a reader could not still say.
+    """
+    if abs(score) == 3:
+        return ""
+    return STRUCT_MARK.get(struct, "")
+
+
 # A rail is drawn on the side a band sits: over the number when one is
 # overhead, under it when one is beneath. Between the bands the number is
 # boxed by both, above them it stands on a floor, below them it hangs from a
@@ -155,14 +170,22 @@ RAIL_KEYS = (
 BAND_MARK = {"rejected": "\u2193", "reclaimed": "\u2191"}
 
 def _band_marks(c: dict) -> str:
-    """RS then RB, each in its own colour, or nothing when neither is live."""
+    """RS then RB, each in its own colour, or nothing when neither is live.
+
+    Set in a fixed-width slot rather than appended. Appended, an arrow made
+    its own column wider than its neighbours, so nineteen columns each grew
+    by the width of a mark most of them were not carrying — the table went
+    from fitting a 1280px window to needing a scrollbar on a 1449px one.
+    A slot that is always there and usually empty costs the same everywhere.
+    """
     out = ""
     for key, col in (("rsMark", C["amber"]), ("rbMark", C["teal"])):
         m = c.get(key)
         if m:
-            out += (f'<span style="color:{col};font-size:11px;'
-                    f'font-weight:700">{BAND_MARK[m]}</span>')
-    return f'<span style="margin-left:5px">{out}</span>' if out else ""
+            out += (f'<span style="color:{col};font-weight:700">'
+                    f'{BAND_MARK[m]}</span>')
+    return (f'<span style="display:inline-block;width:14px;text-align:left;'
+            f'font-size:10px;letter-spacing:-1px">{out}</span>')
 
 
 def _mark_legend() -> str:
@@ -269,7 +292,8 @@ def _hv_matrix(cols: list, order: list, code: str, hz: str, head: str,
 
 
 def technical_matrix(d: dict, code: str, hz: str,
-                     sort: str = "Structure", brk: str = None) -> str:
+                     sort: str = "Structure", brk: str = None,
+                     on: str = "Ladder") -> str:
     """The survey half: what is breaking, and the whole ladder."""
     order, grid = d["order"], d["grid"]
 
@@ -334,12 +358,32 @@ def technical_matrix(d: dict, code: str, hz: str,
     # them, and letting one of them re-sort alone would break exactly that.
     # It ranks on the selected horizon's percentile, because "most volatile"
     # is not a question you can ask of a whole ladder at once.
+    #
+    # And on one rung rather than the whole ladder when asked. "Which is the
+    # biggest breakout today" is a real question the ladder total cannot
+    # answer: a column with four quiet rungs and one violent one totals the
+    # same as one that is mildly long everywhere, and only the second of
+    # those is boring.
     rank = {c: i for i, c in enumerate(U.CODES)}
-    if sort == "Volatility":
-        def vol_key(s):
-            v = (s["by_h"].get(hz) or {}).get("segHvPct")
-            return (0 if v is None else -v, -s["tot"], rank[s["code"]])
-        cols.sort(key=vol_key)
+
+    def at(s, key):
+        return (s["by_h"].get(on) or {}).get(key)
+
+    if sort == "Volatility" and on != "Ladder":
+        cols.sort(key=lambda s: (-(at(s, "segHvPct") or -1), -s["tot"],
+                                 rank[s["code"]]))
+    elif sort == "Volatility":
+        # No Sigma exists for volatility, so the ladder means its average.
+        def mean_pct(s):
+            vs = [c.get("segHvPct") for c in s["by_h"].values()
+                  if c.get("segHvPct") is not None]
+            return -(sum(vs) / len(vs)) if vs else 1
+        cols.sort(key=lambda s: (mean_pct(s), -s["tot"], rank[s["code"]]))
+    elif on != "Ladder":
+        cols.sort(key=lambda s: (-(at(s, "score") if at(s, "score") is not None
+                                   else -9),
+                                 -BREAK_VOTE.get(at(s, "regime"), 0),
+                                 -s["tot"], rank[s["code"]]))
     else:
         cols.sort(key=lambda s: (-s["breaks"], -s["tot"], rank[s["code"]]))
 
@@ -351,7 +395,7 @@ def technical_matrix(d: dict, code: str, hz: str,
     # ZN — the two most broken-down instruments on the board, and the last
     # thing a wide table should hide. Four pixels off each side of every cell
     # buys 152px and costs nothing a reader can see.
-    TIGHT = "padding-left:8px;padding-right:8px;"
+    TIGHT = "padding-left:6px;padding-right:6px;"
     head = ('<th class="l">Horizon</th>'
             + "".join(
                 f'<th{" class=\"on\"" if s["code"] == code else ""}'
@@ -385,7 +429,7 @@ def technical_matrix(d: dict, code: str, hz: str,
                       f'font-weight:{700 if on or sel else 600}" '
                       f'title="{esc(title)}">'
                       f'<span style="{_rails(c)}">'
-                      f'{STRUCT_MARK.get(struct, "")}'
+                      f'{_glyph(struct, c["score"])}'
                       f'{"+" if c["score"] > 0 else ""}{c["score"]}</span>'
                       f'{_band_marks(c)}</td>')
         body += (f'<tr{" class=\"out\"" if on else ""}>'
