@@ -283,11 +283,60 @@ def _hv_matrix(cols: list, order: list, code: str, hz: str, head: str,
                      f'<td class="l">{esc(h)}</td>{cells}</tr>')
     if not rows:
         return ""
-    return (eyebrow("Volatility Table") + table(head, rows)
-            # The Instrument selector sits immediately under
-            # this table and read as part of it. Streamlit
-            # gives a widget no top margin worth the name, so
-            # the gap has to come from the block above it.
+    return eyebrow("Volatility Table") + table(head, rows)
+
+
+# Signed and diverging, because travel has a direction that volatility does
+# not: away from the prior close is up or down, and the bias ladder's own two
+# ramps already mean exactly that. Bucketed on absolute size so the brightest
+# cell is the one that has covered a whole prior range or more, which is the
+# reading that changes what is still reachable today.
+TRAVEL_STEPS = ((25, "1"), (50, "2"), (100, "3"))
+
+
+def _travel_tone(v):
+    if v is None:
+        return C["faint"]
+    up = v >= 0
+    for ceiling, key in TRAVEL_STEPS:
+        if abs(v) < ceiling:
+            return BIAS_COL[key if up else f"-{key}"]
+    return BIAS_COL["3" if up else "-3"]
+
+
+def _travel_matrix(cols: list, order: list, code: str, hz: str, head: str,
+                   tight: str) -> str:
+    """Distance from the prior close, as a percentage of the prior range.
+
+    Third table, same columns, same order. Where price is, how hard it is
+    moving, and how far it has come — the three questions a level is worth
+    reading against, stacked so a column answers all of them at once.
+    """
+    rows = ""
+    for h in order:
+        cells, any_ = "", False
+        for s in cols:
+            c = s["by_h"].get(h) or {}
+            sel = s["code"] == code
+            bg = ("background:var(--hair);" if sel and h == hz
+                  else "background:var(--raised);" if sel else "")
+            v = c.get("segTravel")
+            if v is None:
+                cells += f'<td style="{bg}{tight}" class="faint">\u2014</td>'
+                continue
+            any_ = True
+            tip = (f'{s["code"]} \u00b7 {h} \u00b7 {num(v, 0)}% of the prior '
+                   f'range from its close of {num(c.get("segPrevClose"), 4)}')
+            cells += (f'<td style="{bg}{tight}color:{_travel_tone(v)};'
+                      f'font-weight:{700 if h == hz else 600}" '
+                      f'title="{esc(tip)}">'
+                      f'{"+" if v > 0 else ""}{num(v, 0)}</td>')
+        if any_:
+            rows += (f'<tr{" class=\"out\"" if h == hz else ""}>'
+                     f'<td class="l">{esc(h)}</td>{cells}</tr>')
+    if not rows:
+        return ""
+    return (eyebrow("Travel Table") + table(head, rows)
             + '<div style="height:34px"></div>')
 
 
@@ -463,7 +512,11 @@ def technical_matrix(d: dict, code: str, hz: str,
             # No caption. The legend is the key and the tooltips carry the
             # rest; a paragraph under a table is read once and then skipped
             # forever, while still costing four lines on every later visit.
-            + _hv_matrix(cols, order, code, hz, head, TIGHT))
+            + _hv_matrix(cols, order, code, hz, head, TIGHT)
+            # Travel closes the stack and carries the gap to
+            # the Instrument selector, which Streamlit gives
+            # no top margin worth the name.
+            + _travel_matrix(cols, order, code, hz, head, TIGHT))
 
 
 def _hv_tone(pct):
@@ -491,6 +544,11 @@ def _range_table(g: dict, order: list, hz: str, dec: int) -> str:
                     else '<td class="faint">\u2014</td>')
                  + (f'<td style="color:{tone}">{num(pctile, 0)}</td>'
                     if tone else cell(pctile, 0))
+                 + (f'<td style="color:{_travel_tone(c["segTravel"])}">'
+                    f'{"+" if c["segTravel"] > 0 else ""}'
+                    f'{num(c["segTravel"], 0)}</td>'
+                    if c.get("segTravel") is not None
+                    else '<td class="faint">\u2014</td>')
                  + cell(c.get("segHv"), 1)
                  + cell(c.get("segHv100"), 1)
                  + (f'<td style="color:{_hv_tone(c.get("segHvPct"))}">'
@@ -510,6 +568,9 @@ def _range_table(g: dict, order: list, hz: str, dec: int) -> str:
             'period than usual, below 1 a quieter one.">\u00d7 ATR</th>'
             '<th title="Where the prior range sits among the completed '
             'segments before it, up to 100.">Pctile</th>'
+            '<th title="Distance from the prior segment\u2019s close, as a '
+            'percentage of that segment\u2019s range. Above 100 means it has '
+            'already covered a whole prior range.">Travel</th>'
             '<th title="Annualised volatility of segment-to-segment closes '
             'over the last 20 segments. A year cannot be annualised from one '
             'observation, so the Year rung is blank.">HV 20</th>'

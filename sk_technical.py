@@ -70,7 +70,45 @@ HV_SEGS = 20            # the measure itself
 HV_SLOW = 100           # the base rate beside it, as the Margin tab does
 
 
-def read_hv(df: pd.DataFrame, seg: str) -> dict:
+def _seg_closes(df: pd.DataFrame, seg: str) -> pd.Series:
+    """Last close of every COMPLETED segment, thin ones dropped.
+
+    Same filter and same live-segment exclusion as _seg_ranges, and factored
+    out because two measures now read it — a vol computed off one series and
+    a distance measured off another would disagree about where yesterday
+    ended, which is the kind of difference a reader cannot see.
+    """
+    p = df.index.to_period(seg)
+    g = df.groupby(p)
+    sizes = g.size()
+    keep = sizes >= max(sizes.median() * MIN_SEG_FRACTION, 2)
+    closes = g["close"].last()[keep]
+    return closes[closes.index != p[-1]]
+
+
+def read_travel(closes: pd.Series, r) -> dict:
+    """How far price has come from the prior close, in prior ranges.
+
+    The two tables either side of this one say where price sits and how much
+    it usually moves. Neither says how far it has come SINCE the last settle,
+    and that is the number that decides whether a level is still reachable:
+    a market 20% of a range from its prior close has the day in front of it,
+    one at 140% has spent it.
+
+    Normalised by the prior segment's range rather than quoted in points, so
+    corn and bitcoin can sit in the same column, and against the range rather
+    than an average of ranges so it shares a denominator with the position
+    figure the tab already prints.
+    """
+    span = r.prev_high - r.prev_low
+    if closes is None or closes.empty or not span or span <= 0:
+        return {"segPrevClose": None, "segTravel": None}
+    pc = float(closes.iloc[-1])
+    return {"segPrevClose": _r(pc, 6),
+            "segTravel": _r((r.close - pc) / span * 100, 0)}
+
+
+def read_hv(closes: pd.Series, seg: str) -> dict:
     """Annualised vol of segment-to-segment closes.
 
     Deliberately not the bar-level HV the Margin tab computes. That one
@@ -80,12 +118,6 @@ def read_hv(df: pd.DataFrame, seg: str) -> dict:
     per day on Day, one per week on Week — so the number can be printed as a
     number.
     """
-    p = df.index.to_period(seg)
-    g = df.groupby(p)
-    sizes = g.size()
-    keep = sizes >= max(sizes.median() * MIN_SEG_FRACTION, 2)
-    closes = g["close"].last()[keep]
-    closes = closes[closes.index != p[-1]]
     ret = closes.pct_change().dropna()
     per_year = SEG_PER_YEAR.get(str(seg)[0].upper())
     if per_year is None or len(ret) < SEG_RANK_MIN:
@@ -334,6 +366,7 @@ def build_technical(frames_by_bar: dict) -> dict:
             if o.empty:
                 continue
             r = o.iloc[-1]
+            seg_closes = _seg_closes(df, cfg["seg"])
             chg = ((o.close.iloc[-1] / o.close.iloc[-2] - 1) * 100
                    if len(o) >= 2 else None)
             per_h[h] = {
@@ -347,7 +380,8 @@ def build_technical(frames_by_bar: dict) -> dict:
                 **read_bias(r), **read_rr(r),
                 **read_bands(o[o["seg"] == r.seg], r),
                 **read_range(_seg_ranges(df, cfg["seg"])),
-                **read_hv(df, cfg["seg"]),
+                **read_hv(seg_closes, cfg["seg"]),
+                **read_travel(seg_closes, r),
             }
         if per_h:
             out[code] = per_h
