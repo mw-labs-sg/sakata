@@ -228,14 +228,27 @@ def _break_line(label, items, colour, faint) -> str:
 # Four steps, not the two the drill-down table uses. That one prints five
 # numbers a reader takes one at a time; this one prints ninety-five they take
 # as a field, and a field wants a gradient or it is a wall of identical
-# digits. Amber throughout because vol has no direction — a 95th percentile
+# digits. Amber throughout because vol has no direction - a 95th percentile
 # is not bullish or bearish, it is loud, and colouring it teal would say
 # otherwise beside a matrix where teal means long.
-# Five steps off the bias ladder's own two ramps, so quiet reads teal and
-# loud reads amber with the neutral grey in between. Borrowing that ladder
-# means teal is not saying "long" here — it is saying the same thing it says
-# there, which is that nothing needs attention.
 HV_HEAT = (("3", 20), ("2", 40), ("0", 60), ("-2", 80), ("-3", 101))
+
+# Signed and diverging, because travel has a direction that volatility does
+# not: away from the prior close is up or down, and the bias ladder's own two
+# ramps already mean exactly that. Bucketed on absolute size so the brightest
+# cell is the one that has covered a whole prior range or more.
+TRAVEL_STEPS = ((25, "1"), (50, "2"), (100, "3"))
+
+# Nineteen columns overran a 1280px window, which clipped the two most
+# broken-down instruments on the board - the last thing a wide table should
+# hide. Six pixels a side buys back more than was needed.
+TIGHT = "padding-left:6px;padding-right:6px;"
+
+# The sort option that reads a whole column rather than one rung. Called
+# Aggregate and not Ladder because "ladder" already means the five rungs
+# themselves, and not Aggregate SCORE because only one of the three tables
+# aggregates a score - the other two aggregate a percentile and a distance.
+AGG = "Aggregate"
 
 
 def _hv_heat(pct):
@@ -245,53 +258,6 @@ def _hv_heat(pct):
         if pct < ceiling:
             return BIAS_COL[key]
     return BIAS_COL["-3"]
-
-
-def _hv_matrix(cols: list, order: list, code: str, hz: str, head: str,
-               tight: str) -> str:
-    """The bias matrix's columns again, carrying volatility rank instead.
-
-    Same instruments in the same order, so the two tables stack into one
-    reading: the top says what price is doing and the bottom says how hard
-    it is having to work to do it. Sorting this one on its own numbers would
-    have made them two tables about two different universes.
-    """
-    rows = ""
-    for h in order:
-        cells, any_ = "", False
-        for s in cols:
-            c = s["by_h"].get(h) or {}
-            sel = s["code"] == code
-            bg = ("background:var(--hair);" if sel and h == hz
-                  else "background:var(--raised);" if sel else "")
-            pct = c.get("segHvPct")
-            if pct is None:
-                cells += f'<td style="{bg}{tight}" class="faint">\u2014</td>'
-                continue
-            any_ = True
-            tip = (f'{s["code"]} \u00b7 {h} \u00b7 HV {num(c.get("segHv"), 1)}%'
-                   f' · {num(pct, 0)}th percentile of '
-                   f'{c.get("segHvN", 0)} readings')
-            cells += (f'<td style="{bg}{tight}color:{_hv_heat(pct)};'
-                      f'font-weight:{700 if h == hz else 600}" '
-                      f'title="{esc(tip)}">{num(pct, 0)}</td>')
-        # A rung with no reading anywhere is dropped rather than drawn as a
-        # row of dashes. Year is always that row: one observation a year
-        # cannot be annualised, so it has nothing to rank.
-        if any_:
-            rows += (f'<tr{" class=\"out\"" if h == hz else ""}>'
-                     f'<td class="l">{esc(h)}</td>{cells}</tr>')
-    if not rows:
-        return ""
-    return eyebrow("Volatility Table") + table(head, rows)
-
-
-# Signed and diverging, because travel has a direction that volatility does
-# not: away from the prior close is up or down, and the bias ladder's own two
-# ramps already mean exactly that. Bucketed on absolute size so the brightest
-# cell is the one that has covered a whole prior range or more, which is the
-# reading that changes what is still reachable today.
-TRAVEL_STEPS = ((25, "1"), (50, "2"), (100, "3"))
 
 
 def _travel_tone(v):
@@ -304,57 +270,104 @@ def _travel_tone(v):
     return BIAS_COL["3" if up else "-3"]
 
 
-def _travel_matrix(cols: list, order: list, code: str, hz: str, head: str,
-                   tight: str) -> str:
-    """Distance from the prior close, as a percentage of the prior range.
+def _columns(grid: dict) -> list:
+    """One entry per instrument that has any rung at all."""
+    cols = []
+    for u_code in U.CODES:
+        g = grid.get(u_code)
+        if not g:
+            continue
+        cols.append({"code": u_code, "by_h": g,
+                     "tot": sum(c["score"] for c in g.values()),
+                     "breaks": sum(BREAK_VOTE.get(c["regime"], 0)
+                                   for c in g.values())})
+    return cols
 
-    Third table, same columns, same order. Where price is, how hard it is
-    moving, and how far it has come — the three questions a level is worth
-    reading against, stacked so a column answers all of them at once.
+
+def _sorted(cols: list, kind: str, on: str) -> list:
+    """Column order for one table, on one rung or on the whole column.
+
+    Each table sorts itself now. That costs the property the three shared
+    before — a column in the same place in all of them — and buys the one
+    that was actually being asked for: each table ordered by the thing it
+    measures. Carrying an instrument between them is what the raised column
+    is for, and it follows the Instrument selector, not the sort.
+
+    The universe order settles every tie, so a table with nothing to say
+    still renders in the same order twice running.
     """
-    rows = ""
-    for h in order:
-        cells, any_ = "", False
-        for s in cols:
-            c = s["by_h"].get(h) or {}
-            sel = s["code"] == code
-            bg = ("background:var(--hair);" if sel and h == hz
-                  else "background:var(--raised);" if sel else "")
-            v = c.get("segTravel")
-            if v is None:
-                cells += f'<td style="{bg}{tight}" class="faint">\u2014</td>'
-                continue
-            any_ = True
-            tip = (f'{s["code"]} \u00b7 {h} \u00b7 {num(v, 0)}% of the prior '
-                   f'range from its close of {num(c.get("segPrevClose"), 4)}')
-            cells += (f'<td style="{bg}{tight}color:{_travel_tone(v)};'
-                      f'font-weight:{700 if h == hz else 600}" '
-                      f'title="{esc(tip)}">'
-                      f'{"+" if v > 0 else ""}{num(v, 0)}</td>')
-        if any_:
-            rows += (f'<tr{" class=\"out\"" if h == hz else ""}>'
-                     f'<td class="l">{esc(h)}</td>{cells}</tr>')
-    if not rows:
-        return ""
-    return (eyebrow("Travel Table") + table(head, rows)
-            + '<div style="height:34px"></div>')
+    rank = {c: i for i, c in enumerate(U.CODES)}
+
+    def at(s, key):
+        return (s["by_h"].get(on) or {}).get(key)
+
+    def mean(s, key):
+        vs = [c.get(key) for c in s["by_h"].values() if c.get(key) is not None]
+        return sum(vs) / len(vs) if vs else None
+
+    if kind == "volatility":
+        def key(s):
+            v = mean(s, "segHvPct") if on == AGG else at(s, "segHvPct")
+            return (-v if v is not None else 1, rank[s["code"]])
+    elif kind == "travel":
+        def key(s):
+            v = mean(s, "segTravel") if on == AGG else at(s, "segTravel")
+            return (-v if v is not None else 1e6, rank[s["code"]])
+    elif on == AGG:
+        def key(s):
+            return (-s["breaks"], -s["tot"], rank[s["code"]])
+    else:
+        def key(s):
+            sc = at(s, "score")
+            return (-(sc if sc is not None else -9),
+                    -BREAK_VOTE.get(at(s, "regime"), 0),
+                    -s["tot"], rank[s["code"]])
+    return sorted(cols, key=key)
 
 
-def technical_matrix(d: dict, code: str, hz: str,
-                     sort: str = "Structure", brk: str = None,
-                     on: str = "Ladder") -> str:
-    """The survey half: what is breaking, and the whole ladder."""
-    order, grid = d["order"], d["grid"]
+def _matrix_head(cols: list, code: str, sigma: bool = False) -> str:
+    """Instruments across the top. The one the Instrument selector chose takes
+    the weight, which is how a reader finds it once the sorts diverge."""
+    head = ('<th class="l">Horizon</th>'
+            + "".join(
+                f'<th{" class=\"on\"" if s["code"] == code else ""}'
+                f' style="{TIGHT}" title="{esc(U.NAME[s["code"]])}">'
+                f'{swatch(U.SECTOR[s["code"]])}{esc(s["code"])}</th>'
+                for s in cols))
+    if sigma:
+        head += ('<th title="Aggregate score: every horizon\u2019s bias for '
+                 'this instrument, added up, so a column that agrees with '
+                 'itself reads far from zero.">\u03a3</th>')
+    return head
 
-    # Breaking now, before anything else. The tab's first question is "what is
-    # outside its range", and the matrix answered it only to a reader willing
-    # to decode a signed number in ninety-five cells. Position rides with the
-    # code because 101% and 140% of the prior range are not the same break.
-    # Its own horizon. The ladder rung a reader wants for "what is out of
-    # range" is not the one they want the levels drawn on — the week's breaks
-    # are the standing picture while the day's are the live one, and tying
-    # both to a single selector made looking at one cost the other.
-    brk = brk or hz
+
+def _cell_bg(sel: bool, on_row: bool) -> str:
+    return ("background:var(--hair);" if sel and on_row
+            else "background:var(--raised);" if sel else "")
+
+
+def _sector_legend(grid: dict) -> str:
+    """Built from the universe order, not the row order: the columns move
+    with the sort and a legend that followed them would reshuffle itself."""
+    out, seen = "", []
+    for u_code in U.CODES:
+        sec = U.SECTOR[u_code]
+        if grid.get(u_code) and sec not in seen:
+            seen.append(sec)
+            out += f'<span class="key">{swatch(sec)}{esc(sec)}</span>'
+    return out
+
+
+def range_breaks(d: dict, brk: str) -> str:
+    """What is outside its prior range, on its own rung.
+
+    Its own rung because the one a reader wants for "what is out of range" is
+    not the one they want the levels drawn on: the week's breaks are the
+    standing picture while the day's are the live one, and tying both to a
+    single selector made looking at one cost the other. Position rides with
+    the code because 101% and 140% of a range are not the same break.
+    """
+    grid = d["grid"]
     out_up, out_dn = [], []
     for u_code in U.CODES:
         c = grid.get(u_code, {}).get(brk)
@@ -372,151 +385,127 @@ def technical_matrix(d: dict, code: str, hz: str,
                  + _break_line("Below prior low", out_dn, C["amber"],
                                C["faint"]))
     else:
-        strip = note(f"Nothing is outside its prior <b>{esc(brk)}</b> range — "
-                     "every instrument on the ladder is trading between the "
-                     "high and the low it made last period.")
+        strip = note(f"Nothing is outside its prior <b>{esc(brk)}</b> range "
+                     "\u2014 every instrument on the ladder is trading between "
+                     "the high and the low it made last period.")
+    return eyebrow("Range Breaks") + strip
 
-    # Instruments across the top, the ladder down the side. A column is now
-    # one instrument read top to bottom, which is the shape the question has:
-    # "is this thing broken on more than one rung" is a glance down a column,
-    # where before it was a scan across a row of five while nineteen other
-    # rows pulled the eye sideways. Nineteen short codes fit a header; the
-    # names did not, and they were the widest thing in the old table.
-    legend, seen = "", []
-    for u_code in U.CODES:
-        sec = U.SECTOR[u_code]
-        if grid.get(u_code) and sec not in seen:
-            seen.append(sec)
-            legend += f'<span class="key">{swatch(sec)}{esc(sec)}</span>'
 
-    cols = []
-    for u_code in U.CODES:
-        g = grid.get(u_code)
-        if not g:
-            continue
-        tot = sum(c["score"] for c in g.values())
-        breaks = sum(BREAK_VOTE.get(c["regime"], 0) for c in g.values())
-        cols.append({"code": u_code, "by_h": g, "tot": tot, "breaks": breaks})
-
-    # Breakout first, literally: the net break count across the ladder orders
-    # the columns left to right, the bias total settles ties, and the universe
-    # order settles the rest so a quiet day still renders in a stable order.
-    #
-    # Sorting on volatility instead reorders BOTH tables, which is the point —
-    # they share a column order so a reader can carry an instrument between
-    # them, and letting one of them re-sort alone would break exactly that.
-    # It ranks on the selected horizon's percentile, because "most volatile"
-    # is not a question you can ask of a whole ladder at once.
-    #
-    # And on one rung rather than the whole ladder when asked. "Which is the
-    # biggest breakout today" is a real question the ladder total cannot
-    # answer: a column with four quiet rungs and one violent one totals the
-    # same as one that is mildly long everywhere, and only the second of
-    # those is boring.
-    rank = {c: i for i, c in enumerate(U.CODES)}
-
-    def at(s, key):
-        return (s["by_h"].get(on) or {}).get(key)
-
-    if sort == "Volatility" and on != "Ladder":
-        cols.sort(key=lambda s: (-(at(s, "segHvPct") or -1), -s["tot"],
-                                 rank[s["code"]]))
-    elif sort == "Volatility":
-        # No Sigma exists for volatility, so the ladder means its average.
-        def mean_pct(s):
-            vs = [c.get("segHvPct") for c in s["by_h"].values()
-                  if c.get("segHvPct") is not None]
-            return -(sum(vs) / len(vs)) if vs else 1
-        cols.sort(key=lambda s: (mean_pct(s), -s["tot"], rank[s["code"]]))
-    elif on != "Ladder":
-        cols.sort(key=lambda s: (-(at(s, "score") if at(s, "score") is not None
-                                   else -9),
-                                 -BREAK_VOTE.get(at(s, "regime"), 0),
-                                 -s["tot"], rank[s["code"]]))
-    else:
-        cols.sort(key=lambda s: (-s["breaks"], -s["tot"], rank[s["code"]]))
-
-    # The instrument the dropdown chose takes a raised column, the horizon it
-    # chose a raised row, and the cell where they cross goes one tone darker.
-    # Two selectors sit above this table and neither of them used to be
-    # visible in it: the reader picked a pair and then hunted for the cell.
-    # Nineteen columns overran a 1280px window by 73px, which clipped ZB and
-    # ZN — the two most broken-down instruments on the board, and the last
-    # thing a wide table should hide. Four pixels off each side of every cell
-    # buys 152px and costs nothing a reader can see.
-    TIGHT = "padding-left:6px;padding-right:6px;"
-    head = ('<th class="l">Horizon</th>'
-            + "".join(
-                f'<th{" class=\"on\"" if s["code"] == code else ""}'
-                f' style="{TIGHT}" title="{esc(U.NAME[s["code"]])}">'
-                f'{swatch(U.SECTOR[s["code"]])}{esc(s["code"])}</th>'
-                for s in cols))
+def structure_table(d: dict, code: str, hz: str, on: str = AGG) -> str:
+    """Where price sits, one column per instrument, one row per rung."""
+    order, grid = d["order"], d["grid"]
+    cols = _sorted(_columns(grid), "structure", on)
+    head = _matrix_head(cols, code, sigma=True)
 
     body = ""
     for h in order:
-        on = h == hz
+        row_on = h == hz
         cells = ""
         for s in cols:
             sel = s["code"] == code
-            bg = TIGHT + ("background:var(--hair);" if sel and on
-                          else "background:var(--raised);"
-                          if sel else "")
+            bg = _cell_bg(sel, row_on)
             c = s["by_h"].get(h)
             if not c:
-                cells += f'<td class="faint" style="{bg}">\u2014</td>'
+                cells += f'<td class="faint" style="{bg}{TIGHT}">\u2014</td>'
                 continue
-            # structure, not regime: a failure had no way to reach the
-            # reader before, and now it is named in the mark and again
-            # in the tooltip that explains the mark.
             struct = c.get("structure", c["regime"])
             note_ = c.get("bandNote")
-            title = (f'{s["code"]} {U.NAME[s["code"]]} · {h} · '
-                     f'{c["bias"]} · {struct} · {c["regime"]} / '
+            title = (f'{s["code"]} {U.NAME[s["code"]]} \u00b7 {h} \u00b7 '
+                     f'{c["bias"]} \u00b7 {struct} \u00b7 {c["regime"]} / '
                      f'{c["retrace"]} / {c["trend"]}'
-                     + (f' · {note_}' if note_ else ""))
-            cells += (f'<td style="{bg}color:{BIAS_COL[str(c["score"])]};'
-                      f'font-weight:{700 if on or sel else 600}" '
+                     + (f' \u00b7 {note_}' if note_ else ""))
+            cells += (f'<td style="{bg}{TIGHT}'
+                      f'color:{BIAS_COL[str(c["score"])]};'
+                      f'font-weight:{700 if row_on or sel else 600}" '
                       f'title="{esc(title)}">'
                       f'<span style="{_rails(c)}">'
                       f'{_glyph(struct, c["score"])}'
                       f'{"+" if c["score"] > 0 else ""}{c["score"]}</span>'
                       f'{_band_marks(c)}</td>')
-        body += (f'<tr{" class=\"out\"" if on else ""}>'
+        body += (f'<tr{" class=\"out\"" if row_on else ""}>'
                  f'<td class="l">{esc(h)}</td>{cells}</tr>')
 
     tot_cells = ""
     for s in cols:
         sel = s["code"] == code
-        bg = TIGHT + ("background:var(--raised);" if sel else "")
         # The footing takes the ends of the ladder, not the middle of it: a
-        # short column should close as loudly as a long one does, and base
-        # amber against a bright green did not.
-        tot_cells += (f'<td style="{bg}color:'
+        # short column should close as loudly as a long one does.
+        tot_cells += (f'<td style="{_cell_bg(sel, False)}{TIGHT}color:'
                       f'{C["pos"] if s["tot"] >= 0 else BIAS_COL["-3"]};'
                       f'font-weight:700">{"+" if s["tot"] > 0 else ""}'
                       f'{s["tot"]}</td>')
-    body += ('<tr><td class="l" title="Ladder total: every horizon\u2019s bias '
-             'for this instrument, added up, so a column that agrees with '
-             'itself reads far from zero.">\u03a3</td>'
+    body += ('<tr><td class="l" title="Aggregate score: every horizon\u2019s '
+             'bias for this instrument, added up.">\u03a3</td>'
              f'{tot_cells}</tr>')
 
-    return (eyebrow(f"Range Breaks · {brk}")
-            + strip
-            + eyebrow("Structure Table",
-                      f'<span class="legend">{legend}</span>')
+    return (eyebrow("Structure",
+                    f'<span class="legend">{_sector_legend(grid)}</span>')
             + table(head, body)
-            # The explainer sits UNDER the table it explains. Four lines of
-            # prose above the matrix pushed the one thing worth seeing first
-            # down the page, and a legend is read once and then never again.
-            + _mark_legend()
-            # No caption. The legend is the key and the tooltips carry the
-            # rest; a paragraph under a table is read once and then skipped
-            # forever, while still costing four lines on every later visit.
-            + _hv_matrix(cols, order, code, hz, head, TIGHT)
-            # Travel closes the stack and carries the gap to
-            # the Instrument selector, which Streamlit gives
-            # no top margin worth the name.
-            + _travel_matrix(cols, order, code, hz, head, TIGHT))
+            + _mark_legend())
+
+
+def volatility_table(d: dict, code: str, hz: str, on: str = AGG) -> str:
+    """How hard each market is working, as a rank against its own history."""
+    order, grid = d["order"], d["grid"]
+    cols = _sorted(_columns(grid), "volatility", on)
+    head = _matrix_head(cols, code)
+    rows = ""
+    for h in order:
+        cells, any_ = "", False
+        for s in cols:
+            c = s["by_h"].get(h) or {}
+            bg = _cell_bg(s["code"] == code, h == hz)
+            pct = c.get("segHvPct")
+            if pct is None:
+                cells += f'<td style="{bg}{TIGHT}" class="faint">\u2014</td>'
+                continue
+            any_ = True
+            tip = (f'{s["code"]} \u00b7 {h} \u00b7 HV {num(c.get("segHv"), 1)}%'
+                   f' \u00b7 {num(pct, 0)}th percentile of '
+                   f'{c.get("segHvN", 0)} readings')
+            cells += (f'<td style="{bg}{TIGHT}color:{_hv_heat(pct)};'
+                      f'font-weight:{700 if h == hz else 600}" '
+                      f'title="{esc(tip)}">{num(pct, 0)}</td>')
+        # A rung with no reading anywhere is dropped rather than drawn as a
+        # row of dashes. Year is always that row: one observation a year
+        # cannot be annualised, so it has nothing to rank.
+        if any_:
+            rows += (f'<tr{" class=\"out\"" if h == hz else ""}>'
+                     f'<td class="l">{esc(h)}</td>{cells}</tr>')
+    return (eyebrow("Volatility") + table(head, rows)) if rows else ""
+
+
+def travel_table(d: dict, code: str, hz: str, on: str = AGG) -> str:
+    """How far price has come from the prior close, in prior ranges."""
+    order, grid = d["order"], d["grid"]
+    cols = _sorted(_columns(grid), "travel", on)
+    head = _matrix_head(cols, code)
+    rows = ""
+    for h in order:
+        cells, any_ = "", False
+        for s in cols:
+            c = s["by_h"].get(h) or {}
+            bg = _cell_bg(s["code"] == code, h == hz)
+            v = c.get("segTravel")
+            if v is None:
+                cells += f'<td style="{bg}{TIGHT}" class="faint">\u2014</td>'
+                continue
+            any_ = True
+            tip = (f'{s["code"]} \u00b7 {h} \u00b7 {num(v, 0)}% of the prior '
+                   f'range from its close of {num(c.get("segPrevClose"), 4)}')
+            cells += (f'<td style="{bg}{TIGHT}color:{_travel_tone(v)};'
+                      f'font-weight:{700 if h == hz else 600}" '
+                      f'title="{esc(tip)}">'
+                      f'{"+" if v > 0 else ""}{num(v, 0)}</td>')
+        if any_:
+            rows += (f'<tr{" class=\"out\"" if h == hz else ""}>'
+                     f'<td class="l">{esc(h)}</td>{cells}</tr>')
+    if not rows:
+        return ""
+    # Travel closes the stack and carries the gap to the Instrument selector,
+    # which Streamlit gives no top margin worth the name.
+    return (eyebrow("Travel") + table(head, rows)
+            + '<div style="height:34px"></div>')
 
 
 def _hv_tone(pct):

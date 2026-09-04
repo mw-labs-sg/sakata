@@ -77,7 +77,10 @@ def _stale() -> list:
     # rename to an old module, which surfaces as AttributeError at the call
     # rather than here, so the names are checked as names first.
     behind = []
-    for _n, _ps in (("technical_matrix", ("sort", "brk", "on")),
+    for _n, _ps in (("structure_table", ("on",)),
+                    ("volatility_table", ("on",)),
+                    ("travel_table", ("on",)),
+                    ("range_breaks", ("brk",)),
                     ("technical_levels", ("market",))):
         _fn = getattr(R, _n, None)
         if _fn is None:
@@ -695,46 +698,68 @@ with t[6]:
     if not codes:
         st.error("No technical grid — not enough price history.")
     else:
-        # The matrix claims its place before the selectors are drawn and is
-        # filled after, so it renders above controls whose values it needs.
-        # Reading st.session_state for those values instead would work right
-        # up until a default changed on one side and not the other.
-        # Sort sits above the tables it reorders and apart from the two
-        # selectors below, which steer the drill-down instead. Three controls
-        # in one row would have said they all did the same kind of thing.
-        sc = st.columns(5)
-        sort_by = sc[0].selectbox("Sort", ["Structure", "Volatility"],
-                                  key="tech_sort",
-                                  help="Column order for both tables. Structure"
-                                       " puts the most-broken instrument first;"
-                                       " Volatility puts the loudest first, on"
-                                       " the horizon chosen below.")
-        sort_on = sc[1].selectbox("Sort on", ["Ladder"] + list(grid["order"]),
-                                  key="tech_sort_on",
-                                  help="Which rung the sort reads. Ladder uses"
-                                       " the column total; a rung answers"
-                                       "'biggest breakout today' instead,"
-                                       " which a total cannot.")
-        brk_hz = sc[2].selectbox("Range Breaks", grid["order"], key="tech_brk",
-                                 help="Which rung the breaks above are read"
-                                      " on. Separate from the Horizon below,"
+        # Each table gets its own rung selector, sitting on top of the table
+        # it orders. One shared sort meant choosing between them: reading
+        # Volatility on the Day cost Structure its ladder order, because both
+        # were the same control. Three controls is one more thing on screen
+        # and one fewer thing to trade off.
+        #
+        # Each block is a container claimed before the Instrument selector is
+        # drawn and filled after, so a table renders above a widget whose
+        # value it needs. Reading st.session_state for that value instead
+        # would work right up until a default changed on one side only.
+        rungs = [R.AGG] + list(grid["order"])
+        RUNG_HELP = ("Which rung this table is ordered by. Aggregate reads the"
+                     " whole column; a rung answers 'biggest today' instead,"
+                     " which a column total cannot.")
+
+        bc = st.columns(5)
+        brk_hz = bc[0].selectbox("Range Breaks on", grid["order"],
+                                 key="tech_brk",
+                                 help="Which rung the breaks are read on."
+                                      " Separate from the Horizon below,"
                                       " because the week's breaks are the"
                                       " standing picture and the day's are"
                                       " the live one.")
-        survey = st.container()
+        breaks_box = st.container()
+
+        st_c = st.columns(5)
+        st_on = st_c[0].selectbox("Structure on", rungs, key="tech_on_struct",
+                                  help=RUNG_HELP)
+        struct_box = st.container()
+
+        vl_c = st.columns(5)
+        vl_on = vl_c[0].selectbox("Volatility on", rungs, key="tech_on_vol",
+                                  help=RUNG_HELP)
+        vol_box = st.container()
+
+        tv_c = st.columns(5)
+        tv_on = tv_c[0].selectbox("Travel on", rungs, key="tech_on_travel",
+                                  help=RUNG_HELP)
+        travel_box = st.container()
+
         tc = st.columns(5)
         code = tc[0].selectbox("Instrument", codes, key="tech_code",
                                format_func=lambda c: f"{c}  {U.NAME[c]}",
-                               help="Which contract the levels below are"
-                                    " drawn for. The matrix above raises its"
-                                    " column.")
+                               help="Which contract the levels below are drawn"
+                                    " for. Every table above raises its"
+                                    " column, which is how it stays findable"
+                                    " once the three sorts disagree.")
         avail = [h for h in grid["order"] if h in grid["grid"][code]]
         hzt = tc[1].selectbox("Horizon", avail, key="tech_hz",
                               help="Bar size the indicators are computed on."
                                    " A horizon is only listed when this"
                                    " instrument has the history to fill it.")
-        with survey:
-            UI.md(R.technical_matrix(grid, code, hzt, sort_by, brk_hz, sort_on))
+
+        with breaks_box:
+            UI.md(R.range_breaks(grid, brk_hz))
+        with struct_box:
+            UI.md(R.structure_table(grid, code, hzt, st_on))
+        with vol_box:
+            UI.md(R.volatility_table(grid, code, hzt, vl_on))
+        with travel_box:
+            UI.md(R.travel_table(grid, code, hzt, tv_on))
+
         # News is already cached and already fetched for its own tab, so this
         # is free after the first visit either way round. Guarded because a
         # commentary provider being down should cost this tab a paragraph,
