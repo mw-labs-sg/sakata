@@ -36,7 +36,18 @@ DRY = False          # set by build.py --dry; swaps prices for synthetic series
 # fetches are unchanged — this is not about how much is asked for, it is
 # about asking again for something already answered.
 CACHE_DIR = pathlib.Path(__file__).parent / "data" / "cache"
-SNAP_MAX_AGE = 900       # seconds a snapshot serves before the network is asked
+# Five minutes, not fifteen. This sits in SERIES with prices()' own 15-minute
+# st.cache_data, and two caches of the same length compound: the Streamlit
+# entry lapses, calls through, is handed a snapshot fourteen minutes old, and
+# caches THAT for another fifteen. Thirty-minute-old prices, presented as
+# freshly computed.
+#
+# The snapshot exists to stop a restart re-asking for what was answered
+# seconds ago, and restarts come in bursts of seconds to a couple of minutes.
+# Five covers that with room and caps the compounded staleness at twenty
+# minutes. Serving stale on a failed fetch is unaffected and still ignores
+# age entirely, which is the case that actually matters.
+SNAP_MAX_AGE = 300       # seconds a snapshot serves before the network is asked
 SINGLE_CAP = 6           # most instruments ever refetched one at a time
 
 

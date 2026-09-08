@@ -1236,22 +1236,40 @@ def portfolio(res: dict, per: str, pl: dict = None,
 
 
 
-def freshness(stamp, ttl: int) -> str:
-    """How old this field is, and how long until it refetches on its own.
+def freshness(stamp, ttl: int, data_as_of=None) -> str:
+    """How old this field is, when its data ends, and when it refetches.
 
     Presentation, so it sits beside the chips that show it. The stamp is taken
-    inside the cached builder, so it reports when the data was BUILT — a page
+    inside the cached builder, so it reports when the field was BUILT — a page
     reload advances this countdown while leaving every number untouched, which
-    is the whole confusion it exists to answer.
+    is the confusion it exists to answer.
+
+    Build time alone was not enough, though, and said the flattering half of
+    it. Prices reach the field through two caches in series, so a field built
+    this second can be ranked on bars that stopped twenty minutes ago, and
+    "computed just now" would report that as current. The last bar is the
+    honest number, so it goes first; a reader who wants to know how old the
+    ranking is is asking about the DATA, not about when a function ran.
     """
     if not stamp:
         return ""
     import datetime as _dt
-    age = int((_dt.datetime.now(_dt.timezone.utc) - stamp).total_seconds())
+    now = _dt.datetime.now(_dt.timezone.utc)
+    age = int((now - stamp).total_seconds())
     left = max(ttl - age, 0)
     ago = "just now" if age < 60 else f"{age // 60}m ago"
-    return (f"computed {ago} · refreshes itself in {left // 60}m {left % 60}s"
-            if left else f"computed {ago} · due to refresh")
+
+    bars = ""
+    if data_as_of is not None:
+        d = data_as_of
+        if getattr(d, "tzinfo", None) is None:
+            d = d.replace(tzinfo=_dt.timezone.utc)
+        lag = int((now - d).total_seconds() // 60)
+        bars = f"bars to {d:%H:%M} UTC, {lag}m old · "
+
+    return (f"{bars}computed {ago} · refreshes itself in "
+            f"{left // 60}m {left % 60}s"
+            if left else f"{bars}computed {ago} · due to refresh")
 
 
 def spreads(d: dict, per: str, sort: str = DEFAULT_SORT,

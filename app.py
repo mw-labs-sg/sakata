@@ -346,7 +346,8 @@ def portfolio_weights(window: str, objective: str, legs: int, cap: int,
 def spread_field(mode: str = "vol", v: str = CACHE_V) -> dict:
     """`mode` is a cache key, not a display flag: it selects the return series
     the whole field is computed from, so each basis gets its own entry."""
-    out = SP.build_spreads(_by_bar_closes(),
+    closes = _by_bar_closes()
+    out = SP.build_spreads(closes,
                            mode=mode,
                            # Every ranking the Function picker offers, so the
                            # chart grid can follow the table into any of them
@@ -358,6 +359,15 @@ def spread_field(mode: str = "vol", v: str = CACHE_V) -> dict:
     # reload reruns the script but returns this same entry untouched, which is
     # why the numbers can look frozen: they are, until the TTL lapses.
     out["computed"] = dt.datetime.now(dt.timezone.utc)
+    # And when the DATA under it ends. These are not the same thing and the
+    # gap between them is the whole question a reader is asking: the field is
+    # rebuilt on its own TTL, but the prices it is rebuilt FROM come through
+    # two caches, so "computed just now" was true of a field ranked on bars
+    # that stopped twenty minutes ago. Reporting the build time alone made
+    # the tab look fresher than it was.
+    ends = [s.index[-1] for by in (closes or {}).values()
+            for s in (by or {}).values() if s is not None and len(s)]
+    out["dataAsOf"] = max(ends) if ends else None
     return out
 
 
@@ -706,7 +716,9 @@ with t[4]:
             help="Whether micros and minis may close the gap on a leg. On a"
                  " small account they are usually the difference between a"
                  " hedge that lands and one that is 30% off.")
-        UI.md(R.spreads(field, per, spsort, R.freshness(stamp, TTL_FAST),
+        UI.md(R.spreads(field, per, spsort,
+                        R.freshness(stamp, TTL_FAST,
+                                    field.get("dataAsOf")),
                         capital=sp_cap_usd, vol_target=sp_vol,
                         smalls=(sp_size == "Standard + Small"),
                         max_lev=(None if sp_lev == "None"
