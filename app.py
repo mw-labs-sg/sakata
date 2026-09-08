@@ -77,6 +77,24 @@ for _k in list(st.session_state.keys()):
     except Exception:                # anything else Streamlit write-locks
         pass
 
+# Defaults are seeded into state rather than passed to the widgets. The loop
+# above gives every key a session value before its widget is built, and
+# Streamlit warns whenever a widget carries a default AND a session value —
+# not once, but with a full stack trace on every rerun, which buried the one
+# real error in the log under a hundred lines of noise about a working
+# control. Seeded here it is said once, in one place, and the log goes quiet
+# enough that something actually broken stands out in it.
+#
+# Every value below must exist in its widget's options or the widget raises.
+_DEFAULTS = {
+    "mg_vol_sort": "HV 1D", "mg_lvl_sort": "HV 1D",
+    "sp_vol": "30%", "sp_lev": "1\u00d7", "sp_capital_txt": "1,000,000",
+    "pf_legs": 6, "pf_cap": "50%", "pf_vol": "30%", "pf_lev": "1\u00d7",
+    "pf_capital_txt": "1,000,000",
+}
+for _k, _v in _DEFAULTS.items():
+    st.session_state.setdefault(_k, _v)
+
 
 def _stale() -> list:
     """Imported modules older than the code in this file that calls them.
@@ -636,7 +654,6 @@ with t[3]:
 
     vc = st.columns(5)
     vsort = vc[0].selectbox("Rank", list(R.VOL_GRID_SORTS), key="mg_vol_sort",
-                            index=list(R.VOL_GRID_SORTS).index("HV 1D"),
                             help="Which bar the grid ranks on. Sector groups"
                                  " it by class instead, which is how you read"
                                  " the term structure rather than the"
@@ -645,7 +662,6 @@ with t[3]:
 
     lc = st.columns(5)
     lsort = lc[0].selectbox("Rank ", list(R.VOL_LEVEL_SORTS), key="mg_lvl_sort",
-                            index=list(R.VOL_LEVEL_SORTS).index("HV 1D"),
                             help="Same eight columns as the grid above,"
                                  " carrying the figures the ranks were taken"
                                  " of: annualised vol, and ATR in dollars.")
@@ -683,8 +699,14 @@ with t[4]:
         # split the Portfolio tab makes, and the reason they can sit under a
         # 15-minute cache and still respond on the keystroke.
         s2 = st.columns([3, 2, 2, 3])
+        # Default seeded into state rather than passed as value=. The restore
+        # loop at the top writes every key before its widget is built, and
+        # Streamlit warns — with a full stack trace, on every rerun — when a
+        # widget carries both a default and a session value. State is the one
+        # that wins, and it is the one that has to, or a typed capital would
+        # snap back to a million on the next refresh.
         sp_cap_usd = _dollars(s2[0].text_input(
-            "Capital", value="1,000,000", key="sp_capital_txt",
+            "Capital", key="sp_capital_txt",
             on_change=_capital("sp_capital_txt"),
             help="What the Send column and the cards are quoted against. The"
                  " ratio does not move with it; the number of contracts does,"
@@ -692,7 +714,7 @@ with t[4]:
                  " costing the hedge."))
         sp_vol = float(s2[1].selectbox(
             "Vol target", ["5%", "10%", "15%", "20%", "30%", "40%"],
-            index=4, key="sp_vol",
+            key="sp_vol",
             help="Annualised volatility to hold the position at. This is a"
                  " scale, not a mix: 20% instead of 30% buys two thirds of"
                  " both legs. It changes the hedge only through rounding —"
@@ -704,7 +726,7 @@ with t[4]:
         # Same control, same default and same meaning as the Portfolio tab.
         sp_lev = s2[2].selectbox(
             "Max leverage", ["1×", "2×", "3×", "5×", "None"],
-            index=0, key="sp_lev",
+            key="sp_lev",
             help="Ceiling on gross notional over capital. A quiet spread needs"
                  " leverage to reach a vol target — GC/6E wanted 10×"
                  " for 30% — and this is where you say how much of that"
@@ -825,10 +847,10 @@ with t[5]:
     # short-only are three answers, not a yes and a no.
     r1 = st.columns(5)
     pf_win = r1[0].selectbox("Time frame", PF_WINDOWS, key="pf_window")
-    pf_legs = r1[1].selectbox("Max legs", list(range(2, 11)), index=4,
+    pf_legs = r1[1].selectbox("Max legs", list(range(2, 11)),
                               key="pf_legs")
     pf_cap = r1[2].selectbox("Weight cap", ["25%", "35%", "50%", "100%"],
-                             index=2, key="pf_cap",
+                             key="pf_cap",
                              help="Most any one instrument may carry. The cap "
                                   "and the leg count are the only defence "
                                   "against a search fitting one window.")
@@ -854,20 +876,20 @@ with t[5]:
     # are a shape and these only decide how large it is drawn, so they take
     # effect without a re-run.
     pf_cap_usd = _dollars(r2[1].text_input(
-        "Capital", value="1,000,000", key="pf_capital_txt", on_change=_capital(),
+        "Capital", key="pf_capital_txt", on_change=_capital(),
         help="What the weights are sized against. Notional and contracts scale"
              " with it; the ratios do not. Below about $500k these baskets"
              " stop being fillable — watch the Miss column."))
     pf_vol = r2[2].selectbox("Vol target",
                              ["5%", "10%", "15%", "20%", "30%", "None"],
-                             index=4, key="pf_vol",
+                             key="pf_vol",
                              help="Annualised volatility to hold the basket"
                                   " at; leverage is this over the portfolio's"
                                   " own volatility, so a noisy basket is held"
                                   " below 1×. Pick None to size on leverage"
                                   " instead and hold the cap.")
     pf_lev = r2[3].selectbox("Max leverage", ["1×", "2×", "3×", "5×", "None"],
-                             index=0, key="pf_lev",
+                             key="pf_lev",
                              help="Ceiling on gross notional over capital. A"
                                   " quiet basket needs leverage to reach a vol"
                                   " target; this is where you say how much of"
