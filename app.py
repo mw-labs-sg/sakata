@@ -49,6 +49,35 @@ st.set_page_config(page_title="Sakata · futures terminal", layout="wide",
                    initial_sidebar_state="collapsed")
 
 
+# Streamlit drops the state of any widget that was not instantiated during the
+# previous script run. Refresh sits ABOVE every selector on its tab and ends in
+# st.rerun(), so the run it triggers instantiates none of them — and each one
+# comes back on its default.
+#
+# It presents as the worst kind of bug, because the control still SHOWS the
+# choice that was made: the browser keeps the old value while the script reads
+# the default, so the Trends picker said WTD over a table ranked on Intraday
+# and every number on screen was internally consistent with the wrong window.
+#
+# Re-assigning each key to itself marks it as script-owned rather than
+# widget-owned, which is what carries it through the interruption.
+#
+# Buttons must be left alone. Assigning one does not raise here — it raises
+# later, at st.button, as StreamlitValueAssignmentNotAllowedError, which took
+# the whole page down rather than the one control. They are also the widgets
+# that SHOULD reset: a Refresh that stayed pressed would refetch forever.
+# Every keyed button in this file is minted by source() as rf_/go_ plus the
+# tab name, so the prefix is a real convention rather than a guess.
+_NO_RESTORE = ("rf_", "go_")
+for _k in list(st.session_state.keys()):
+    if isinstance(_k, str) and _k.startswith(_NO_RESTORE):
+        continue
+    try:
+        st.session_state[_k] = st.session_state[_k]
+    except Exception:                # anything else Streamlit write-locks
+        pass
+
+
 def _stale() -> list:
     """Imported modules older than the code in this file that calls them.
 
