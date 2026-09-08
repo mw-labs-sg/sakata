@@ -1299,6 +1299,13 @@ def spreads(d: dict, per: str, sort: str = DEFAULT_SORT,
             f'<th class="l">Send ({esc(weighting["label"])})</th>'
             '<th>vs leg</th><th>Top 10</th>')
     body = ""
+    # How many rows the leverage cap is holding below their vol target. The
+    # cards said this one spread at a time and the table said nothing, so
+    # changing Vol target with the cap binding moved no number on screen and
+    # looked exactly like a control that had stopped working. It had not; it
+    # was being overruled, and being overruled silently is the part worth
+    # fixing.
+    capped_n = sized_n = 0
     for i, r in enumerate(rows, 1):
         lg = (f'<span style="color:{teal};font-weight:600">{esc(r["long"])}'
               f'</span>' if r["long"] else '<span class="cash">cash</span>')
@@ -1328,6 +1335,9 @@ def spreads(d: dict, per: str, sort: str = DEFAULT_SORT,
         # row that already carries eleven columns.
         sz = SP.size_at(r, capital, vol_target, p.get("ann") or 252,
                         smalls=smalls, max_lev=max_lev)
+        if sz:
+            sized_n += 1
+            capped_n += 1 if sz.get("capped") else 0
         ex = r.get(sxkey)
         if sz and sz["text"] != "—":
             tip = []
@@ -1378,6 +1388,12 @@ def spreads(d: dict, per: str, sort: str = DEFAULT_SORT,
                     + (["vol-adjusted legs", f'cap {d["cap"]}:1']
                        if d.get("mode") == "vol" else
                        ["equal-notional legs", "no leg cap"])
+                    # Named only when it binds. A chip that always reads
+                    # "1x cap" is furniture; one that appears the moment the
+                    # cap starts overruling the vol target is an answer.
+                    + ([f'{max_lev:g}x cap binding on {capped_n} of '
+                        f'{sized_n} — vol target not reached']
+                       if capped_n and max_lev else [])
                     + ([fresh] if fresh else []))
             + spread_charts(p, t, sort, capital, vol_target, smalls,
                             max_lev))
