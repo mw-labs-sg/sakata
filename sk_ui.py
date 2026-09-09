@@ -448,23 +448,39 @@ def apply(dark: bool = True) -> None:
     md(_FONTS + "<style>" + css + _bridge(t) + "</style>")
 
 
+# The other terminal. A link rather than anything cleverer: the two are
+# separate apps with separate data, and pretending otherwise by embedding one
+# in the other would put a second app's staleness behind this app's chrome.
+SIBLING = ("Sanpo", "https://sanpo-markets-mw.streamlit.app/")
+
+
 def header(stamp: str = "") -> None:
-    """The lockup: mark, wordmark, stamp. No rule — the tab strip already
-    draws a line two rows down, and two horizontal rules that close together
-    read as a mistake rather than as structure.
+    """The lockup: mark, wordmark, sibling link, stamp. No rule — the tab
+    strip already draws a line two rows down, and two horizontal rules that
+    close together read as a mistake rather than as structure.
 
     Everything here is an inline style on a span. Streamlit's own rules for
     <h1> and for its markdown container are specific enough to win against a
     class, which is what pushed the mark onto its own line and stripped the
     teal off it.
+
+    The sibling sits next to the wordmark and not out by the stamp, because
+    it is a place to go and the stamp is a fact about this page. Grouping it
+    with the name says the two are the same kind of thing, which they are.
     """
     t = tokens(st.session_state.get("dark", True))
+    name, url = SIBLING
     md(f'<div style="display:flex;align-items:baseline;gap:11px;margin:0 0 2px">'
        f'<span style="flex:none;line-height:0;color:{t.get("teal")};'
        f'align-self:center">{MARK}</span>'
        f'<span style="font-family:var(--display),Inter,sans-serif;font-size:27px;'
        f'font-weight:700;letter-spacing:-.022em;color:{t.get("ink")};'
        f'line-height:1">Sakata</span>'
+       f'<a href="{esc(url)}" target="_blank" rel="noopener noreferrer" '
+       f'title="{esc(name)} — opens in a new tab" '
+       f'style="font-size:11px;color:{t.get("faint")};text-decoration:none;'
+       f'letter-spacing:.06em;text-transform:uppercase;font-weight:600;'
+       f'white-space:nowrap">{esc(name)} ↗</a>'
        f'<span style="flex:1"></span>'
        f'<span style="font-size:11px;color:{t.get("faint")};white-space:nowrap;'
        f'letter-spacing:.01em">{esc(stamp)}</span></div>')
