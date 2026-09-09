@@ -384,6 +384,59 @@ def fetch_fed_funds() -> dict:
     return {"tradeDate": td, "rows": rows}
 
 
+# The committee's own calendar. Worth fetching rather than keeping by hand:
+# the hand-kept list in sk_calendar had June 2027 on the 16th, and the Fed has
+# it on the 9th. A meeting date that is a week wrong does not make the priced
+# path slightly wrong, it assigns a month's worth of average rate to the wrong
+# side of the decision, and the tab reports it with the same confidence as a
+# right one.
+FOMC_CAL_URL = "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm"
+
+
+def fetch_fomc_dates() -> list:
+    """Decision dates, ISO, ascending. Empty when the page cannot be read.
+
+    A meeting is announced on the LAST day of its block, so "27-28" decides on
+    the 28th. Blocks that straddle a month end carry both names — "April/May"
+    with "29-1" — and the giveaway is the second day being the smaller of the
+    two, which is the only way a range runs backwards.
+    """
+    if DRY:
+        return []
+    import calendar as _cal
+    mon = {m.lower(): i for i, m in enumerate(_cal.month_name) if m}
+    try:
+        txt = session().get(FOMC_CAL_URL, timeout=40).text
+    except Exception as e:
+        print(f"    FOMC calendar failed: {str(e)[:60]}")
+        return []
+    out = set()
+    # Panels are keyed by year and are NOT in chronological order on the page
+    # — the coming year sits last, under "Future Year" — so the year has to
+    # come from the heading rather than from the order rows appear in.
+    panels = re.split(r'<a id="\d+">(\d{4}) FOMC Meetings</a>', txt)
+    for k in range(1, len(panels), 2):
+        year, block = int(panels[k]), panels[k + 1]
+        for mo, da in re.findall(
+                r'fomc-meeting__month[^>]*>(?:\s*<strong>)?\s*([A-Za-z/]+)'
+                r'.*?fomc-meeting__date[^>]*>\s*([0-9]+(?:-[0-9]+)?)',
+                block, re.S):
+            names = [mon[x.lower()] for x in mo.split("/") if x.lower() in mon]
+            if not names:
+                continue
+            days = [int(x) for x in da.split("-")]
+            wrapped = len(days) > 1 and days[-1] < days[0]
+            m = names[-1] if wrapped else names[0]
+            y = year + 1 if (wrapped and names[0] == 12) else year
+            try:
+                out.add(dt.date(y, m, days[-1]).isoformat())
+            except ValueError:
+                continue
+    if not out:
+        print("    FOMC calendar parsed to nothing")
+    return sorted(out)
+
+
 # -------------------------------------------------------------------- AMP
 AMP_URL = "https://www.ampfutures.com/trading-info/margins"
 

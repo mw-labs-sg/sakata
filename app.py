@@ -404,8 +404,14 @@ def fomc_data(v: str = CACHE_V) -> dict:
     overnight.
     """
     raw = S.fetch_fed_funds()
-    return FOMC.build_fomc(raw.get("rows") or [], CAL.FOMC,
-                           raw.get("tradeDate") or "")
+    # The Fed's own calendar first, the hand-kept list only if it cannot be
+    # read. Preferring the scrape is not tidiness: the hand list stops at the
+    # last date anyone remembered to add, which silently shortens this table,
+    # and it had June 2027 a week late.
+    live = S.fetch_fomc_dates()
+    return FOMC.build_fomc(raw.get("rows") or [], live or CAL.FOMC,
+                           raw.get("tradeDate") or "",
+                           "federalreserve.gov" if live else "built-in list")
 
 
 @st.cache_data(ttl=TTL_SLOW, show_spinner="pulling CME settlements…")

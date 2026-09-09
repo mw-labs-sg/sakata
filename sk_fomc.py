@@ -118,7 +118,8 @@ def label_move(n: int) -> str:
     return f'{"hike" if n > 0 else "cut"} {size}'
 
 
-def build_fomc(rows: list, meetings: list, trade_date: str = "") -> dict:
+def build_fomc(rows: list, meetings: list, trade_date: str = "",
+               dates_from: str = "") -> dict:
     """The Fed Funds strip, the path it implies, and the odds on each meeting."""
     today = dt.date.today()
     strip = []
@@ -184,4 +185,8 @@ def build_fomc(rows: list, meetings: list, trade_date: str = "") -> dict:
             prev = r
     return {"now": round(now, 4) if now is not None else None,
             "meetings": out, "strip": strip, "tradeDate": trade_date,
+            # Where the meeting dates came from. The whole calculation hangs
+            # on them, so the reader is told, rather than left to assume the
+            # confident-looking table was built on a list somebody typed.
+            "datesFrom": dates_from,
             "resid": round(sol["resid"] * 100, 2), "step": STEP}

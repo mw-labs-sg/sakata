@@ -699,7 +699,8 @@ def fomc(d: dict) -> str:
     if now is not None:
         facts.append(f'implied now {now:.2f}%')
     facts += [f'ZQ settlements {d.get("tradeDate") or "-"}',
-              f'{len(strip)} contract months']
+              f'{len(strip)} contract months',
+              f'{len(meets)} meetings from {d.get("datesFrom") or "-"}']
     if resid is not None:
         # The fit, in the units of the thing being fitted. A quarter point is
         # 25bp, so a worst-month residual near one is the strip and the

@@ -110,12 +110,20 @@ def seasonal(gen, months):
 # ---------------------------------------------------------------- schedule
 # Hand-maintained lists. When one runs out the tab says so rather than
 # quietly dropping the row — see exhausted() below.
+# Checked against federalreserve.gov, which is also where the FOMC tab reads
+# them from live; this copy is the fallback for when that page cannot be
+# fetched. June 2027 was here as the 16th and the Fed has it on the 9th — a
+# week wrong, which on this list is not a small error: it puts a month of
+# average effective rate on the wrong side of a decision.
 FOMC = ["2026-09-16", "2026-10-28", "2026-12-09",
-        "2027-01-27", "2027-03-17", "2027-04-28", "2027-06-16"]
+        "2027-01-27", "2027-03-17", "2027-04-28", "2027-06-09",
+        "2027-07-28", "2027-09-15", "2027-10-27", "2027-12-08"]
 # Minutes land three weeks after each decision and have moved the front end
-# on their own more than once.
-FOMC_MINUTES = ["2026-10-07", "2026-11-18", "2026-12-30",
-                "2027-02-17", "2027-04-07", "2027-05-19"]
+# on their own more than once. Derived rather than listed: every entry of the
+# hand-kept list was exactly +21 days, so it was a rule written out longhand,
+# and a second list to forget to extend.
+FOMC_MINUTES = [(dt.date.fromisoformat(d) + dt.timedelta(days=21)).isoformat()
+                for d in FOMC]
 # Jackson Hole. The Kansas City Fed symposium runs late August and the Chair
 # speaks Friday morning; the exact dates are announced only weeks ahead, so
 # these are flagged as estimates. Added because the News tab was citing it as
