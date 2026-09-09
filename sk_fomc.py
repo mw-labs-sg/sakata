@@ -112,10 +112,18 @@ def probabilities(delta: float) -> dict:
 
 
 def label_move(n: int) -> str:
+    """"hike (25)" rather than "hike 25".
+
+    The size is a parenthetical because it is not what the label is for. The
+    direction is, and the percentage that follows it is. Unbracketed, "hike 25
+    61%" runs three numbers together and reads for a beat like a hike of
+    2,561; brackets close the size off as an aside so the eye carries on to
+    the odds, which is the number being looked up.
+    """
     if n == 0:
         return "hold"
     size = abs(n) * int(STEP * 100)
-    return f'{"hike" if n > 0 else "cut"} {size}'
+    return f'{"hike" if n > 0 else "cut"} ({size})'
 
 
 def build_fomc(rows: list, meetings: list, trade_date: str = "",
