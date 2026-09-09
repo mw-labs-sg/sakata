@@ -29,6 +29,7 @@ import sk_amp as AMP
 import sk_board as BOARD
 import sk_calendar as CAL
 import sk_curve as CURVE
+import sk_fomc as FOMC
 import sk_export as EX
 import sk_knowledge as KN
 import sk_margins as MARGIN
@@ -394,6 +395,19 @@ def technical_grid(v: str = CACHE_V) -> dict:
     return TECH.build_technical(by_bar())
 
 
+@st.cache_data(ttl=TTL_SLOW, show_spinner="pulling the Fed Funds strip…")
+def fomc_data(v: str = CACHE_V) -> dict:
+    """The policy path, off the same CME settlements service as the curves.
+
+    TTL_SLOW because settlements move once a day: asking every fifteen minutes
+    would be fifteen minutes of politeness spent on a number that changes
+    overnight.
+    """
+    raw = S.fetch_fed_funds()
+    return FOMC.build_fomc(raw.get("rows") or [], CAL.FOMC,
+                           raw.get("tradeDate") or "")
+
+
 @st.cache_data(ttl=TTL_SLOW, show_spinner="pulling CME settlements…")
 def curve_data(v: str = CACHE_V) -> dict:
     """The reason for a failure travels with the data, as it does for margins.
@@ -583,7 +597,7 @@ def source(label: str, *caches, key: str = "", action: str = "") -> bool:
 # Uppercased here rather than in CSS: which element holds the label has moved
 # between Streamlit versions, so a selector is a thing that breaks on upgrade.
 TABS = ["Board", "News", "Calendar", "Margin Vol", "Trends", "Portfolio",
-        "Structure", "Curve", "Knowledge", "Briefing"]
+        "Structure", "Curve", "FOMC", "Knowledge", "Briefing"]
 t = st.tabs([x.upper() for x in TABS])
 
 # ----------------------------------------------------------------- Board
@@ -1002,8 +1016,13 @@ with t[7]:
                             label_visibility="collapsed")
         UI.md(R.curve(cd, code))
 
-# ------------------------------------------------------------- Knowledge
+# ------------------------------------------------------------------ FOMC
 with t[8]:
+    source("CME 30-Day Fed Funds settlements", fomc_data, key="fomc")
+    UI.md(R.fomc(fomc_data()))
+
+# ------------------------------------------------------------- Knowledge
+with t[9]:
     source("Hand-maintained in sk_knowledge.py · no fetch")
     kc = st.columns(5)
     grp = kc[0].selectbox("Group", ["All", "Financials", "Commodities"],
@@ -1019,7 +1038,7 @@ with t[8]:
     UI.md(R.knowledge(grp, last_kn))
 
 # --------------------------------------------------------------- Briefing
-with t[9]:
+with t[10]:
     UI.md(UI.note(
         "Build one provider-neutral market snapshot for ChatGPT, Claude or "
         "another LLM. <b>Markdown</b> is the recommended attachment; JSON is "

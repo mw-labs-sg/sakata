@@ -625,6 +625,95 @@ def technical_levels(d: dict, code: str, hz: str, dec: int,
             + table('<th class="l">Level</th><th>Price</th>', lv))
 
 
+# ------------------------------------------------------------------- FOMC
+def fomc(d: dict) -> str:
+    """The policy path priced into Fed Funds, meeting by meeting."""
+    import sk_fomc as FM
+
+    t = _tok()
+    meets, strip = d.get("meetings") or [], d.get("strip") or []
+    if not meets or not strip:
+        return ('<div class="skel">No Fed Funds settlements came back \u2014 '
+                "CME may be refusing this host. Try Refresh.</div>")
+    ink = t.get("ink", "#0d1418")
+    teal, amber = t.get("teal", "#0d8f83"), t.get("amber", "#96701c")
+    mute, faint = t.get("mute", "#66727b"), t.get("faint", "#97a2ab")
+
+    def bp(v):
+        """Basis points, signed. Tightening is amber and easing teal, the same
+        rule the rest of the app uses: amber is the direction that costs a
+        long position money. Under a basis point is neither, and says so."""
+        if v is None:
+            return '<td class="faint">\u2014</td>'
+        col = mute if abs(v) < 1 else (amber if v > 0 else teal)
+        return (f'<td style="color:{col};font-weight:600">'
+                f'{"+" if v > 0 else ""}{num(v, 1)}</td>')
+
+    body = ""
+    for m in meets:
+        when = dt.date.fromisoformat(m["date"])
+        # Both outcomes, not only the likely one. "Hike 61%" invites reading a
+        # decision; "hike 25 61% / hold 39%" is the same number saying what it
+        # actually is, which is that the market has not made its mind up.
+        ps = sorted(m.get("probs", {}).items(), key=lambda kv: -kv[1])
+        priced = " \u00b7 ".join(
+            f'<span style="color:{ink if i == 0 else faint};'
+            f'font-weight:{700 if i == 0 else 400}">'
+            f'{esc(FM.label_move(int(k)))} {num(v, 0)}%</span>'
+            for i, (k, v) in enumerate(ps)) or "\u2014"
+        # The next meeting is the one anyone is here for, and the raised band
+        # is what the other tabs use to say so.
+        body += (f'<tr{" class=\"out\"" if m is meets[0] else ""}>'
+                 f'<td class="l" style="color:{ink};font-weight:600">'
+                 f'{when:%d %b %Y}</td>'
+                 f'<td class="faint">{m["days"]}d</td>'
+                 f'<td style="color:{ink};font-weight:700">'
+                 f'{num(m["rate"], 3)}</td>'
+                 + bp(m.get("stepBp")) + bp(m.get("cumBp"))
+                 + f'<td class="l">{priced}</td></tr>')
+
+    head = ('<th class="l">Meeting</th><th>In</th>'
+            '<th title="Target the strip prices once this meeting has taken '
+            'effect.">Implied %</th>'
+            '<th title="Change this meeting alone is priced to make.">Step bp'
+            '</th>'
+            '<th title="Change from the rate priced today.">Cumulative bp</th>'
+            '<th class="l">Priced as</th>')
+
+    sbody = ""
+    for s in strip:
+        sbody += (f'<tr><td class="l">{esc(s["month"])}</td>'
+                  f'<td>{num(s["settle"], 4)}</td>'
+                  f'<td style="color:{ink};font-weight:600">'
+                  f'{num(s["implied"], 3)}</td>'
+                  f'<td class="faint">{esc(str(s.get("oi") or "-"))}</td></tr>')
+    shead = ('<th class="l">Contract</th><th>Settle</th>'
+             '<th title="100 minus the settlement: the AVERAGE effective rate '
+             'over the contract month, not the rate on any one day of it. '
+             'Reading it as a spot rate is wrong in exactly the months that '
+             'have a meeting in them.">Implied avg %</th>'
+             '<th>Open interest</th>')
+
+    now, resid = d.get("now"), d.get("resid")
+    facts = []
+    if now is not None:
+        facts.append(f'implied now {now:.2f}%')
+    facts += [f'ZQ settlements {d.get("tradeDate") or "-"}',
+              f'{len(strip)} contract months']
+    if resid is not None:
+        # The fit, in the units of the thing being fitted. A quarter point is
+        # 25bp, so a worst-month residual near one is the strip and the
+        # meeting calendar agreeing, and one near ten is a reason not to
+        # believe the row above it.
+        facts.append(f'worst month fits to {resid:.2f}bp')
+
+    return (eyebrow("Priced policy path")
+            + table(head, body)
+            + chips(facts)
+            + eyebrow("Fed Funds strip")
+            + table(shead, sbody))
+
+
 # ---------------------------------------------------------------- Spreads
 # Default is the normalised measure. Within one window ER and ER (Adj) order
 # rows identically — bars is constant, so sqrt(bars) is a positive scale factor

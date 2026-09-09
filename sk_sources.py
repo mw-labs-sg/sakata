@@ -356,6 +356,34 @@ def fetch_curves() -> dict:
     return {"tradeDate": td, "curves": curves}
 
 
+# 30-Day Federal Funds futures, the contract the whole policy path is read
+# out of. Fetched on its own rather than added to CME_PRODUCT: that map is the
+# nineteen tradables the rest of the app ranks, sizes and charts, and ZQ is
+# none of those things here — it is an input to one tab.
+CME_FF_PID = 305
+
+
+def fetch_fed_funds() -> dict:
+    """{tradeDate, rows} of the Fed Funds settlement strip."""
+    if DRY:
+        rows, base = [], 96.30
+        for i in range(14):
+            d = dt.date.today().replace(day=1) + dt.timedelta(days=31 * i)
+            rows.append({"month": d.strftime("%b %y").upper(),
+                         "settle": round(base - 0.03 * i, 4),
+                         "chg": "-.0125", "vol": "1,000", "oi": "100,000"})
+        return {"tradeDate": "DRY", "rows": rows}
+    td = resolve_tradedate()
+    try:
+        data = session().get(CME_URL.format(pid=CME_FF_PID, td=td),
+                             headers=CME_HEADERS, timeout=25).json()
+        rows = _settlement_rows(data.get("settlements"))
+    except Exception as e:
+        print(f"    CME fed funds failed: {str(e)[:60]}")
+        rows = []
+    return {"tradeDate": td, "rows": rows}
+
+
 # -------------------------------------------------------------------- AMP
 AMP_URL = "https://www.ampfutures.com/trading-info/margins"
 
