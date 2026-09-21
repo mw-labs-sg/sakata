@@ -266,8 +266,10 @@ def _by_bar_closes() -> dict:
             "4h": _closes(bb["4h"]), "1d": _closes(bb["1d"])}
 
 
-PF_WINDOWS = ["Intraday", "WTD", "MTD", "QTD", "YTD", "30D", "60D",
-              "120D", "240D"]
+# The same nine the Trends picker offers, and the same list rather than a
+# copy of it: both tabs slice from sk_spreads.WINDOWS, so a window added or
+# renamed there would otherwise reach one tab and not the other.
+PF_WINDOWS = list(SP.PERIODS)
 
 CAPITAL_MIN, CAPITAL_MAX = 1_000, 1_000_000_000
 
@@ -709,7 +711,13 @@ with t[4]:
         st.error("No spread windows built — not enough price history.")
     else:
         stamp = field.get("computed")
-        per = sc[0].selectbox("Time frame", field["periods"], key="sp_window")
+        per = sc[0].selectbox(
+            "Time frame", field["periods"], key="sp_window",
+            help="Which window the field is ranked on, and the column the two"
+                 " matrices above are sorted by. The calendar windows answer"
+                 " how the quarter is going; 30D through 240D answer what has"
+                 " worked lately, and a pair that tops both is a different"
+                 " object from one that tops only the shortest.")
         spsort = sc[1].selectbox("Function", list(R.SORTS), key="sp_sort")
         sc[3].checkbox("Auto", key="sp_auto",
                        help="Refetch by itself once the 15-minute cache "

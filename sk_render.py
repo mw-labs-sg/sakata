@@ -772,7 +772,7 @@ def _optimal(d: dict, per: str, t: dict, sort: str = DEFAULT_SORT) -> str:
 
     Transposed for that reason alone: the two blocks answer the same question
     at different grains, so reading one after the other should not mean
-    re-learning which axis is which. The five windows stay in a FIXED column
+    re-learning which axis is which. The nine windows stay in a FIXED column
     order whether or not each built, so the shape survives a reload.
     """
     wins = d.get("displayPeriods", d.get("periods", []))

@@ -41,12 +41,6 @@ MAX_LEG_CHARTS = 2      # times one instrument may appear across those charts
 # can discount it themselves.
 MIN_DISPLAY_BARS = 20
 
-# Windows offered in the selector. The rolling ones keep computing because the
-# "also top-10 in" column is only worth reading if it spans more than the five
-# calendar windows — but nine radio buttons over one table was the tab's worst
-# habit, so they no longer appear in the picker.
-DISPLAY_PERIODS = ["Intraday", "WTD", "MTD", "QTD", "YTD"]
-
 # Point sakata_stats at the live universe so anything added later flows through
 # without editing two files.
 ss.ALL_SYMBOLS = list(U.TICKERS)
@@ -73,6 +67,14 @@ WINDOWS = OrderedDict([
     ("240D",     dict(bar="1d",  kind="bars",  n=240, note="last 240 trading days")),
 ])
 PERIODS = list(WINDOWS)
+
+# All nine are offered in the selector, and PERIODS is the only list that says
+# so — there is no shorter display set any more. The rolling windows were
+# computed either way, so hiding them left the "also top-10 in" column naming
+# windows the reader could not open and the two by-window matrices ranking a
+# pair on a horizon the picker denied. Nine radio buttons over one table was
+# the habit worth breaking; a nine-item dropdown, the same one Portfolio
+# already carries for these windows, is not.
 INTRADAY_BARS = {"15m", "1h", "4h"}
 
 
@@ -962,12 +964,13 @@ def build_spreads(by_bar: dict, mode: str = MODE,
             row["alsoTop"] = [w for w in tw.get((row["long"], row["short"]), [])
                               if w != name]
 
-    return {"periods": [p for p in DISPLAY_PERIODS if p in out],
-            # The canonical five, present or not. The by-window table renders a
-            # fixed set of rows so the layout does not reflow when a window
-            # fails to build or falls under the bar floor.
-            "displayPeriods": list(DISPLAY_PERIODS),
-            "allPeriods": [p for p in PERIODS if p in out],
+    return {"periods": [p for p in PERIODS if p in out],
+            # Every window, built or not. The two by-window matrices render a
+            # fixed set of COLUMNS so the layout does not reflow when one
+            # fails to build or falls under the bar floor; the picker above
+            # them lists only what built, because an option that opens an
+            # empty table is worse than a dashed column.
+            "displayPeriods": list(PERIODS),
             "mode": mode, "cap": RATIO_CAP, "topN": TOP_N, "summary": summary,
             "minBars": MIN_DISPLAY_BARS, "nWindows": len(out), "data": out,
             # Static-site key. The Streamlit tab carries this as the "also top
