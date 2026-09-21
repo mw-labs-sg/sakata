@@ -271,6 +271,46 @@ def _by_bar_closes() -> dict:
 # renamed there would otherwise reach one tab and not the other.
 PF_WINDOWS = list(SP.PERIODS)
 
+# The six controls the SEARCH reads, in the order the run takes them and the
+# "controls changed" line compares them. The other five on the tab — capital,
+# vol target, leverage, fees, contracts — only decide how the answer is drawn
+# and are read where they are used.
+PF_SEARCH_KEYS = ("pf_window", "pf_obj", "pf_legs", "pf_cap",
+                  "pf_side", "pf_risk")
+PF_SEARCH_LABELS = ("Time frame", "Objective", "Max legs", "Weight cap",
+                    "Direction", "Risk cap")
+
+
+def _pf_arm() -> None:
+    """Snapshot the search controls at the instant Optimize is pressed.
+
+    Optimize sits at the top of the tab and its dropdowns underneath, so the
+    run used to read whatever those widgets returned a couple of hundred
+    lines later — after a script that renders ten other tabs on the way. Cut
+    that script short before it arrives, which a Refresh on any tab above
+    does by calling st.rerun(), and the Portfolio widgets never re-register;
+    Streamlit then drops the state they were never asked for, and the seeding
+    at the top of this file hands them back their DEFAULT. That is the bug
+    where eight legs are picked and six are searched, and it hides itself,
+    because the browser goes on showing the eight.
+
+    A callback runs before any of that. Streamlit applies the widget values
+    the browser sent with the click, then calls this, then reruns the script
+    — so what is captured here is what was under the cursor.
+
+    Written back as well as read: a callback is the one place a widget's own
+    state may be set, and doing it here marks the six keys as script-owned
+    before the seeding loop can setdefault over a missing one. That is also
+    what keeps the controls showing the settings the answer below them was
+    computed from, instead of quietly disagreeing with it.
+    """
+    snap = {}
+    for k in PF_SEARCH_KEYS:
+        if k in st.session_state:
+            snap[k] = st.session_state[k]
+            st.session_state[k] = snap[k]
+    st.session_state["pf_armed"] = snap
+
 CAPITAL_MIN, CAPITAL_MAX = 1_000, 1_000_000_000
 
 
@@ -569,7 +609,8 @@ def autorefresh(stamp, ttl: int) -> None:
         st.rerun(scope="app")
 
 
-def source(label: str, *caches, key: str = "", action: str = "") -> bool:
+def source(label: str, *caches, key: str = "", action: str = "",
+           on_click=None) -> bool:
     """A refresh button, hard left, above whatever controls the tab has.
 
     The source line that used to sit here is gone. It named where the data
@@ -580,6 +621,10 @@ def source(label: str, *caches, key: str = "", action: str = "") -> bool:
     `action` puts a second button beside Refresh and returns whether it was
     pressed. Both are "go and do something", which is a different kind of
     control from the selectors underneath and belongs on its own line.
+
+    `on_click` runs on that button BEFORE the script reruns, which is the
+    only moment a tab can read its own controls without having rendered them
+    yet — the action button sits above them. See _pf_arm.
     """
     if not caches:
         return False
@@ -594,7 +639,7 @@ def source(label: str, *caches, key: str = "", action: str = "") -> bool:
         S.drop_snapshots()      # or the button serves the snapshot it is for
         st.rerun()
     return bool(action) and c[1].button(action, key=f"go_{key}",
-                                        type="primary")
+                                        type="primary", on_click=on_click)
 
 # Tab order is reading order: what happened, what is being said about it, what
 # is scheduled, then the analytical tabs, with the standing reference last.
@@ -867,7 +912,7 @@ with t[5]:
     # something", and it was the only control on the tab that did not belong
     # with the settings it followed.
     go = source("Yahoo · 15m, 1H, 4H, 1D", *PRICE_CACHES, key="portfolio",
-                action="Optimize")
+                action="Optimize", on_click=_pf_arm)
     # Two rows of five, equal widths, every control the same shape of box.
     # The Shorts checkbox used to sit mid-row with no box around it, which
     # pulled its label half a line up and left the rows out of register. A
@@ -941,6 +986,13 @@ with t[5]:
 
     pf_args = (pf_win, pf_obj, pf_legs, pf_cap, pf_side, pf_risk)
     if go:
+        # What the button captured beats what the widgets returned. The two
+        # agree on every run that was not interrupted, and when one was, only
+        # the snapshot still holds the settings that were clicked.
+        armed = {**dict(zip(PF_SEARCH_KEYS, pf_args)),
+                 **(st.session_state.get("pf_armed") or {})}
+        pf_args = tuple(armed[k] for k in PF_SEARCH_KEYS)
+        pf_win, pf_obj, pf_legs, pf_cap, pf_side, pf_risk = pf_args
         # A bar rather than a spinner: the search runs tens of seconds now
         # that it restarts, grows and swaps legs, and a spinner that long
         # reads as a hang. The running best is on it, which also shows the
@@ -977,7 +1029,16 @@ with t[5]:
         bar.empty()
     res = st.session_state.get("pf_result")
     if res and st.session_state.get("pf_for") != pf_args:
-        st.caption("Controls changed since this ran — press Optimize again.")
+        # Named, not just announced. "Controls changed" over a tab whose
+        # controls all look right is the least useful sentence on the page,
+        # and naming the one that moved is the difference between a prompt
+        # and a diagnosis.
+        ran = st.session_state.get("pf_for") or ()
+        moved = [f"{lab} {was} → {now}"
+                 for lab, was, now in zip(PF_SEARCH_LABELS, ran, pf_args)
+                 if was != now]
+        st.caption("Controls changed since this ran — press Optimize again."
+                   + ("  ·  " + ", ".join(moved) if moved else ""))
     # Priced off the same cached daily closes as the Board and the contract
     # specs on Knowledge, so three tabs cannot disagree about what one
     # contract costs.
