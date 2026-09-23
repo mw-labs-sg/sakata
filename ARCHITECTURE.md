@@ -38,7 +38,7 @@ sk_render.py — HTML for every tab | imports: sk_charts, sk_knowledge, sk_margi
 
 sk_sources.py — every network call: Yahoo OHLC, CME, resampling | imports: sk_universe | called by: app, build, diag_margins, pull
 
-sk_spreads.py — spread field: one ranked table and a chart set per window | imports: sakata_stats, sk_universe | called by: app, build
+sk_spreads.py — spread field: one ranked table and a chart set per window; thirteen windows, Intraday to Full | imports: sakata_stats, sk_universe | called by: app, build
 
 sk_technical.py — Range Levels across the five-rung ladder | imports: sk_fmt, sk_universe | called by: app, build
 

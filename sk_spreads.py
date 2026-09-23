@@ -1,10 +1,11 @@
 """Sakata — the spread field, one ranked table and a chart set per window.
 
-Nine windows, not four. The calendar periods answer "how is this quarter
+Thirteen windows, not four. The calendar periods answer "how is this quarter
 going"; the rolling ones answer "what has worked lately", and those are
 different questions that disagree often enough to be worth seeing side by
 side. A pair that tops 30D, 60D AND 120D is a different object from one that
-only tops the shortest.
+only tops the shortest. The long end — 2Y to Full — answers neither: it is
+there because a walk-forward needs history to walk across.
 
 Every window is sliced from bars already fetched — nothing here goes to the
 network. The chart series ship with the field so the page can show WHY a row
@@ -65,6 +66,24 @@ WINDOWS = OrderedDict([
     ("60D",      dict(bar="1d",  kind="bars",  n=60,  note="last 60 trading days")),
     ("120D",     dict(bar="1d",  kind="bars",  n=120, note="last 120 trading days")),
     ("240D",     dict(bar="1d",  kind="bars",  n=240, note="last 240 trading days")),
+    # The long end. Daily bars are fetched over ten years, so these cost
+    # nothing to fetch and — measured — almost nothing to rank: a field is
+    # 0.61s over 240 bars and 0.64s over 2,226, because the work is the 171
+    # pairs rather than the bars under them.
+    #
+    # They exist for the walk-forward. A cadence needs refits and a refit
+    # needs training bars, so 240D at Monthly is nine fits of a year between
+    # them; Full is eight years and gives a walk enough segments to be a
+    # sample rather than an anecdote.
+    ("2Y",       dict(bar="1d",  kind="bars",  n=504,  note="last 2 years of trading days")),
+    ("3Y",       dict(bar="1d",  kind="bars",  n=756,  note="last 3 years of trading days")),
+    ("5Y",       dict(bar="1d",  kind="bars",  n=1260, note="last 5 years of trading days")),
+    # Everything the nineteen share. The inner join ends at ether's listing in
+    # November 2017, so "Full" is about nine years and not the ten the daily
+    # fetch asks for — which is worth saying in the note, because a window
+    # called Full that quietly means "since the newest instrument listed" is
+    # the kind of label a reader only checks once.
+    ("Full",     dict(bar="1d",  kind="all",           note="every daily bar all 19 share, back to ether's listing")),
 ])
 PERIODS = list(WINDOWS)
 
@@ -104,6 +123,8 @@ def _slice(frames, spec):
     if spec["kind"] == "cal":
         start = pd.Timestamp(_cal_start(spec["unit"]))
         return {k: v[v.index >= start] for k, v in frames.items()}
+    if spec["kind"] == "all":
+        return frames
     if spec["kind"] == "days":
         live = [v for v in frames.values() if len(v)]
         if not live:

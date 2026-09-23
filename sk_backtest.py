@@ -120,6 +120,32 @@ def segments(index: pd.DatetimeIndex, cadence: str) -> list:
     return out
 
 
+# Seconds one refit costs on the nineteen, measured: 11s over 120 training
+# bars, 10s over 240, 11s over 500, 16s over 1,000, 20s over 2,000. Flat plus
+# a little per bar, because the pair screen is 171 scorings whatever the
+# window and the slope is those scorings getting longer.
+#
+# This exists to price a run BEFORE it starts. The first version of the
+# caption assumed five seconds a refit, which is roughly right for a year of
+# daily bars and wrong by a factor of three over nine years — it told a
+# reader seven minutes for a walk that takes twenty-two.
+REFIT_FLAT = 10.0
+REFIT_PER_BAR = 0.005
+
+
+def cost_estimate(index, cadence: str) -> tuple:
+    """(refits, seconds) for a walk that has not run yet.
+
+    Counts the whole-window fit at the end, because the reader is waiting for
+    that too, and it is the most expensive single search in the run.
+    """
+    segs = segments(index, cadence)
+    if not segs:
+        return 0, 0.0
+    trains = [a for a, _, _ in segs] + [len(index)]
+    return len(segs), sum(REFIT_FLAT + REFIT_PER_BAR * t for t in trains)
+
+
 def _fine_slice(fine, index, a: int, b: int):
     """The fine bars that fall inside closes positions [a, b).
 

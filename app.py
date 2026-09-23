@@ -1044,10 +1044,16 @@ with t[5]:
         st.caption(f"{_note} · one fit on the whole window, "
                    "the last 30% held back.")
     elif _pc is not None:
-        _n = len(BT.segments(_pc.index, pf_cad))
-        st.caption(f"{_note} · {pf_cad} walk-forward: {_n} refits plus one "
-                   f"whole-window fit — about "
-                   f"{max(1, round((_n + 1) * 5 / 60)):d} min.")
+        _n, _sec = BT.cost_estimate(_pc.index, pf_cad)
+        _m = int(round(_sec / 60))
+        _took = (f"{_m // 60}h {_m % 60:02d}m" if _m >= 60
+                 else f"{max(1, _m)} min")
+        _line = (f"{_note} · {pf_cad} walk-forward: {_n} refits plus one "
+                 f"whole-window fit — about {_took}.")
+        # Past ten minutes this stops being a caption and becomes a decision,
+        # so it stops looking like one. Full at Daily is sixteen hundred full
+        # searches; nobody should discover that from a progress bar.
+        (st.warning if _sec > 600 else st.caption)(_line)
     if go:
         # What the button captured beats what the widgets returned. The two
         # agree on every run that was not interrupted, and when one was, only
