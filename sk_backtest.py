@@ -47,6 +47,13 @@ import sk_portfolio as PF
 # reached. An unknown cadence returns no segments rather than quietly falling
 # back to a holdout.
 REBALANCE = OrderedDict([
+    # Daily is here for the three windows whose bars are finer than a day.
+    # Intraday is 15-minute prints over three sessions and WTD is hourly
+    # since Monday: on those, every calendar cadence coarser than this one
+    # spans the whole window and there is nothing to walk. On a daily-bar
+    # window it means a refit every bar, which is honest but slow, and the
+    # tab prices it before the click rather than after.
+    ("Daily", "D"),
     ("Weekly", "W"),
     ("Monthly", "M"),
     ("Quarterly", "Q"),
@@ -60,7 +67,11 @@ REBALANCE = OrderedDict([
 # through everything after it.
 MIN_TRAIN = 24
 WARMUP_FRAC = 0.25      # or this share of the window, whichever is larger
-MIN_TEST = 2            # bars a segment must hold for its returns to count
+# One bar is a real holding period, not a degenerate one: a daily rebalance
+# on a daily-bar window holds each basket for exactly one bar, and that is the
+# strategy rather than a rounding error in it. The chain does not care how
+# long a segment is, only that the weights were fixed across it.
+MIN_TEST = 1            # bars a segment must hold for its returns to count
 MIN_SEGMENTS = 2        # below this it is a holdout, not a walk-forward
 
 

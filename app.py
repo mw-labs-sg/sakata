@@ -117,7 +117,8 @@ def _stale() -> list:
     a missing parameter always means the module is behind.
     """
     import inspect
-    want = (("sk_render.portfolio", R.portfolio, ("hold", "turn", "pl")),
+    want = (("sk_render.portfolio", R.portfolio,
+             ("hold", "turn", "pl", "mode")),
             ("sk_render.spreads", R.spreads, ("sort",)),
             ("sk_portfolio.optimise", PF.optimise, ("risk_cap", "progress")),
             ("sk_portfolio.plan", PF.plan, ("margins", "fees", "max_lev")),
@@ -289,7 +290,6 @@ PF_SEARCH_LABELS = ("Time frame", "Rebalance", "Objective", "Max legs",
 # done, with the 70/30 holdout under it — so it is answered here rather than
 # handed to sk_backtest, which only knows about calendars.
 PF_FULL = "Full period"
-PF_CADENCES = [PF_FULL] + list(BT.REBALANCE)
 
 
 def _arm(keys: tuple, store: str):
@@ -927,8 +927,13 @@ with t[5]:
     # Optimize sits on the header line with Refresh: both are "go and do
     # something", and it was the only control on the tab that did not belong
     # with the settings it followed.
+    # Read from state rather than from the widget: the button is built before
+    # the dropdowns, and "(WF)" on it is the earliest point the tab can say
+    # that this click is about to cost a minute instead of ten seconds.
+    _cad = st.session_state.get("pf_cadence", PF_FULL)
     go = source("Yahoo · 15m, 1H, 4H, 1D", *PRICE_CACHES, key="portfolio",
-                action="Optimize", on_click=_pf_arm)
+                action=("Optimize" if _cad == PF_FULL else "Optimize (WF)"),
+                on_click=_pf_arm)
     # Two rows of five, equal widths, every control the same shape of box.
     # The Shorts checkbox used to sit mid-row with no box around it, which
     # pulled its label half a line up and left the rows out of register. A
@@ -939,7 +944,22 @@ with t[5]:
     # Second, because it is the control that decides what the other nine
     # mean: on Full period they describe one fit, on a cadence they describe
     # every fit in a walk.
-    pf_cad = r1[1].selectbox("Rebalance", PF_CADENCES, key="pf_cadence",
+    # Offered per window, because a time frame is a bar size as well as a
+    # span. Intraday is 15-minute prints over three sessions and WTD is
+    # hourly since Monday — on those, everything coarser than Daily covers
+    # the whole window and there is nothing to walk. Listing the six
+    # regardless meant five of them answered with a refusal.
+    _pc, _ = portfolio_frames(pf_win)
+    pf_cads = [PF_FULL] + ([c for c in BT.REBALANCE
+                            if len(BT.segments(_pc.index, c))
+                            >= BT.MIN_SEGMENTS]
+                           if _pc is not None else [])
+    # A cadence that the previous window could carry and this one cannot has
+    # to go before its widget is built, or Streamlit raises on a value that
+    # is no longer in the list.
+    if st.session_state.get("pf_cadence") not in pf_cads:
+        st.session_state["pf_cadence"] = PF_FULL
+    pf_cad = r1[1].selectbox("Rebalance", pf_cads, key="pf_cadence",
                              help="Full period fits one basket to the whole"
                                   " time frame and keeps the last 30% back as"
                                   " a holdout. Any cadence walks instead:"
@@ -1013,19 +1033,21 @@ with t[5]:
                                    " Miss column when you switch.")
 
     pf_args = (pf_win, pf_cad, pf_obj, pf_legs, pf_cap, pf_side, pf_risk)
-    # What a cadence is about to cost, before the click rather than during
-    # it. A Weekly walk over 240D is fifty full searches, and a reader who
-    # has not been told that reasonably concludes the tab has hung.
-    if pf_cad != PF_FULL:
-        _pc, _ = portfolio_frames(pf_win)
-        if _pc is not None:
-            _n = len(BT.segments(_pc.index, pf_cad))
-            st.caption(
-                f"{pf_cad} leaves no complete segment in {len(_pc)} bars of "
-                f"{pf_win} — pick a shorter cadence or a longer time frame."
-                if not _n else
-                f"{pf_cad} over {pf_win}: {_n} refits plus one whole-window "
-                f"fit — about {max(1, round((_n + 1) * 5 / 60)):d} min.")
+    # What the run is, and what it is about to cost, before the click rather
+    # than during it. The bar size leads because a time frame does not show
+    # it anywhere else — "Intraday" says three days, not 15-minute prints —
+    # and the cadence only makes sense against it. A Daily walk over 240D is
+    # a hundred and eighty full searches, and a reader who has not been told
+    # that reasonably concludes the tab has hung.
+    _note = SP.WINDOWS.get(pf_win, {}).get("note", "")
+    if pf_cad == PF_FULL:
+        st.caption(f"{_note} · one fit on the whole window, "
+                   "the last 30% held back.")
+    elif _pc is not None:
+        _n = len(BT.segments(_pc.index, pf_cad))
+        st.caption(f"{_note} · {pf_cad} walk-forward: {_n} refits plus one "
+                   f"whole-window fit — about "
+                   f"{max(1, round((_n + 1) * 5 / 60)):d} min.")
     if go:
         # What the button captured beats what the widgets returned. The two
         # agree on every run that was not interrupted, and when one was, only
@@ -1147,7 +1169,11 @@ with t[5]:
     # yesterday's holdout beside today's window would be the tab quietly
     # answering a question about a different portfolio.
     same = st.session_state.get("pf_for") == pf_args
+    walk = st.session_state.get("pf_walk") if same else None
     UI.md(R.portfolio(res or {}, shown_win, plan, capital=pf_cap_usd,
+                      mode=(f'{walk["cadence"]} walk-forward, '
+                            f'{walk["nSegments"]} refits out of sample'
+                            if walk else "full-period fit"),
                       vol_target=(None if pf_vol == "None"
                                   else float(pf_vol.rstrip("%"))),
                       hold=hold if same else None,
@@ -1155,7 +1181,6 @@ with t[5]:
     # The evidence, under the answer. Same order the question is asked in:
     # here is the basket, and here is how much of its score the same recipe
     # kept when it could not see where it was going.
-    walk = st.session_state.get("pf_walk") if same else None
     if walk:
         UI.md(R.backtest(walk, shown_win))
 

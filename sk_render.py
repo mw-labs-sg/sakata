@@ -1041,7 +1041,7 @@ def backtest(bt: dict, per: str) -> str:
         cost) if x)
 
     card = ('<div class="plot">'
-            '<div class="ctitle"><b>What survived out of sample</b>'
+            '<div class="ctitle"><b>Walk-forward — what survived out of sample</b>'
             f'{verdict}</div>'
             f'<div class="cstats" style="color:{mute}">{esc(sub)}</div>'
             + '<div class="scroll"><table>'
@@ -1170,7 +1170,7 @@ def backtest(bt: dict, per: str) -> str:
 # ------------------------------------------------------------- Portfolio
 def portfolio(res: dict, per: str, pl: dict = None,
               capital: float = 1_000_000, vol_target=15.0,
-              hold: dict = None, turn: dict = None) -> str:
+              hold: dict = None, turn: dict = None, mode: str = "") -> str:
     """Weights, the size they imply, and what that size actually fills.
 
     All the arithmetic arrives done: sk_portfolio.plan holds the weights,
@@ -1496,7 +1496,13 @@ def portfolio(res: dict, per: str, pl: dict = None,
     # The notes that used to trail each label are one line under the title
     # instead. Wrapping the label column to three lines pushed the numbers off
     # the right edge, and half a page is still not room for both.
+    # `mode` leads, because it is the one fact about this card that the card
+    # cannot show: the same weights, the same three rows and the same curve
+    # come out of a full-period fit and out of a walk, and only the evidence
+    # underneath is different. A reader who scrolled past that had no way to
+    # tell which run they were looking at.
     sub = " · ".join(x for x in (
+        mode,
         "ideal vs whole contracts vs equal weight",
         (f'held forward fit on {hold["trainBars"]} bars through '
          f'{hold["testBars"]}') if hold else "", turned) if x)
