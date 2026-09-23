@@ -938,6 +938,202 @@ def _outrights(d: dict, per: str, t: dict, sort: str = DEFAULT_SORT) -> str:
             + table(head, body, _wincols(len(wins))))
 
 
+# -------------------------------------------------------------- Backtest
+def backtest(bt: dict, per: str) -> str:
+    """The walk-forward: what the search kept once it stopped seeing the answer.
+
+    Three blocks, in the order the question gets asked. What it scored out of
+    sample, against what it scored in sample and against equal weight; the
+    curve that produced those, which was never fitted to a bar it is drawn on;
+    then the two tables that say why — which legs kept being picked, and what
+    each refit actually held.
+    """
+    t = _tok()
+    ink, mute = t.get("ink", "#0d1418"), t.get("mute", "#66727b")
+    faint = t.get("faint", "#97a2ab")
+    teal, amber = t.get("teal", "#0d8f83"), t.get("amber", "#96701c")
+    pos = t.get("pos", "#0a7c66")
+
+    if not bt:
+        return ('<div class="skel">No walk-forward yet — set the cadence and '
+                "press Optimize (WF).</div>")
+    if bt.get("short"):
+        # Not an error. An annual rebalance over a fortnight is a question
+        # with no answer in it, and naming the two numbers that disagree is
+        # more use than a spinner that stops.
+        return ('<div class="skel">'
+                f'{esc(bt["cadence"])} leaves {bt.get("segments", 0)} '
+                f'segment(s) in a {bt.get("bars", 0)}-bar window — too few to '
+                "walk. Pick a shorter cadence or a longer time frame.</div>")
+
+    oos, ins, eq = bt["oos"], bt.get("inSample"), bt.get("equal")
+
+    def statrow(label, d, strong=False, note_="", wash=""):
+        if not d:
+            return ""
+        cells = "".join(
+            f'<td style="{wash}color:{col or ink};'
+            f'font-weight:{700 if strong else 600}">{v}</td>'
+            for v, col in (
+                (num(d.get("erAdj"), 2), None), (num(d.get("roa"), 1), None),
+                (num(d.get("sharpe"), 2), None),
+                (f'{d.get("win", 0):.0f}', None), (num(d.get("vol"), 1), None),
+                (f'{"+" if (d.get("tot") or 0) >= 0 else ""}'
+                 f'{num(d.get("tot"), 1)}',
+                 pos if (d.get("tot") or 0) >= 0 else amber),
+                (num(d.get("mdd"), 1), amber)))
+        tail = (f'<span class="nm" style="color:{mute}"> {esc(note_)}</span>'
+                if note_ else "")
+        return (f'<tr><td class="l" style="{wash}">{esc(label)}{tail}</td>'
+                f'{cells}</tr>')
+
+    # The headline is the DECAY, not the level. A walk-forward ROA of 3 says
+    # nothing on its own; 3 against an in-sample 15 says the recipe gave back
+    # four fifths of what it promised, and that is a number you can act on.
+    dec = bt.get("decay")
+    obj = bt.get("objective", "")
+    if dec is None:
+        verdict = (f'<span style="color:{faint}">{esc(per)} · '
+                   f'{bt["bars"]} bars out of sample</span>')
+    else:
+        kept = 100 + dec
+        good = dec >= -35
+        vcol = pos if good else amber
+        verdict = (f'<span style="padding:2px 8px;border-radius:3px;'
+                   f'background:{vcol}22;color:{vcol};font-weight:700;'
+                   f'font-size:10.5px;letter-spacing:.04em;white-space:nowrap">'
+                   f'KEEPS {kept:.0f}% OF ITS IN-SAMPLE '
+                   f'{esc(obj.upper())}</span>')
+
+    # Out of sample first and washed, because it is the only row here that was
+    # not fitted to the bars it is scored on. The two beneath it are what it
+    # is read against, and both of them saw the answer.
+    scored = (statrow("Walk-forward", oos, True,
+                      f'{bt["nSegments"]} refits, out of sample',
+                      wash=f"background:{pos}1f;")
+              + statrow("In-sample", ins, False, "one fit, whole window")
+              + statrow("Equal weight", eq, False,
+                        "every leg ever held, carried throughout"))
+    sub = " · ".join(x for x in (
+        f'{bt["cadence"]} rebalance',
+        f'{bt["bars"]} bars {bt["start"]} → {bt["end"]}',
+        f'warm-up {bt["warmup"]} bars',
+        (f'{bt["avgTurnover"]:.0f}% average turnover per refit'
+         if bt.get("avgTurnover") is not None else "")) if x)
+
+    card = ('<div class="plot">'
+            '<div class="ctitle"><b>What survived out of sample</b>'
+            f'{verdict}</div>'
+            f'<div class="cstats" style="color:{mute}">{esc(sub)}</div>'
+            + '<div class="scroll"><table>'
+              '<thead><tr><th class="l"></th><th>ER adj</th><th>ROA</th>'
+              '<th>Sharpe</th><th>Win%</th><th>Vol%</th><th>Tot%</th>'
+              '<th>MDD%</th></tr></thead>'
+              f'<tbody>{scored}</tbody></table></div></div>')
+
+    curve, eqc = bt.get("curve"), bt.get("equalCurve")
+    plot = ""
+    if curve and curve.get("v"):
+        series = []
+        if eqc and eqc.get("v"):
+            series.append({"k": "equal weight, same legs", "v": eqc["v"],
+                           "c": ink, "w": 1.8, "dash": "0.1 5",
+                           "cap": "round", "o": 0.55})
+        series.append({"k": "walk-forward (out of sample)", "v": curve["v"],
+                       "c": teal, "w": 2.6})
+        legend = "".join(
+            f'<span class="key" style="display:inline-flex;align-items:center;'
+            f'gap:6px"><i style="display:inline-block;width:18px;height:0;'
+            f'border-top:{"2px dotted" if sr.get("dash") else "3px solid"} '
+            f'{sr["c"]};opacity:{sr.get("o", 1)}"></i>'
+            f'<span style="color:{sr["c"]};opacity:{sr.get("o", 1)};'
+            f'font-weight:600">{esc(sr["k"])}</span></span>'
+            for sr in reversed(series))
+        cend = curve["v"][-1]
+        eend = eqc["v"][-1] if (eqc and eqc.get("v")) else None
+        # Both rebased to 100 at the first bar the walk traded, so the
+        # difference of the end points is the gap in points. Unlevered, like
+        # every number on this tab — nothing here is sized to an account.
+        gap = (f'ends at {cend:,.1f}'
+               + (f' vs {eend:,.1f} equal — {cend - eend:+,.1f} points'
+                  if eend is not None else ""))
+        plotsub = " · ".join(x for x in (
+            f'{per} · {bt["cadence"]}',
+            (f'{obj} {num(bt.get("fitness"), 2)} out of sample vs '
+             f'{num(bt.get("inSampleFitness"), 2)} in'
+             if bt.get("fitness") is not None else ""),
+            gap) if x)
+        plot = ('<div class="plot">'
+                '<div class="ctitle"><b>The curve it never saw</b></div>'
+                f'<div class="clegend">{legend}</div>'
+                f'<div class="cstats" style="color:{mute}">{esc(plotsub)}'
+                '</div>'
+                + CH.line_chart(curve["t"], series, None, 620, 300, 1)
+                + "</div>")
+
+    # Which legs kept being chosen. This is the table the tab was asked for: a
+    # leg the search picks at every refit is a standing answer, one it picks
+    # once in nine is the window talking. Hit rate leads because it is the
+    # column that separates those two; the average weight follows to say
+    # whether the persistence was worth carrying.
+    stab = ""
+    for r in bt.get("stability", []):
+        hit = r["hit"]
+        hcol = ink if hit >= 75 else (mute if hit >= 40 else faint)
+        scol = {"long": teal, "short": amber}.get(r["side"], mute)
+        stab += (f'<tr><td class="l">{swatch(U.SECTOR.get(r["code"], ""))}'
+                 f'{esc(r["code"])} '
+                 f'<span class="nm">{esc(U.NAME.get(r["code"], ""))}</span>'
+                 f'</td>'
+                 f'<td class="l" style="color:{scol};font-weight:600">'
+                 f'{esc(r["side"])}</td>'
+                 f'<td style="color:{hcol};font-weight:700">{hit}%</td>'
+                 f'<td class="dim">{r["n"]} of {r["of"]}</td>'
+                 f'<td style="color:{ink};font-weight:600">'
+                 f'{r["avgW"]:+.1f}%</td></tr>')
+    stability = ""
+    if stab:
+        stability = (eyebrow("Legs That Kept Being Picked — hit rate across "
+                             "refits")
+                     + table('<th class="l">Instrument</th>'
+                             '<th class="l">Side</th>'
+                             '<th title="Share of refits that chose this leg">'
+                             'Hit%</th><th>Refits</th>'
+                             '<th title="Mean signed weight over the refits '
+                             'that held it">Avg weight</th>', stab))
+
+    # Every refit, in order. Turnover is the column to read down: a basket
+    # replaced wholesale at every rebalance is a window too short for its
+    # objective, whatever the score at the top says.
+    segs = ""
+    for r in bt.get("segments", []):
+        tv = r.get("turnover")
+        tcol = faint if tv is None else (amber if tv >= 60 else mute)
+        segs += (f'<tr><td class="l faint">{r["n"]}</td>'
+                 f'<td class="l dim">{esc(r["from"])} → {esc(r["to"])}</td>'
+                 f'<td class="faint">{r["trainBars"]}</td>'
+                 f'<td class="faint">{r["testBars"]}</td>'
+                 + pct(r["tot"], 2)
+                 + f'<td class="dim">{r["legs"]}</td>'
+                 + (f'<td style="color:{tcol}">{tv:.0f}%</td>'
+                    if tv is not None else '<td class="faint">—</td>')
+                 + f'<td class="l dim">{esc(r["label"])}</td></tr>')
+    refits = ""
+    if segs:
+        refits = (eyebrow(f'Every Refit — {esc(bt["cadence"])}, '
+                          f'{bt["nSegments"]} in {esc(per)}')
+                  + table('<th class="l">#</th><th class="l">Held</th>'
+                          '<th title="Bars the search saw before this fit">'
+                          'Train</th>'
+                          '<th title="Bars this basket was held for">Test</th>'
+                          '<th>Tot%</th><th>Legs</th>'
+                          '<th title="Weight changed since the previous '
+                          'refit; half the sum of absolute changes">Turn%</th>'
+                          '<th class="l">Top legs</th>', segs))
+
+    return f'<div class="grid2">{card}{plot}</div>' + stability + refits
+
+
 # ------------------------------------------------------------- Portfolio
 def portfolio(res: dict, per: str, pl: dict = None,
               capital: float = 1_000_000, vol_target=15.0,

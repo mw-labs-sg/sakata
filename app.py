@@ -26,6 +26,7 @@ if sys.version_info < (3, 12):
 import streamlit as st
 
 import sk_amp as AMP
+import sk_backtest as BT
 import sk_board as BOARD
 import sk_calendar as CAL
 import sk_curve as CURVE
@@ -92,6 +93,12 @@ _DEFAULTS = {
     "sp_vol": "30%", "sp_lev": "1\u00d7", "sp_capital_txt": "1,000,000",
     "pf_legs": 6, "pf_cap": "50%", "pf_vol": "30%", "pf_lev": "1\u00d7",
     "pf_capital_txt": "1,000,000",
+    # 240D over Monthly, not the first option in each list. Intraday is
+    # 81 bars of 15-minute prints, so a monthly rebalance has nothing
+    # to rebalance and the tab would open on a refusal. This pair is
+    # the shortest one that walks: nine or ten refits, about a minute.
+    "bt_window": "240D", "bt_cadence": "Monthly",
+    "bt_legs": 6, "bt_cap": "50%",
 }
 for _k, _v in _DEFAULTS.items():
     st.session_state.setdefault(_k, _v)
@@ -281,11 +288,11 @@ PF_SEARCH_LABELS = ("Time frame", "Objective", "Max legs", "Weight cap",
                     "Direction", "Risk cap")
 
 
-def _pf_arm() -> None:
-    """Snapshot the search controls at the instant Optimize is pressed.
+def _arm(keys: tuple, store: str):
+    """Snapshot a tab's search controls at the instant its button is pressed.
 
-    Optimize sits at the top of the tab and its dropdowns underneath, so the
-    run used to read whatever those widgets returned a couple of hundred
+    The button sits at the top of its tab and the dropdowns underneath, so
+    the run used to read whatever those widgets returned a couple of hundred
     lines later — after a script that renders ten other tabs on the way. Cut
     that script short before it arrives, which a Refresh on any tab above
     does by calling st.rerun(), and the Portfolio widgets never re-register;
@@ -299,17 +306,31 @@ def _pf_arm() -> None:
     — so what is captured here is what was under the cursor.
 
     Written back as well as read: a callback is the one place a widget's own
-    state may be set, and doing it here marks the six keys as script-owned
+    state may be set, and doing it here marks those keys as script-owned
     before the seeding loop can setdefault over a missing one. That is also
     what keeps the controls showing the settings the answer below them was
     computed from, instead of quietly disagreeing with it.
     """
-    snap = {}
-    for k in PF_SEARCH_KEYS:
-        if k in st.session_state:
-            snap[k] = st.session_state[k]
-            st.session_state[k] = snap[k]
-    st.session_state["pf_armed"] = snap
+    def go() -> None:
+        snap = {}
+        for k in keys:
+            if k in st.session_state:
+                snap[k] = st.session_state[k]
+                st.session_state[k] = snap[k]
+        st.session_state[store] = snap
+    return go
+
+
+_pf_arm = _arm(PF_SEARCH_KEYS, "pf_armed")
+
+# The walk-forward's seven, in the order it takes them. Cadence sits second
+# because it is the control that separates this tab from Portfolio, and the
+# one a reader changes most.
+BT_KEYS = ("bt_window", "bt_cadence", "bt_obj", "bt_legs", "bt_cap",
+           "bt_side", "bt_risk")
+BT_LABELS = ("Time frame", "Rebalance", "Objective", "Max legs",
+             "Weight cap", "Direction", "Risk cap")
+_bt_arm = _arm(BT_KEYS, "bt_armed")
 
 CAPITAL_MIN, CAPITAL_MAX = 1_000, 1_000_000_000
 
@@ -649,8 +670,10 @@ def source(label: str, *caches, key: str = "", action: str = "",
 # analytical tab that looks at a single instrument on its own.
 # Uppercased here rather than in CSS: which element holds the label has moved
 # between Streamlit versions, so a selector is a thing that breaks on upgrade.
+# Backtest follows Portfolio because it is that tab with the answer covered
+# up: same search, same objectives, scored on bars the weights never saw.
 TABS = ["Board", "News", "Calendar", "Margin Vol", "Trends", "Portfolio",
-        "Structure", "Curve", "FOMC", "Knowledge", "Briefing"]
+        "Backtest", "Structure", "Curve", "FOMC", "Knowledge", "Briefing"]
 t = st.tabs([x.upper() for x in TABS])
 
 # ----------------------------------------------------------------- Board
@@ -821,8 +844,109 @@ with t[4]:
         if st.session_state.get("sp_auto"):
             autorefresh(stamp, TTL_FAST)
 
-# ------------------------------------------------------------- Structure
+# -------------------------------------------------------------- Backtest
 with t[6]:
+    # Same shape as Portfolio, and deliberately: this tab asks that tab's
+    # question again with the answer covered up, so the two sets of controls
+    # have to be comparable at a glance or the comparison is not one.
+    bgo = source("Yahoo · 15m, 1H, 4H, 1D", *PRICE_CACHES, key="backtest",
+                 action="Optimize (WF)", on_click=_bt_arm)
+    b1 = st.columns(5)
+    bt_win = b1[0].selectbox("Time frame", PF_WINDOWS, key="bt_window",
+                             help="The span the walk runs across. It is not a"
+                                  " lookback — the search refits on everything"
+                                  " before each rebalance, so a longer frame"
+                                  " is more refits, not a longer memory.")
+    bt_cad = b1[1].selectbox("Rebalance", list(BT.REBALANCE), key="bt_cadence",
+                             help="How often the basket is refitted and"
+                                  " re-held. No Rebalance fits once after the"
+                                  " warm-up and holds to the end, which is the"
+                                  " control the other five are read against."
+                                  " Every refit is a full search, so this is"
+                                  " also the cost dial.")
+    bt_obj = b1[2].selectbox("Objective", PF.OBJECTIVES, key="bt_obj",
+                             help="What each refit maximises, and the number"
+                                  " the walk is scored on. This is the control"
+                                  " the tab exists to settle: the objective"
+                                  " with the best in-sample score is often not"
+                                  " the one that keeps most of it.")
+    bt_legs = b1[3].selectbox("Max legs", list(range(2, 11)), key="bt_legs",
+                              help="Ceiling on legs per refit. More legs fit"
+                                   " the training window better and usually"
+                                   " keep less of it.")
+    bt_cap = b1[4].selectbox("Weight cap", ["25%", "35%", "50%", "100%"],
+                             key="bt_cap",
+                             help="Most any one instrument may carry at a"
+                                  " refit. With the leg count, the only"
+                                  " defence against a search fitting one"
+                                  " stretch of the window.")
+
+    b2 = st.columns(5)
+    bt_risk = b2[0].selectbox("Risk cap", ["None", "60%", "50%", "40%", "30%"],
+                              key="bt_risk",
+                              help="Most of the portfolio's variance any one"
+                                   " leg may carry at a refit.")
+    bt_side = b2[1].selectbox("Direction", PF.SIDES, key="bt_side",
+                              help="Which way the legs may point at every"
+                                   " refit.")
+
+    bt_args = (bt_win, bt_cad, bt_obj, bt_legs, bt_cap, bt_side, bt_risk)
+    # The cost, before the click rather than during it. A Weekly walk over
+    # 240D is fifty full searches, and a reader who has not been told that
+    # reasonably concludes the tab has hung.
+    bclose, bfine = portfolio_frames(bt_win)
+    if bclose is None:
+        st.error("No price history for this time frame.")
+    else:
+        nseg = len(BT.segments(bclose.index, bt_cad))
+        if not nseg:
+            st.caption(f"{bt_cad} leaves no complete segment in "
+                       f"{len(bclose)} bars of {bt_win} — pick a shorter "
+                       "cadence or a longer time frame.")
+        else:
+            # Measured at roughly seven seconds a search on nineteen
+            # instruments, and the early fits are cheaper because they see
+            # fewer bars, so this is an over-estimate on purpose.
+            st.caption(f"{bt_cad} over {bt_win}: {nseg} refits plus one "
+                       f"whole-window fit — about "
+                       f"{max(1, round((nseg + 1) * 5 / 60)):d} min.")
+
+        if bgo:
+            armed = {**dict(zip(BT_KEYS, bt_args)),
+                     **(st.session_state.get("bt_armed") or {})}
+            bt_args = tuple(armed[k] for k in BT_KEYS)
+            (bt_win, bt_cad, bt_obj, bt_legs,
+             bt_cap, bt_side, bt_risk) = bt_args
+            bclose, bfine = portfolio_frames(bt_win)
+            bar = st.progress(0.0, text="walking forward…")
+
+            def _btick(done, total, _best=None):
+                bar.progress(min(done / max(total, 1), 1.0),
+                             text=(f"walking forward… refit {done} of "
+                                   f"{total - 1}" if done < total - 1
+                                   else "fitting the whole window…"))
+
+            brc = 0.0 if bt_risk == "None" else int(bt_risk.rstrip("%")) / 100
+            st.session_state["bt_result"] = BT.walk_forward(
+                bclose, bfine, bt_obj, bt_cad, progress=_btick,
+                max_legs=bt_legs, max_weight=int(bt_cap.rstrip("%")) / 100,
+                side=bt_side, risk_cap=brc)
+            st.session_state["bt_for"] = bt_args
+            bar.empty()
+
+        bres = st.session_state.get("bt_result")
+        if bres and st.session_state.get("bt_for") != bt_args:
+            ran = st.session_state.get("bt_for") or ()
+            moved = [f"{lab} {was} → {now}"
+                     for lab, was, now in zip(BT_LABELS, ran, bt_args)
+                     if was != now]
+            st.caption("Controls changed since this ran — press Optimize (WF) "
+                       "again." + ("  ·  " + ", ".join(moved) if moved else ""))
+        shown = (st.session_state.get("bt_for") or bt_args)[0]
+        UI.md(R.backtest(bres or {}, shown))
+
+# ------------------------------------------------------------- Structure
+with t[7]:
     # by_bar belongs in this list. Without it, clearing technical_grid and
     # prices left by_bar's 15-minute entry intact, so the grid was rebuilt from
     # byte-identical bars and Refresh fetched nothing — while Board's Refresh
@@ -1079,7 +1203,7 @@ with t[5]:
 
 
 # ----------------------------------------------------------------- Curve
-with t[7]:
+with t[8]:
     source("CME settlements", curve_data, key="curve")
     cd = curve_data()
     codes = list(cd.get("curves", {}))
@@ -1092,12 +1216,12 @@ with t[7]:
         UI.md(R.curve(cd, code))
 
 # ------------------------------------------------------------------ FOMC
-with t[8]:
+with t[9]:
     source("CME 30-Day Fed Funds settlements", fomc_data, key="fomc")
     UI.md(R.fomc(fomc_data()))
 
 # ------------------------------------------------------------- Knowledge
-with t[9]:
+with t[10]:
     source("Hand-maintained in sk_knowledge.py · no fetch")
     kc = st.columns(5)
     grp = kc[0].selectbox("Group", ["All", "Financials", "Commodities"],
@@ -1113,7 +1237,7 @@ with t[9]:
     UI.md(R.knowledge(grp, last_kn))
 
 # --------------------------------------------------------------- Briefing
-with t[10]:
+with t[11]:
     UI.md(UI.note(
         "Build one provider-neutral market snapshot for ChatGPT, Claude or "
         "another LLM. <b>Markdown</b> is the recommended attachment; JSON is "

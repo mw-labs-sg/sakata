@@ -2,7 +2,7 @@
 
 ## FILES
 
-app.py — Streamlit terminal; ten tabs, cached data functions, refresh/staleness shell | imports: sk_amp, sk_board, sk_calendar, sk_curve, sk_export, sk_knowledge, sk_margins, sk_portfolio, sk_render, sk_sources, sk_spreads, sk_technical, sk_ui, sk_universe | called by: —
+app.py — Streamlit terminal; twelve tabs, cached data functions, refresh/staleness shell | imports: sk_amp, sk_backtest, sk_board, sk_calendar, sk_curve, sk_export, sk_knowledge, sk_margins, sk_portfolio, sk_render, sk_sources, sk_spreads, sk_technical, sk_ui, sk_universe | called by: —
 
 build.py — CI build of the static site; fetches once, writes every JSON payload | imports: sk_amp, sk_board, sk_curve, sk_knowledge, sk_margins, sk_sources, sk_spreads, sk_technical, sk_universe | called by: —
 
@@ -13,6 +13,8 @@ diag_margins.py — Streamlit diagnostic for an empty Margins tab | imports: sk_
 sakata_stats.py — spread and outright statistics; pure numpy/pandas | imports: — | called by: sk_portfolio, sk_spreads
 
 sk_amp.py — scrapes AMP margin tables | imports: sk_universe | called by: app, build, pull
+
+sk_backtest.py — walk-forward over the Portfolio search: refit on a calendar cadence, hold out of sample, chain the segments | imports: sakata_stats, sk_portfolio | called by: app
 
 sk_board.py — Board tab data: last price and the calendar-period ladder | imports: sk_fmt, sk_universe | called by: app, build
 
@@ -30,7 +32,7 @@ sk_knowledge.py — hand-maintained per-contract notes; no fetch | imports: — 
 
 sk_margins.py — margin vs notional, realised vol, vol percentiles, multi-bar vol grid | imports: sk_fmt, sk_universe | called by: app, build, pull, sk_render
 
-sk_portfolio.py — basket weights by search; plan, turnover, hold stats | imports: sakata_stats | called by: app
+sk_portfolio.py — basket weights by search; plan, turnover, hold stats, stats_of | imports: sakata_stats | called by: app, sk_backtest
 
 sk_render.py — HTML for every tab | imports: sk_charts, sk_knowledge, sk_margins, sk_ui, sk_universe | called by: app
 
@@ -51,11 +53,13 @@ sk_universe.py — instrument list, sectors, groups, multipliers, CME product id
 
 1. `sk_universe` defines the 19 instruments; every module derives its symbol list from it.
 2. `sk_sources.fetch_ohlc` pulls 15m/60d, 1h/730d, 1d/10y in batched requests; 4h and 1wk are resampled from those.
-3. Tab modules (`sk_board`, `sk_margins`, `sk_spreads`, `sk_technical`, `sk_curve`, `sk_calendar`, `sk_portfolio`) turn frames into plain dicts.
+3. Tab modules (`sk_board`, `sk_margins`, `sk_spreads`, `sk_technical`, `sk_curve`, `sk_calendar`, `sk_portfolio`, `sk_backtest`) turn frames into plain dicts.
 4. `sk_render` turns those dicts into HTML using `sk_ui` primitives and `sk_charts` SVG.
 5. `app.py` wraps steps 2–4 in `st.cache_data` and pipes the HTML through `UI.md`; `build.py` writes the same dicts to JSON for the static site.
 
 ## TOUCH GROUPS
+
+Portfolio and its walk-forward: sk_portfolio.py, sk_backtest.py, sk_render.py, app.py — the two tabs run the same search, so a change to `optimise` or to `_Scorer.stats` moves both. `stats_of` exists so the walk-forward's chained series is scored by the same definitions.
 
 Margins and vol grid: sk_margins.py, sk_render.py, app.py
 Universe changes: sk_universe.py, sk_sources.py, sk_amp.py, build.py

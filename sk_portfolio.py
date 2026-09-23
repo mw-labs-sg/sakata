@@ -730,6 +730,42 @@ def hold_stats(closes, fine, w, lev: float = 1.0,
     return sc.stats(arr * lev)
 
 
+def stats_of(r, index, rf=None) -> dict:
+    """The seven numbers _Scorer.stats reports, for a return series that no
+    single weight vector produced.
+
+    The walk-forward chains a DIFFERENT basket's returns into every segment,
+    so there is no vector to hand _Scorer — but the row it makes sits in the
+    same table as the rows there are, and two definitions of Sharpe on one
+    table is how a tab starts lying quietly. Same annualiser measured off the
+    index, same observed-gap mask, same 1.0-anchored drawdown.
+
+    `rf` is the finer series to measure the hole on, exactly as _Scorer takes
+    a `fine` frame: a portfolio priced only at daily closes steps over the
+    same intraday holes a single spread does.
+    """
+    r = np.asarray(r, dtype=float)
+    if r.size == 0:
+        return {}
+    obs = ss._observed(index) if index is not None else None
+    ann = ss.ann_factor_for(index) if index is not None else 252.0
+    er = _efficiency(r, obs)
+    fine = np.asarray(rf, dtype=float) if rf is not None and len(rf) else r
+    mdd = _drawdown(fine)
+    tot = float(np.prod(1 + r) - 1) * 100
+    sd = float(r.std())
+    return {
+        "er": round(er, 3), "erAdj": round(er * len(r) ** 0.5, 2),
+        "roa": (None if abs(mdd) < MIN_MDD else
+                round(float(np.clip(tot / abs(mdd), -MAX_ROA, MAX_ROA)), 1)),
+        "sharpe": (0.0 if sd == 0 else
+                   round(float(r.mean() / sd * ann ** 0.5), 2)),
+        "tot": round(tot, 1), "mdd": round(mdd, 1),
+        "vol": round(sd * ann ** 0.5 * 100, 1),
+        "win": round(float((r > 0).mean() * 100)),
+    }
+
+
 def turnover(now: list, before: list) -> dict:
     """How much of the basket changed since the last run.
 
