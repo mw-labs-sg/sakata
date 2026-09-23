@@ -949,12 +949,19 @@ with t[5]:
     go = source("Yahoo · 15m, 1H, 4H, 1D", *PRICE_CACHES, key="portfolio",
                 action=("Optimize" if _cad == PF_FULL else "Optimize (WF)"),
                 on_click=_pf_arm)
-    # Two rows of five, equal widths, every control the same shape of box.
-    # The Shorts checkbox used to sit mid-row with no box around it, which
-    # pulled its label half a line up and left the rows out of register. A
-    # direction belongs in a dropdown anyway: long-and-short, long-only and
-    # short-only are three answers, not a yes and a no.
-    r1 = st.columns(5)
+    # Four a row, not five. Fourteen controls across fives put the last
+    # column past the right edge of a 1366-wide window — Max legs and Capital
+    # were clipped, and a text box with its thousands separator cut off is
+    # the one control on the tab you cannot read around. Four is also the
+    # grouping: what to run, what to search on, how large to draw it, what it
+    # costs to send.
+    #
+    # Equal widths, every control the same shape of box. The Shorts checkbox
+    # used to sit mid-row with no box around it, which pulled its label half a
+    # line up and left the rows out of register. A direction belongs in a
+    # dropdown anyway: long-and-short, long-only and short-only are three
+    # answers, not a yes and a no.
+    r1 = st.columns(4)
     pf_win = r1[0].selectbox("Time frame", PF_WINDOWS, key="pf_window")
     # Second, because it is the control that decides what the other nine
     # mean: on Full period they describe one fit, on a cadence they describe
@@ -1019,15 +1026,15 @@ with t[5]:
              " Every walk in a sweep shares one fit cache, so a grid costs"
              " less than the same walks run one at a time — but not much"
              " less, and the line underneath prices it.")
-    pf_legs = r1[4].selectbox("Max legs", list(range(2, 11)),
+    r2 = st.columns(4)
+    pf_legs = r2[1].selectbox("Max legs", list(range(2, 11)),
                               key="pf_legs")
-    r1b = st.columns(5)
-    pf_cap = r1b[0].selectbox("Weight cap", ["25%", "35%", "50%", "100%"],
+    pf_cap = r2[2].selectbox("Weight cap", ["25%", "35%", "50%", "100%"],
                              key="pf_cap",
                              help="Most any one instrument may carry. The cap "
                                   "and the leg count are the only defence "
                                   "against a search fitting one window.")
-    pf_risk = r1b[1].selectbox("Risk cap", ["None", "60%", "50%", "40%", "30%"],
+    pf_risk = r2[3].selectbox("Risk cap", ["None", "60%", "50%", "40%", "30%"],
                               key="pf_risk",
                               help="Most of the portfolio's VARIANCE any one"
                                    " leg may carry. The weight cap limits the"
@@ -1035,25 +1042,25 @@ with t[5]:
                                    " which is a different thing — a basket can"
                                    " hold a tenth of its money in ether and"
                                    " half its variance there.")
-    pf_side = r1b[2].selectbox("Direction", PF.SIDES, key="pf_side",
+    r3 = st.columns(4)
+    pf_side = r3[0].selectbox("Direction", PF.SIDES, key="pf_side",
                               help="Which way the legs may point. Long only"
                                    " and short only are one-sided books; long"
                                    " and short lets the search hedge.")
 
-    pf_obj = r1b[3].selectbox("Objective", PF.OBJECTIVES, key="pf_obj",
+    pf_obj = r2[0].selectbox("Objective", PF.OBJECTIVES, key="pf_obj",
                              help="What the search maximises. ROA and ER (Adj)"
                                   " depend on the order of the returns, so"
                                   " weights are searched, not solved.")
     # Capital, vol target and leverage are not search arguments: the weights
     # are a shape and these only decide how large it is drawn, so they take
     # effect without a re-run.
-    pf_cap_usd = _dollars(r1b[4].text_input(
+    pf_cap_usd = _dollars(r3[1].text_input(
         "Capital", key="pf_capital_txt", on_change=_capital(),
         help="What the weights are sized against. Notional and contracts scale"
              " with it; the ratios do not. Below about $500k these baskets"
              " stop being fillable — watch the Miss column."))
-    r2 = st.columns(5)
-    pf_vol = r2[0].selectbox("Vol target",
+    pf_vol = r3[2].selectbox("Vol target",
                              ["5%", "10%", "15%", "20%", "30%", "None"],
                              key="pf_vol",
                              help="Annualised volatility to hold the basket"
@@ -1061,20 +1068,21 @@ with t[5]:
                                   " own volatility, so a noisy basket is held"
                                   " below 1×. Pick None to size on leverage"
                                   " instead and hold the cap.")
-    pf_lev = r2[1].selectbox("Max leverage", ["1×", "2×", "3×", "5×", "None"],
+    pf_lev = r3[3].selectbox("Max leverage", ["1×", "2×", "3×", "5×", "None"],
                              key="pf_lev",
                              help="Ceiling on gross notional over capital. A"
                                   " quiet basket needs leverage to reach a vol"
                                   " target; this is where you say how much of"
                                   " that you will actually take.")
-    pf_fee = r2[2].selectbox("Fees", list(U.FEE_TIERS), key="pf_fee",
+    r4 = st.columns(4)
+    pf_fee = r4[0].selectbox("Fees", list(U.FEE_TIERS), key="pf_fee",
                              help="Round-turn commission per contract, scaled"
                                   " from a retail schedule. It decides between"
                                   " fills that are equally close to the"
                                   " target, so it changes the tickets rather"
                                   " than the weights.")
 
-    pf_size = r2[3].selectbox("Contracts",
+    pf_size = r4[1].selectbox("Contracts",
                               ["Standard + Small", "Standard Only"],
                               key="pf_size",
                               help="Whether micros and minis may be used to"
