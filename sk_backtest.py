@@ -179,6 +179,76 @@ def cost_estimate(index, cadence: str, lookback: str = ANCHORED) -> tuple:
     return len(segs), sum(REFIT_FLAT + REFIT_PER_BAR * t for t in trains)
 
 
+def sweep_plan(index, cadences, lookbacks) -> tuple:
+    """(cells, unique fits, seconds) for a grid that has not run yet.
+
+    Counts the fits the way the run will: one per distinct (lookback, bar),
+    because the cache collapses the rest. Without that the estimate would be
+    a sum of walks and a sweep would look more expensive than it is.
+    """
+    want, cells = set(), 0
+    for cad in cadences:
+        for lb in lookbacks:
+            segs = segments(index, cad, lb)
+            if len(segs) < MIN_SEGMENTS:
+                continue
+            cells += 1
+            for a, fit_upto, _ in segs:
+                want.add((lb, fit_upto, fit_upto - a))
+    if not cells:
+        return 0, 0, 0.0
+    secs = sum(REFIT_FLAT + REFIT_PER_BAR * t for _, _, t in want)
+    # The whole-window fit is shared by every cell, so it is paid once.
+    secs += REFIT_FLAT + REFIT_PER_BAR * len(index)
+    return cells, len(want) + 1, secs
+
+
+def sweep(closes, fine, objective: str = "ROA", cadences=(), lookbacks=(),
+          progress=None, **kw) -> dict:
+    """Walk every (cadence, lookback) pair and rank them out of sample.
+
+    One shared fit cache across the grid, which is where the saving is: the
+    coarse cadences rebalance on bars the fine ones have already fitted at
+    the same lookback, and the whole-window fit is common to all of them.
+
+    The winner keeps its full walk — curve, refits, leg stability — because
+    it has already been computed and a grid that made you re-run the best
+    cell to see it would be asking for the same minutes twice.
+    """
+    cache, grid, best, best_v = {}, [], None, None
+    combos = [(c, lb) for c in cadences for lb in lookbacks
+              if len(segments(closes.index, c, lb)) >= MIN_SEGMENTS]
+    if not combos:
+        return {}
+    okey = {"ROA": "roa", "ER (Adj)": "erAdj", "Sharpe": "sharpe"}.get(
+        objective, "roa")
+    for i, (cad, lb) in enumerate(combos):
+        if progress:
+            progress(i, len(combos), f"{cad} / {lb}")
+        r = walk_forward(closes, fine, objective, cad, lookback=lb,
+                         fit_cache=cache, **kw)
+        if not r or r.get("short") or not r.get("oos"):
+            continue
+        v = r["oos"].get(okey)
+        grid.append({
+            "cadence": cad, "lookback": lb, "n": r["nSegments"],
+            "fitness": v, "tot": r["oos"].get("tot"),
+            "mdd": r["oos"].get("mdd"), "sharpe": r["oos"].get("sharpe"),
+            "vol": r["oos"].get("vol"), "decay": r.get("decay"),
+            "fees": r.get("fees"), "turnover": r.get("avgTurnover"),
+        })
+        if v is not None and (best_v is None or v > best_v):
+            best, best_v = r, v
+    if not grid:
+        return {}
+    return {"grid": grid, "best": best, "okey": okey, "objective": objective,
+            "cadences": [c for c in cadences
+                         if any(g["cadence"] == c for g in grid)],
+            "lookbacks": [lb for lb in lookbacks
+                          if any(g["lookback"] == lb for g in grid)],
+            "fits": len(cache), "cells": len(grid)}
+
+
 def _fine_slice(fine, index, a: int, b: int):
     """The fine bars that fall inside closes positions [a, b).
 
@@ -245,7 +315,7 @@ def walk_forward(closes, fine, objective: str = "ROA",
                  capital: float = 1_000_000.0,
                  vol_target=30.0, max_lev=1.0, fees: dict = None,
                  fee_tier: float = 1.0, mult: dict = None,
-                 progress=None, **kw) -> dict:
+                 progress=None, fit_cache: dict = None, **kw) -> dict:
     """Refit at every rebalance, hold to the next, chain what was held.
 
     `kw` is passed straight to optimise — max_legs, max_weight, side,
@@ -287,7 +357,16 @@ def walk_forward(closes, fine, objective: str = "ROA",
                       & (fine.index <= train.index[-1])]
             if len(tf) < 5:
                 tf = None
-        res = PF.optimise(train, tf, objective, **kw)
+        # A fit is decided by the bars it sees and nothing else, so two walks
+        # that rebalance on the same bar with the same lookback want the same
+        # search. Across a sweep that is worth real minutes: the coarse
+        # cadences land on bars the fine ones already fitted.
+        ck = (lookback, fit_upto)
+        res = fit_cache.get(ck) if fit_cache is not None else None
+        if res is None:
+            res = PF.optimise(train, tf, objective, **kw)
+            if fit_cache is not None and res and res.get("w"):
+                fit_cache[ck] = res
         if not res or not res.get("w"):
             continue
         w = np.array(res["w"], dtype=float)
@@ -368,7 +447,12 @@ def walk_forward(closes, fine, objective: str = "ROA",
     # how much of its score to believe.
     if progress:
         progress(len(segs), total, None)
-    full = PF.optimise(closes, fine, objective, **kw)
+    fk = ("__full__", len(closes))
+    full = fit_cache.get(fk) if fit_cache is not None else None
+    if full is None:
+        full = PF.optimise(closes, fine, objective, **kw)
+        if fit_cache is not None and full:
+            fit_cache[fk] = full
     ins = None
     if full and full.get("stats"):
         flev = _leverage(full["stats"].get("vol") or 0.0, vol_target, max_lev)

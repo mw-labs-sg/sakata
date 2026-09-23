@@ -938,6 +938,106 @@ def _outrights(d: dict, per: str, t: dict, sort: str = DEFAULT_SORT) -> str:
             + table(head, body, _wincols(len(wins))))
 
 
+# ----------------------------------------------------------------- Sweep
+def sweep(sw: dict, per: str) -> str:
+    """Every rebalance and lookback tried, ranked on the objective.
+
+    Two views of one answer. The table ranks the combinations, because the
+    question is "which one" and a ranked list answers it directly. The matrix
+    under it — only when both axes were swept — says something the ranking
+    cannot: whether the winner sits on a ridge or on a spike. A best cell
+    surrounded by near-misses is a setting; one surrounded by bad cells is a
+    coincidence with a label on it.
+    """
+    if not sw or not sw.get("grid"):
+        return ""
+    t = _tok()
+    ink, mute = t.get("ink", "#0d1418"), t.get("mute", "#66727b")
+    faint = t.get("faint", "#97a2ab")
+    teal, amber = t.get("teal", "#0d8f83"), t.get("amber", "#96701c")
+    pos = t.get("pos", "#0a7c66")
+    obj = sw.get("objective", "")
+    rows = sorted(sw["grid"],
+                  key=lambda g: (g["fitness"] is not None, g["fitness"]),
+                  reverse=True)
+    top = rows[0]
+
+    body = ""
+    for i, g in enumerate(rows):
+        win = i == 0
+        wash = f"background:{pos}1f;" if win else ""
+        wt = 700 if win else 600
+        dec = g.get("decay")
+        dcol = pos if (dec is not None and dec >= -35) else amber
+        body += (f'<tr><td class="l" style="{wash}color:{ink};'
+                 f'font-weight:{wt}">{esc(g["cadence"])}</td>'
+                 f'<td class="l" style="{wash}color:{ink};'
+                 f'font-weight:{wt}">{esc(g["lookback"])}</td>'
+                 f'<td class="faint" style="{wash}">{g["n"]}</td>'
+                 f'<td style="{wash}color:{ink};font-weight:{wt}">'
+                 f'{num(g["fitness"], 2)}</td>'
+                 + pct(g.get("tot"), 1)
+                 + f'<td class="warn" style="{wash}">{num(g.get("mdd"), 1)}</td>'
+                 + f'<td class="dim" style="{wash}">{num(g.get("sharpe"), 2)}</td>'
+                 + f'<td class="dim" style="{wash}">{num(g.get("vol"), 1)}</td>'
+                 + (f'<td style="{wash}color:{mute}">{g["turnover"]:.0f}%</td>'
+                    if g.get("turnover") is not None
+                    else f'<td class="faint" style="{wash}">—</td>')
+                 + (f'<td class="dim" style="{wash}">{g["fees"]:,.0f}</td>'
+                    if g.get("fees") else
+                    f'<td class="faint" style="{wash}">—</td>')
+                 + (f'<td style="{wash}color:{dcol}">{dec:+.0f}%</td>'
+                    if dec is not None
+                    else f'<td class="faint" style="{wash}">—</td>')
+                 + "</tr>")
+
+    head = ('<th class="l">Rebalance</th><th class="l">Lookback</th>'
+            '<th title="Refits in this walk">Refits</th>'
+            f'<th>{esc(obj)}</th><th>Tot%</th><th>MDD%</th>'
+            '<th>Sharpe</th><th>Vol%</th>'
+            '<th title="Average weight changed per refit">Turn%</th>'
+            '<th title="Fees charged across the whole walk">Fees $</th>'
+            '<th title="Out-of-sample score against the same recipe\u2019s '
+            'in-sample score. Nearer zero is less decay.">Decay</th>')
+    out = (eyebrow(f'Rebalance \u00d7 Lookback \u2014 {sw["cells"]} walks on '
+                   f'{esc(per)}, ranked on {esc(obj)}',
+                   f'<span style="margin-left:auto;color:{mute};'
+                   f'font-size:11.5px;font-weight:500">best: '
+                   f'{esc(top["cadence"])} / {esc(top["lookback"])} at '
+                   f'{num(top["fitness"], 2)}</span>')
+           + table(head, body))
+
+    # The surface, when there is one. Rows are lookbacks and columns are
+    # cadences, which is the way round the controls sit on the tab.
+    cads, lbs = sw.get("cadences") or [], sw.get("lookbacks") or []
+    if len(cads) > 1 and len(lbs) > 1:
+        by = {(g["cadence"], g["lookback"]): g for g in sw["grid"]}
+        vals = [g["fitness"] for g in sw["grid"] if g["fitness"] is not None]
+        hi = max(vals) if vals else None
+        mhead = ('<th class="l">Lookback</th>'
+                 + "".join(f"<th>{esc(c)}</th>" for c in cads))
+        mbody = ""
+        for lb in lbs:
+            cells = ""
+            for c in cads:
+                g = by.get((c, lb))
+                if g is None or g["fitness"] is None:
+                    cells += '<td class="faint">—</td>'
+                    continue
+                best = hi is not None and abs(g["fitness"] - hi) < 1e-9
+                st_ = f"background:{pos}1f;" if best else ""
+                col = ink if best else mute
+                cells += (f'<td style="{st_}color:{col};'
+                          f'font-weight:{700 if best else 550}">'
+                          f'{num(g["fitness"], 2)}</td>')
+            mbody += (f'<tr><td class="l dim">{esc(lb)}</td>{cells}</tr>')
+        out += (eyebrow(f'The Surface \u2014 {esc(obj)} out of sample, '
+                        'every pairing')
+                + table(mhead, mbody,
+                        '<col style="width:16%">' + "<col>" * len(cads)))
+    return out
+
+
 # -------------------------------------------------------------- Backtest
 def backtest(bt: dict, per: str) -> str:
     """The walk-forward: what the search kept once it stopped seeing the answer.
