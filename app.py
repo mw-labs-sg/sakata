@@ -96,6 +96,10 @@ _DEFAULTS = {
     # Full period, so the tab opens doing what it has always done. A cadence
     # is a minute of searching and the reader should ask for it.
     "pf_cadence": "Full period",
+    # Rolling, not anchored, and Sanpo's choice for the same reason: Time
+    # frame IS a lookback in live use, so a fit on an expanding history is
+    # testing a recipe the tab does not offer.
+    "pf_lookback": "240 bars",
 }
 for _k, _v in _DEFAULTS.items():
     st.session_state.setdefault(_k, _v)
@@ -280,10 +284,10 @@ PF_WINDOWS = list(SP.PERIODS)
 # "controls changed" line compares them. The other five on the tab — capital,
 # vol target, leverage, fees, contracts — only decide how the answer is drawn
 # and are read where they are used.
-PF_SEARCH_KEYS = ("pf_window", "pf_cadence", "pf_obj", "pf_legs", "pf_cap",
-                  "pf_side", "pf_risk")
-PF_SEARCH_LABELS = ("Time frame", "Rebalance", "Objective", "Max legs",
-                    "Weight cap", "Direction", "Risk cap")
+PF_SEARCH_KEYS = ("pf_window", "pf_cadence", "pf_lookback", "pf_obj",
+                  "pf_legs", "pf_cap", "pf_side", "pf_risk")
+PF_SEARCH_LABELS = ("Time frame", "Rebalance", "Lookback", "Objective",
+                    "Max legs", "Weight cap", "Direction", "Risk cap")
 
 # The one control that decides which of the two runs happens. "Full period"
 # is not a cadence — it is the single whole-window fit the tab has always
@@ -968,14 +972,41 @@ with t[5]:
                                   " next, and score the chain — which the"
                                   " weights never saw. Every refit is a full"
                                   " search, so this is also the cost dial.")
-    pf_legs = r1[2].selectbox("Max legs", list(range(2, 11)),
+    # Only the lookbacks this window and cadence leave room to walk with: a
+    # 756-bar training set over a 240-bar window is not a short run, it is no
+    # run at all.
+    pf_lbs = [lb for lb in BT.LOOKBACKS
+              if _pc is not None
+              and len(BT.segments(_pc.index, pf_cad, lb)) >= BT.MIN_SEGMENTS]
+    if pf_cad == PF_FULL or not pf_lbs:
+        pf_lbs = [BT.ANCHORED]
+    if st.session_state.get("pf_lookback") not in pf_lbs:
+        # The largest rolling option that fits, else Anchored. Largest is the
+        # most data per fit and the fewest fits — the steadier estimate and
+        # the shorter wait, which for once point the same way.
+        _roll = [x for x in pf_lbs if x != BT.ANCHORED]
+        st.session_state["pf_lookback"] = _roll[-1] if _roll else BT.ANCHORED
+    pf_lb = r1[2].selectbox(
+        "Lookback", pf_lbs, key="pf_lookback",
+        disabled=(pf_cad == PF_FULL),
+        help="How many bars each refit may see. Rolling keeps that number"
+             " fixed, so every fit in the walk is the same experiment and the"
+             " basket can forget a regime that ended — and it matches how this"
+             " tab is used live, where Time frame is itself a lookback."
+             " Anchored trains on everything since the start instead: more"
+             " data per fit, but then the first fit and the last are two"
+             " different estimators chained into one curve. Counted in bars"
+             " because a bar is not a day on every time frame. Ignored on Full"
+             " period, which has one fit and no walk.")
+    pf_legs = r1[3].selectbox("Max legs", list(range(2, 11)),
                               key="pf_legs")
-    pf_cap = r1[3].selectbox("Weight cap", ["25%", "35%", "50%", "100%"],
+    pf_cap = r1[4].selectbox("Weight cap", ["25%", "35%", "50%", "100%"],
                              key="pf_cap",
                              help="Most any one instrument may carry. The cap "
                                   "and the leg count are the only defence "
                                   "against a search fitting one window.")
-    pf_risk = r1[4].selectbox("Risk cap", ["None", "60%", "50%", "40%", "30%"],
+    r1b = st.columns(5)
+    pf_risk = r1b[0].selectbox("Risk cap", ["None", "60%", "50%", "40%", "30%"],
                               key="pf_risk",
                               help="Most of the portfolio's VARIANCE any one"
                                    " leg may carry. The weight cap limits the"
@@ -983,25 +1014,24 @@ with t[5]:
                                    " which is a different thing — a basket can"
                                    " hold a tenth of its money in ether and"
                                    " half its variance there.")
-    r1b = st.columns(5)
-    pf_side = r1b[0].selectbox("Direction", PF.SIDES, key="pf_side",
+    pf_side = r1b[1].selectbox("Direction", PF.SIDES, key="pf_side",
                               help="Which way the legs may point. Long only"
                                    " and short only are one-sided books; long"
                                    " and short lets the search hedge.")
 
-    pf_obj = r1b[1].selectbox("Objective", PF.OBJECTIVES, key="pf_obj",
+    pf_obj = r1b[2].selectbox("Objective", PF.OBJECTIVES, key="pf_obj",
                              help="What the search maximises. ROA and ER (Adj)"
                                   " depend on the order of the returns, so"
                                   " weights are searched, not solved.")
     # Capital, vol target and leverage are not search arguments: the weights
     # are a shape and these only decide how large it is drawn, so they take
     # effect without a re-run.
-    pf_cap_usd = _dollars(r1b[2].text_input(
+    pf_cap_usd = _dollars(r1b[3].text_input(
         "Capital", key="pf_capital_txt", on_change=_capital(),
         help="What the weights are sized against. Notional and contracts scale"
              " with it; the ratios do not. Below about $500k these baskets"
              " stop being fillable — watch the Miss column."))
-    pf_vol = r1b[3].selectbox("Vol target",
+    pf_vol = r1b[4].selectbox("Vol target",
                              ["5%", "10%", "15%", "20%", "30%", "None"],
                              key="pf_vol",
                              help="Annualised volatility to hold the basket"
@@ -1009,21 +1039,21 @@ with t[5]:
                                   " own volatility, so a noisy basket is held"
                                   " below 1×. Pick None to size on leverage"
                                   " instead and hold the cap.")
-    pf_lev = r1b[4].selectbox("Max leverage", ["1×", "2×", "3×", "5×", "None"],
+    r2 = st.columns(5)
+    pf_lev = r2[0].selectbox("Max leverage", ["1×", "2×", "3×", "5×", "None"],
                              key="pf_lev",
                              help="Ceiling on gross notional over capital. A"
                                   " quiet basket needs leverage to reach a vol"
                                   " target; this is where you say how much of"
                                   " that you will actually take.")
-    r2 = st.columns(5)
-    pf_fee = r2[0].selectbox("Fees", list(U.FEE_TIERS), key="pf_fee",
+    pf_fee = r2[1].selectbox("Fees", list(U.FEE_TIERS), key="pf_fee",
                              help="Round-turn commission per contract, scaled"
                                   " from a retail schedule. It decides between"
                                   " fills that are equally close to the"
                                   " target, so it changes the tickets rather"
                                   " than the weights.")
 
-    pf_size = r2[1].selectbox("Contracts",
+    pf_size = r2[2].selectbox("Contracts",
                               ["Standard + Small", "Standard Only"],
                               key="pf_size",
                               help="Whether micros and minis may be used to"
@@ -1032,7 +1062,8 @@ with t[5]:
                                    " the price of a coarser fill — watch the"
                                    " Miss column when you switch.")
 
-    pf_args = (pf_win, pf_cad, pf_obj, pf_legs, pf_cap, pf_side, pf_risk)
+    pf_args = (pf_win, pf_cad, pf_lb, pf_obj, pf_legs, pf_cap,
+               pf_side, pf_risk)
     # What the run is, and what it is about to cost, before the click rather
     # than during it. The bar size leads because a time frame does not show
     # it anywhere else — "Intraday" says three days, not 15-minute prints —
@@ -1044,12 +1075,14 @@ with t[5]:
         st.caption(f"{_note} · one fit on the whole window, "
                    "the last 30% held back.")
     elif _pc is not None:
-        _n, _sec = BT.cost_estimate(_pc.index, pf_cad)
+        _n, _sec = BT.cost_estimate(_pc.index, pf_cad, pf_lb)
         _m = int(round(_sec / 60))
         _took = (f"{_m // 60}h {_m % 60:02d}m" if _m >= 60
                  else f"{max(1, _m)} min")
-        _line = (f"{_note} · {pf_cad} walk-forward: {_n} refits plus one "
-                 f"whole-window fit — about {_took}.")
+        _trains = ("anchored, each fit seeing everything before it"
+                   if pf_lb == BT.ANCHORED else f"rolling {pf_lb}")
+        _line = (f"{_note} · {pf_cad} walk-forward, {_trains}: {_n} refits "
+                 f"plus one whole-window fit — about {_took}.")
         # Past ten minutes this stops being a caption and becomes a decision,
         # so it stops looking like one. Full at Daily is sixteen hundred full
         # searches; nobody should discover that from a progress bar.
@@ -1061,7 +1094,7 @@ with t[5]:
         armed = {**dict(zip(PF_SEARCH_KEYS, pf_args)),
                  **(st.session_state.get("pf_armed") or {})}
         pf_args = tuple(armed[k] for k in PF_SEARCH_KEYS)
-        (pf_win, pf_cad, pf_obj, pf_legs,
+        (pf_win, pf_cad, pf_lb, pf_obj, pf_legs,
          pf_cap, pf_side, pf_risk) = pf_args
         # A bar rather than a spinner: the search runs tens of seconds now
         # that it restarts, grows and swaps legs, and a spinner that long
@@ -1094,7 +1127,8 @@ with t[5]:
                                    else "fitting the whole window…"))
 
             walk = BT.walk_forward(
-                wc, wf, pf_obj, pf_cad, capital=pf_cap_usd,
+                wc, wf, pf_obj, pf_cad, lookback=pf_lb,
+                capital=pf_cap_usd,
                 vol_target=(None if pf_vol == "None"
                             else float(pf_vol.rstrip("%"))),
                 max_lev=(None if pf_lev == "None"
@@ -1177,8 +1211,11 @@ with t[5]:
     same = st.session_state.get("pf_for") == pf_args
     walk = st.session_state.get("pf_walk") if same else None
     UI.md(R.portfolio(res or {}, shown_win, plan, capital=pf_cap_usd,
-                      mode=(f'{walk["cadence"]} walk-forward, '
-                            f'{walk["nSegments"]} refits out of sample'
+                      mode=((f'{walk["cadence"]} walk-forward, '
+                             f'{walk["nSegments"]} refits out of sample, '
+                             + ("anchored"
+                                if walk.get("lookback") == BT.ANCHORED
+                                else f'rolling {walk.get("lookback")}'))
                             if walk else "full-period fit"),
                       vol_target=(None if pf_vol == "None"
                                   else float(pf_vol.rstrip("%"))),

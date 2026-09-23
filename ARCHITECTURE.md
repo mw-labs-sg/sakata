@@ -14,7 +14,7 @@ sakata_stats.py — spread and outright statistics; pure numpy/pandas | imports:
 
 sk_amp.py — scrapes AMP margin tables | imports: sk_universe | called by: app, build, pull
 
-sk_backtest.py — walk-forward behind the Portfolio tab's Rebalance control: refit on a calendar cadence, size each fit to the vol target, charge the fees, chain the held segments | imports: sakata_stats, sk_portfolio | called by: app
+sk_backtest.py — walk-forward behind the Portfolio tab's Rebalance control: refit on a calendar cadence over a rolling (or anchored) lookback, size each fit to the vol target, charge the fees, chain the held segments | imports: sakata_stats, sk_portfolio | called by: app
 
 sk_board.py — Board tab data: last price and the calendar-period ladder | imports: sk_fmt, sk_universe | called by: app, build
 

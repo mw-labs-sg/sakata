@@ -1033,6 +1033,8 @@ def backtest(bt: dict, per: str) -> str:
                    if bt.get("feeShare") is not None else ""))
     sub = " · ".join(x for x in (
         f'{bt["cadence"]} rebalance',
+        ("anchored training" if bt.get("lookback") == "Anchored"
+         else f'rolling {bt.get("lookback")} of training'),
         f'{bt["bars"]} bars {bt["start"]} → {bt["end"]}',
         (f'held at {bt["avgLev"]:.2f}× average'
          if bt.get("avgLev") is not None else ""),

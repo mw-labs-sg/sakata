@@ -61,12 +61,35 @@ REBALANCE = OrderedDict([
     ("Annual", "Y"),
 ])
 
+# How much history each refit is allowed to see. Labelled in BARS rather than
+# borrowing the Time frame's day-names, because a lookback is counted in the
+# window's own bars and those are not days on every window: "240D" over a
+# 15-minute Intraday frame would be 240 prints, or about two sessions. Bars
+# is also the unit the refit table already prints under Train.
+#
+# ROLLING is the default and Sanpo's choice, and it is the right one here for
+# a reason particular to this tab: Time frame IS a lookback in live use. Pick
+# 240D on Portfolio and you are fitting the last 240 days, so a walk that
+# trains on an expanding window is testing a recipe the tab does not offer.
+# It also keeps the refits comparable — anchored over Full means the first fit
+# sees two years and the last sees nine, which are two different estimators
+# chained into one curve — and it lets the basket forget a regime that ended.
+#
+# Anchored survives as an option because the argument for it is real: more
+# data is less estimation noise, and that wins wherever the relationships
+# actually are stable.
+ANCHORED = "Anchored"
+LOOKBACKS = OrderedDict([
+    ("30 bars", 30), ("60 bars", 60), ("120 bars", 120), ("240 bars", 240),
+    ("504 bars", 504), ("756 bars", 756), (ANCHORED, None),
+])
+
 # Bars the first fit must have before it is allowed to trade. A basket fitted
 # to eleven bars is not a basket, and letting one through would put the
 # worst-informed fit of the run at the front of the curve, where it compounds
 # through everything after it.
 MIN_TRAIN = 24
-WARMUP_FRAC = 0.25      # or this share of the window, whichever is larger
+WARMUP_FRAC = 0.25      # anchored only: the share of the window kept as warm-up
 # One bar is a real holding period, not a degenerate one: a daily rebalance
 # on a daily-bar window holds each basket for exactly one bar, and that is the
 # strategy rather than a rounding error in it. The chain does not care how
@@ -87,13 +110,17 @@ def _period_key(index: pd.DatetimeIndex, freq: str) -> list:
     return list(index.to_period(freq))
 
 
-def segments(index: pd.DatetimeIndex, cadence: str) -> list:
-    """[(fit_upto, hold_from, hold_to)] in CLOSES positions.
+def segments(index: pd.DatetimeIndex, cadence: str,
+             lookback: str = ANCHORED) -> list:
+    """[(train_from, fit_upto, hold_to)] in CLOSES positions.
 
-    fit_upto is exclusive: the search sees closes[:fit_upto] and nothing
-    after, which is the whole point. hold_from is the same bar, so the first
-    return the basket earns is the step out of the last bar it was fitted on
-    — no gap, and no bar counted twice.
+    fit_upto is exclusive and is also where the holding starts: the search
+    sees closes[train_from:fit_upto] and nothing after, and the first return
+    the basket earns is the step out of the last bar it was fitted on — no
+    gap, and no bar counted twice.
+
+    train_from is 0 when anchored and fit_upto minus the lookback when
+    rolling, which is the only difference between the two modes.
 
     Returned before anything is run so the tab can say how many searches a
     cadence is about to cost. A Weekly walk over a year is fifty fits, and
@@ -105,8 +132,12 @@ def segments(index: pd.DatetimeIndex, cadence: str) -> list:
     freq = REBALANCE.get(cadence)
     if freq is None:
         return []
-    warm = max(MIN_TRAIN, int(n * WARMUP_FRAC))
-    if n - warm < MIN_TEST:
+    back = LOOKBACKS.get(lookback, None)
+    # Rolling warms up for exactly its lookback: a 240-bar training set does
+    # not exist until there are 240 bars behind it, and starting earlier on a
+    # short slice would be the anchored behaviour wearing a rolling label.
+    warm = back if back else max(MIN_TRAIN, int(n * WARMUP_FRAC))
+    if warm < MIN_TRAIN or n - warm < MIN_TEST:
         return []
     key = _period_key(index, freq)
     marks = [i for i in range(1, n) if key[i] != key[i - 1] and i >= warm]
@@ -116,7 +147,7 @@ def segments(index: pd.DatetimeIndex, cadence: str) -> list:
     out = []
     for a, b in zip(cuts, cuts[1:] + [n]):
         if b - a >= MIN_TEST:
-            out.append((a, a, b))
+            out.append((max(0, a - back) if back else 0, a, b))
     return out
 
 
@@ -133,16 +164,18 @@ REFIT_FLAT = 10.0
 REFIT_PER_BAR = 0.005
 
 
-def cost_estimate(index, cadence: str) -> tuple:
+def cost_estimate(index, cadence: str, lookback: str = ANCHORED) -> tuple:
     """(refits, seconds) for a walk that has not run yet.
 
     Counts the whole-window fit at the end, because the reader is waiting for
-    that too, and it is the most expensive single search in the run.
+    that too, and under a rolling lookback it is the most expensive single
+    search in the run by some margin — every other fit is capped at the
+    lookback and that one sees everything.
     """
-    segs = segments(index, cadence)
+    segs = segments(index, cadence, lookback)
     if not segs:
         return 0, 0.0
-    trains = [a for a, _, _ in segs] + [len(index)]
+    trains = [b - a for a, b, _ in segs] + [len(index)]
     return len(segs), sum(REFIT_FLAT + REFIT_PER_BAR * t for t in trains)
 
 
@@ -208,7 +241,8 @@ def _fee_for(delta: np.ndarray, codes, fees: dict, tier: float) -> float:
 
 
 def walk_forward(closes, fine, objective: str = "ROA",
-                 cadence: str = "Monthly", capital: float = 1_000_000.0,
+                 cadence: str = "Monthly", lookback: str = ANCHORED,
+                 capital: float = 1_000_000.0,
                  vol_target=30.0, max_lev=1.0, fees: dict = None,
                  fee_tier: float = 1.0, mult: dict = None,
                  progress=None, **kw) -> dict:
@@ -223,7 +257,7 @@ def walk_forward(closes, fine, objective: str = "ROA",
     """
     if closes is None or len(closes) < MIN_TRAIN + MIN_TEST:
         return {}
-    segs = segments(closes.index, cadence)
+    segs = segments(closes.index, cadence, lookback)
     if not segs:
         return {}
 
@@ -238,13 +272,21 @@ def walk_forward(closes, fine, objective: str = "ROA",
     fee_total = 0.0
     total = len(segs) + 1           # the segments, plus the whole-window fit
 
-    for k, (fit_upto, hold_from, hold_to) in enumerate(segs):
+    for k, (train_from, fit_upto, hold_to) in enumerate(segs):
+        hold_from = fit_upto
         if progress:
             progress(k, total, None)
-        train = closes.iloc[:fit_upto]
-        tf = fine[fine.index <= train.index[-1]] if fine is not None else None
-        if tf is not None and len(tf) < 5:
-            tf = None
+        train = closes.iloc[train_from:fit_upto]
+        # Bounded at BOTH ends now. Cutting only the right-hand side would
+        # have handed a rolling fit the whole history on its fine bars, which
+        # is the lookahead-free half of the mistake but still the wrong
+        # training set.
+        tf = None
+        if fine is not None:
+            tf = fine[(fine.index >= train.index[0])
+                      & (fine.index <= train.index[-1])]
+            if len(tf) < 5:
+                tf = None
         res = PF.optimise(train, tf, objective, **kw)
         if not res or not res.get("w"):
             continue
@@ -284,7 +326,7 @@ def walk_forward(closes, fine, objective: str = "ROA",
             "n": len(rows) + 1,
             "from": closes.index[hold_from].strftime("%d %b %y"),
             "to": closes.index[min(hold_to, len(closes) - 1)].strftime("%d %b %y"),
-            "trainBars": int(fit_upto), "testBars": int(len(r)),
+            "trainBars": int(fit_upto - train_from), "testBars": int(len(r)),
             "lev": round(float(lev), 2),
             "fee": round(float(fee), 0),
             "tot": round(float(np.prod(1 + r_net) - 1) * 100, 2),
@@ -391,7 +433,8 @@ def walk_forward(closes, fine, objective: str = "ROA",
         "stability": stability,
         "full": full,
         "bars": int(len(r_net)), "windowBars": int(len(closes)),
-        "warmup": int(segs[0][0]),
+        "lookback": lookback,
+        "warmup": int(segs[0][1]),
         "start": idx_all[0].strftime("%d %b %y"),
         "end": idx_all[-1].strftime("%d %b %y"),
         "avgTurnover": round(float(np.mean(turns)), 1) if turns else None,
