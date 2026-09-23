@@ -997,29 +997,48 @@ def backtest(bt: dict, per: str) -> str:
                    f'{bt["bars"]} bars out of sample</span>')
     else:
         kept = 100 + dec
-        good = dec >= -35
-        vcol = pos if good else amber
+        vcol = pos if dec >= -35 else amber
+        # A score that changed sign kept none of it. "Keeps -2%" is arithmetic
+        # rather than English, and it reads as a small loss when what happened
+        # is that the edge went away entirely.
+        said = (f'KEEPS {kept:.0f}% OF ITS IN-SAMPLE {esc(obj.upper())}'
+                if kept > 0 else
+                f'KEEPS NONE OF ITS IN-SAMPLE {esc(obj.upper())}')
         verdict = (f'<span style="padding:2px 8px;border-radius:3px;'
                    f'background:{vcol}22;color:{vcol};font-weight:700;'
                    f'font-size:10.5px;letter-spacing:.04em;white-space:nowrap">'
-                   f'KEEPS {kept:.0f}% OF ITS IN-SAMPLE '
-                   f'{esc(obj.upper())}</span>')
+                   f'{said}</span>')
 
     # Out of sample first and washed, because it is the only row here that was
     # not fitted to the bars it is scored on. The two beneath it are what it
     # is read against, and both of them saw the answer.
-    scored = (statrow("Walk-forward", oos, True,
-                      f'{bt["nSegments"]} refits, out of sample',
+    # Net first and washed: it is the only row here that was neither fitted
+    # to the bars it is scored on nor handed its tickets for free. Gross sits
+    # under it so the cost of the cadence is a subtraction the reader can
+    # see rather than a claim in the caption.
+    scored = (statrow("Walk-forward, net", oos, True,
+                      f'{bt["nSegments"]} refits, after fees',
                       wash=f"background:{pos}1f;")
+              + statrow("Walk-forward, gross", bt.get("oosGross"), False,
+                        "same walk, fees not charged")
               + statrow("In-sample", ins, False, "one fit, whole window")
               + statrow("Equal weight", eq, False,
                         "every leg ever held, carried throughout"))
+    cost = ""
+    if bt.get("fees"):
+        cost = (f'${bt["fees"]:,.0f} of fees on ${bt.get("capital", 0):,.0f}'
+                + (f' — {bt["feeBps"]:.0f} bps'
+                   if bt.get("feeBps") is not None else "")
+                + (f', {bt["feeShare"]:.0f}% of the return'
+                   if bt.get("feeShare") is not None else ""))
     sub = " · ".join(x for x in (
         f'{bt["cadence"]} rebalance',
         f'{bt["bars"]} bars {bt["start"]} → {bt["end"]}',
-        f'warm-up {bt["warmup"]} bars',
+        (f'held at {bt["avgLev"]:.2f}× average'
+         if bt.get("avgLev") is not None else ""),
         (f'{bt["avgTurnover"]:.0f}% average turnover per refit'
-         if bt.get("avgTurnover") is not None else "")) if x)
+         if bt.get("avgTurnover") is not None else ""),
+        cost) if x)
 
     card = ('<div class="plot">'
             '<div class="ctitle"><b>What survived out of sample</b>'
@@ -1039,7 +1058,12 @@ def backtest(bt: dict, per: str) -> str:
             series.append({"k": "equal weight, same legs", "v": eqc["v"],
                            "c": ink, "w": 1.8, "dash": "0.1 5",
                            "cap": "round", "o": 0.55})
-        series.append({"k": "walk-forward (out of sample)", "v": curve["v"],
+        gc = bt.get("grossCurve")
+        if gc and gc.get("v"):
+            series.append({"k": "before fees", "v": gc["v"], "c": amber,
+                           "w": 2.0, "dash": "0.1 5", "cap": "round",
+                           "o": 0.95})
+        series.append({"k": "walk-forward, net of fees", "v": curve["v"],
                        "c": teal, "w": 2.6})
         legend = "".join(
             f'<span class="key" style="display:inline-flex;align-items:center;'
@@ -1113,7 +1137,10 @@ def backtest(bt: dict, per: str) -> str:
                  f'<td class="l dim">{esc(r["from"])} → {esc(r["to"])}</td>'
                  f'<td class="faint">{r["trainBars"]}</td>'
                  f'<td class="faint">{r["testBars"]}</td>'
+                 + f'<td class="dim">{r.get("lev", 0):.2f}×</td>'
                  + pct(r["tot"], 2)
+                 + (f'<td class="dim">{r["fee"]:,.0f}</td>'
+                    if r.get("fee") else '<td class="faint">—</td>')
                  + f'<td class="dim">{r["legs"]}</td>'
                  + (f'<td style="color:{tcol}">{tv:.0f}%</td>'
                     if tv is not None else '<td class="faint">—</td>')
@@ -1126,7 +1153,13 @@ def backtest(bt: dict, per: str) -> str:
                           '<th title="Bars the search saw before this fit">'
                           'Train</th>'
                           '<th title="Bars this basket was held for">Test</th>'
-                          '<th>Tot%</th><th>Legs</th>'
+                          '<th title="Leverage this refit was sized at, from '
+                          'the volatility of its own training window">At</th>'
+                          '<th title="Segment return, after the fees charged '
+                          'to get into it">Tot%</th>'
+                          '<th title="Fees to trade into this basket, half a '
+                          'round turn per contract moved">Fees $</th>'
+                          '<th>Legs</th>'
                           '<th title="Weight changed since the previous '
                           'refit; half the sum of absolute changes">Turn%</th>'
                           '<th class="l">Top legs</th>', segs))

@@ -2,7 +2,7 @@
 
 ## FILES
 
-app.py — Streamlit terminal; twelve tabs, cached data functions, refresh/staleness shell | imports: sk_amp, sk_backtest, sk_board, sk_calendar, sk_curve, sk_export, sk_knowledge, sk_margins, sk_portfolio, sk_render, sk_sources, sk_spreads, sk_technical, sk_ui, sk_universe | called by: —
+app.py — Streamlit terminal; eleven tabs, cached data functions, refresh/staleness shell | imports: sk_amp, sk_backtest, sk_board, sk_calendar, sk_curve, sk_export, sk_knowledge, sk_margins, sk_portfolio, sk_render, sk_sources, sk_spreads, sk_technical, sk_ui, sk_universe | called by: —
 
 build.py — CI build of the static site; fetches once, writes every JSON payload | imports: sk_amp, sk_board, sk_curve, sk_knowledge, sk_margins, sk_sources, sk_spreads, sk_technical, sk_universe | called by: —
 
@@ -14,7 +14,7 @@ sakata_stats.py — spread and outright statistics; pure numpy/pandas | imports:
 
 sk_amp.py — scrapes AMP margin tables | imports: sk_universe | called by: app, build, pull
 
-sk_backtest.py — walk-forward over the Portfolio search: refit on a calendar cadence, hold out of sample, chain the segments | imports: sakata_stats, sk_portfolio | called by: app
+sk_backtest.py — walk-forward behind the Portfolio tab's Rebalance control: refit on a calendar cadence, size each fit to the vol target, charge the fees, chain the held segments | imports: sakata_stats, sk_portfolio | called by: app
 
 sk_board.py — Board tab data: last price and the calendar-period ladder | imports: sk_fmt, sk_universe | called by: app, build
 
@@ -59,7 +59,7 @@ sk_universe.py — instrument list, sectors, groups, multipliers, CME product id
 
 ## TOUCH GROUPS
 
-Portfolio and its walk-forward: sk_portfolio.py, sk_backtest.py, sk_render.py, app.py — the two tabs run the same search, so a change to `optimise` or to `_Scorer.stats` moves both. `stats_of` exists so the walk-forward's chained series is scored by the same definitions.
+Portfolio and its walk-forward: sk_portfolio.py, sk_backtest.py, sk_render.py, app.py — one tab, two modes off the Rebalance control, running the same search, so a change to `optimise` or to `_Scorer.stats` moves both. `stats_of` exists so the walk-forward's chained series is scored by the same definitions.
 
 Margins and vol grid: sk_margins.py, sk_render.py, app.py
 Universe changes: sk_universe.py, sk_sources.py, sk_amp.py, build.py

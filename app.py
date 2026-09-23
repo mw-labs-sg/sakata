@@ -93,12 +93,9 @@ _DEFAULTS = {
     "sp_vol": "30%", "sp_lev": "1\u00d7", "sp_capital_txt": "1,000,000",
     "pf_legs": 6, "pf_cap": "50%", "pf_vol": "30%", "pf_lev": "1\u00d7",
     "pf_capital_txt": "1,000,000",
-    # 240D over Monthly, not the first option in each list. Intraday is
-    # 81 bars of 15-minute prints, so a monthly rebalance has nothing
-    # to rebalance and the tab would open on a refusal. This pair is
-    # the shortest one that walks: nine or ten refits, about a minute.
-    "bt_window": "240D", "bt_cadence": "Monthly",
-    "bt_legs": 6, "bt_cap": "50%",
+    # Full period, so the tab opens doing what it has always done. A cadence
+    # is a minute of searching and the reader should ask for it.
+    "pf_cadence": "Full period",
 }
 for _k, _v in _DEFAULTS.items():
     st.session_state.setdefault(_k, _v)
@@ -282,10 +279,17 @@ PF_WINDOWS = list(SP.PERIODS)
 # "controls changed" line compares them. The other five on the tab — capital,
 # vol target, leverage, fees, contracts — only decide how the answer is drawn
 # and are read where they are used.
-PF_SEARCH_KEYS = ("pf_window", "pf_obj", "pf_legs", "pf_cap",
+PF_SEARCH_KEYS = ("pf_window", "pf_cadence", "pf_obj", "pf_legs", "pf_cap",
                   "pf_side", "pf_risk")
-PF_SEARCH_LABELS = ("Time frame", "Objective", "Max legs", "Weight cap",
-                    "Direction", "Risk cap")
+PF_SEARCH_LABELS = ("Time frame", "Rebalance", "Objective", "Max legs",
+                    "Weight cap", "Direction", "Risk cap")
+
+# The one control that decides which of the two runs happens. "Full period"
+# is not a cadence — it is the single whole-window fit the tab has always
+# done, with the 70/30 holdout under it — so it is answered here rather than
+# handed to sk_backtest, which only knows about calendars.
+PF_FULL = "Full period"
+PF_CADENCES = [PF_FULL] + list(BT.REBALANCE)
 
 
 def _arm(keys: tuple, store: str):
@@ -322,15 +326,6 @@ def _arm(keys: tuple, store: str):
 
 
 _pf_arm = _arm(PF_SEARCH_KEYS, "pf_armed")
-
-# The walk-forward's seven, in the order it takes them. Cadence sits second
-# because it is the control that separates this tab from Portfolio, and the
-# one a reader changes most.
-BT_KEYS = ("bt_window", "bt_cadence", "bt_obj", "bt_legs", "bt_cap",
-           "bt_side", "bt_risk")
-BT_LABELS = ("Time frame", "Rebalance", "Objective", "Max legs",
-             "Weight cap", "Direction", "Risk cap")
-_bt_arm = _arm(BT_KEYS, "bt_armed")
 
 CAPITAL_MIN, CAPITAL_MAX = 1_000, 1_000_000_000
 
@@ -670,10 +665,8 @@ def source(label: str, *caches, key: str = "", action: str = "",
 # analytical tab that looks at a single instrument on its own.
 # Uppercased here rather than in CSS: which element holds the label has moved
 # between Streamlit versions, so a selector is a thing that breaks on upgrade.
-# Backtest follows Portfolio because it is that tab with the answer covered
-# up: same search, same objectives, scored on bars the weights never saw.
 TABS = ["Board", "News", "Calendar", "Margin Vol", "Trends", "Portfolio",
-        "Backtest", "Structure", "Curve", "FOMC", "Knowledge", "Briefing"]
+        "Structure", "Curve", "FOMC", "Knowledge", "Briefing"]
 t = st.tabs([x.upper() for x in TABS])
 
 # ----------------------------------------------------------------- Board
@@ -844,109 +837,8 @@ with t[4]:
         if st.session_state.get("sp_auto"):
             autorefresh(stamp, TTL_FAST)
 
-# -------------------------------------------------------------- Backtest
-with t[6]:
-    # Same shape as Portfolio, and deliberately: this tab asks that tab's
-    # question again with the answer covered up, so the two sets of controls
-    # have to be comparable at a glance or the comparison is not one.
-    bgo = source("Yahoo · 15m, 1H, 4H, 1D", *PRICE_CACHES, key="backtest",
-                 action="Optimize (WF)", on_click=_bt_arm)
-    b1 = st.columns(5)
-    bt_win = b1[0].selectbox("Time frame", PF_WINDOWS, key="bt_window",
-                             help="The span the walk runs across. It is not a"
-                                  " lookback — the search refits on everything"
-                                  " before each rebalance, so a longer frame"
-                                  " is more refits, not a longer memory.")
-    bt_cad = b1[1].selectbox("Rebalance", list(BT.REBALANCE), key="bt_cadence",
-                             help="How often the basket is refitted and"
-                                  " re-held. No Rebalance fits once after the"
-                                  " warm-up and holds to the end, which is the"
-                                  " control the other five are read against."
-                                  " Every refit is a full search, so this is"
-                                  " also the cost dial.")
-    bt_obj = b1[2].selectbox("Objective", PF.OBJECTIVES, key="bt_obj",
-                             help="What each refit maximises, and the number"
-                                  " the walk is scored on. This is the control"
-                                  " the tab exists to settle: the objective"
-                                  " with the best in-sample score is often not"
-                                  " the one that keeps most of it.")
-    bt_legs = b1[3].selectbox("Max legs", list(range(2, 11)), key="bt_legs",
-                              help="Ceiling on legs per refit. More legs fit"
-                                   " the training window better and usually"
-                                   " keep less of it.")
-    bt_cap = b1[4].selectbox("Weight cap", ["25%", "35%", "50%", "100%"],
-                             key="bt_cap",
-                             help="Most any one instrument may carry at a"
-                                  " refit. With the leg count, the only"
-                                  " defence against a search fitting one"
-                                  " stretch of the window.")
-
-    b2 = st.columns(5)
-    bt_risk = b2[0].selectbox("Risk cap", ["None", "60%", "50%", "40%", "30%"],
-                              key="bt_risk",
-                              help="Most of the portfolio's variance any one"
-                                   " leg may carry at a refit.")
-    bt_side = b2[1].selectbox("Direction", PF.SIDES, key="bt_side",
-                              help="Which way the legs may point at every"
-                                   " refit.")
-
-    bt_args = (bt_win, bt_cad, bt_obj, bt_legs, bt_cap, bt_side, bt_risk)
-    # The cost, before the click rather than during it. A Weekly walk over
-    # 240D is fifty full searches, and a reader who has not been told that
-    # reasonably concludes the tab has hung.
-    bclose, bfine = portfolio_frames(bt_win)
-    if bclose is None:
-        st.error("No price history for this time frame.")
-    else:
-        nseg = len(BT.segments(bclose.index, bt_cad))
-        if not nseg:
-            st.caption(f"{bt_cad} leaves no complete segment in "
-                       f"{len(bclose)} bars of {bt_win} — pick a shorter "
-                       "cadence or a longer time frame.")
-        else:
-            # Measured at roughly seven seconds a search on nineteen
-            # instruments, and the early fits are cheaper because they see
-            # fewer bars, so this is an over-estimate on purpose.
-            st.caption(f"{bt_cad} over {bt_win}: {nseg} refits plus one "
-                       f"whole-window fit — about "
-                       f"{max(1, round((nseg + 1) * 5 / 60)):d} min.")
-
-        if bgo:
-            armed = {**dict(zip(BT_KEYS, bt_args)),
-                     **(st.session_state.get("bt_armed") or {})}
-            bt_args = tuple(armed[k] for k in BT_KEYS)
-            (bt_win, bt_cad, bt_obj, bt_legs,
-             bt_cap, bt_side, bt_risk) = bt_args
-            bclose, bfine = portfolio_frames(bt_win)
-            bar = st.progress(0.0, text="walking forward…")
-
-            def _btick(done, total, _best=None):
-                bar.progress(min(done / max(total, 1), 1.0),
-                             text=(f"walking forward… refit {done} of "
-                                   f"{total - 1}" if done < total - 1
-                                   else "fitting the whole window…"))
-
-            brc = 0.0 if bt_risk == "None" else int(bt_risk.rstrip("%")) / 100
-            st.session_state["bt_result"] = BT.walk_forward(
-                bclose, bfine, bt_obj, bt_cad, progress=_btick,
-                max_legs=bt_legs, max_weight=int(bt_cap.rstrip("%")) / 100,
-                side=bt_side, risk_cap=brc)
-            st.session_state["bt_for"] = bt_args
-            bar.empty()
-
-        bres = st.session_state.get("bt_result")
-        if bres and st.session_state.get("bt_for") != bt_args:
-            ran = st.session_state.get("bt_for") or ()
-            moved = [f"{lab} {was} → {now}"
-                     for lab, was, now in zip(BT_LABELS, ran, bt_args)
-                     if was != now]
-            st.caption("Controls changed since this ran — press Optimize (WF) "
-                       "again." + ("  ·  " + ", ".join(moved) if moved else ""))
-        shown = (st.session_state.get("bt_for") or bt_args)[0]
-        UI.md(R.backtest(bres or {}, shown))
-
 # ------------------------------------------------------------- Structure
-with t[7]:
+with t[6]:
     # by_bar belongs in this list. Without it, clearing technical_grid and
     # prices left by_bar's 15-minute entry intact, so the grid was rebuilt from
     # byte-identical bars and Refresh fetched nothing — while Board's Refresh
@@ -1044,14 +936,26 @@ with t[5]:
     # short-only are three answers, not a yes and a no.
     r1 = st.columns(5)
     pf_win = r1[0].selectbox("Time frame", PF_WINDOWS, key="pf_window")
-    pf_legs = r1[1].selectbox("Max legs", list(range(2, 11)),
+    # Second, because it is the control that decides what the other nine
+    # mean: on Full period they describe one fit, on a cadence they describe
+    # every fit in a walk.
+    pf_cad = r1[1].selectbox("Rebalance", PF_CADENCES, key="pf_cadence",
+                             help="Full period fits one basket to the whole"
+                                  " time frame and keeps the last 30% back as"
+                                  " a holdout. Any cadence walks instead:"
+                                  " refit at every rebalance on everything"
+                                  " that had happened by then, hold to the"
+                                  " next, and score the chain — which the"
+                                  " weights never saw. Every refit is a full"
+                                  " search, so this is also the cost dial.")
+    pf_legs = r1[2].selectbox("Max legs", list(range(2, 11)),
                               key="pf_legs")
-    pf_cap = r1[2].selectbox("Weight cap", ["25%", "35%", "50%", "100%"],
+    pf_cap = r1[3].selectbox("Weight cap", ["25%", "35%", "50%", "100%"],
                              key="pf_cap",
                              help="Most any one instrument may carry. The cap "
                                   "and the leg count are the only defence "
                                   "against a search fitting one window.")
-    pf_risk = r1[3].selectbox("Risk cap", ["None", "60%", "50%", "40%", "30%"],
+    pf_risk = r1[4].selectbox("Risk cap", ["None", "60%", "50%", "40%", "30%"],
                               key="pf_risk",
                               help="Most of the portfolio's VARIANCE any one"
                                    " leg may carry. The weight cap limits the"
@@ -1059,25 +963,25 @@ with t[5]:
                                    " which is a different thing — a basket can"
                                    " hold a tenth of its money in ether and"
                                    " half its variance there.")
-    pf_side = r1[4].selectbox("Direction", PF.SIDES, key="pf_side",
+    r1b = st.columns(5)
+    pf_side = r1b[0].selectbox("Direction", PF.SIDES, key="pf_side",
                               help="Which way the legs may point. Long only"
                                    " and short only are one-sided books; long"
                                    " and short lets the search hedge.")
 
-    r2 = st.columns(5)
-    pf_obj = r2[0].selectbox("Objective", PF.OBJECTIVES, key="pf_obj",
+    pf_obj = r1b[1].selectbox("Objective", PF.OBJECTIVES, key="pf_obj",
                              help="What the search maximises. ROA and ER (Adj)"
                                   " depend on the order of the returns, so"
                                   " weights are searched, not solved.")
     # Capital, vol target and leverage are not search arguments: the weights
     # are a shape and these only decide how large it is drawn, so they take
     # effect without a re-run.
-    pf_cap_usd = _dollars(r2[1].text_input(
+    pf_cap_usd = _dollars(r1b[2].text_input(
         "Capital", key="pf_capital_txt", on_change=_capital(),
         help="What the weights are sized against. Notional and contracts scale"
              " with it; the ratios do not. Below about $500k these baskets"
              " stop being fillable — watch the Miss column."))
-    pf_vol = r2[2].selectbox("Vol target",
+    pf_vol = r1b[3].selectbox("Vol target",
                              ["5%", "10%", "15%", "20%", "30%", "None"],
                              key="pf_vol",
                              help="Annualised volatility to hold the basket"
@@ -1085,21 +989,21 @@ with t[5]:
                                   " own volatility, so a noisy basket is held"
                                   " below 1×. Pick None to size on leverage"
                                   " instead and hold the cap.")
-    pf_lev = r2[3].selectbox("Max leverage", ["1×", "2×", "3×", "5×", "None"],
+    pf_lev = r1b[4].selectbox("Max leverage", ["1×", "2×", "3×", "5×", "None"],
                              key="pf_lev",
                              help="Ceiling on gross notional over capital. A"
                                   " quiet basket needs leverage to reach a vol"
                                   " target; this is where you say how much of"
                                   " that you will actually take.")
-    pf_fee = r2[4].selectbox("Fees", list(U.FEE_TIERS), key="pf_fee",
+    r2 = st.columns(5)
+    pf_fee = r2[0].selectbox("Fees", list(U.FEE_TIERS), key="pf_fee",
                              help="Round-turn commission per contract, scaled"
                                   " from a retail schedule. It decides between"
                                   " fills that are equally close to the"
                                   " target, so it changes the tickets rather"
                                   " than the weights.")
 
-    r3 = st.columns(5)
-    pf_size = r3[0].selectbox("Contracts",
+    pf_size = r2[1].selectbox("Contracts",
                               ["Standard + Small", "Standard Only"],
                               key="pf_size",
                               help="Whether micros and minis may be used to"
@@ -1108,7 +1012,20 @@ with t[5]:
                                    " the price of a coarser fill — watch the"
                                    " Miss column when you switch.")
 
-    pf_args = (pf_win, pf_obj, pf_legs, pf_cap, pf_side, pf_risk)
+    pf_args = (pf_win, pf_cad, pf_obj, pf_legs, pf_cap, pf_side, pf_risk)
+    # What a cadence is about to cost, before the click rather than during
+    # it. A Weekly walk over 240D is fifty full searches, and a reader who
+    # has not been told that reasonably concludes the tab has hung.
+    if pf_cad != PF_FULL:
+        _pc, _ = portfolio_frames(pf_win)
+        if _pc is not None:
+            _n = len(BT.segments(_pc.index, pf_cad))
+            st.caption(
+                f"{pf_cad} leaves no complete segment in {len(_pc)} bars of "
+                f"{pf_win} — pick a shorter cadence or a longer time frame."
+                if not _n else
+                f"{pf_cad} over {pf_win}: {_n} refits plus one whole-window "
+                f"fit — about {max(1, round((_n + 1) * 5 / 60)):d} min.")
     if go:
         # What the button captured beats what the widgets returned. The two
         # agree on every run that was not interrupted, and when one was, only
@@ -1116,7 +1033,8 @@ with t[5]:
         armed = {**dict(zip(PF_SEARCH_KEYS, pf_args)),
                  **(st.session_state.get("pf_armed") or {})}
         pf_args = tuple(armed[k] for k in PF_SEARCH_KEYS)
-        pf_win, pf_obj, pf_legs, pf_cap, pf_side, pf_risk = pf_args
+        (pf_win, pf_cad, pf_obj, pf_legs,
+         pf_cap, pf_side, pf_risk) = pf_args
         # A bar rather than a spinner: the search runs tens of seconds now
         # that it restarts, grows and swaps legs, and a spinner that long
         # reads as a hang. The running best is on it, which also shows the
@@ -1129,9 +1047,36 @@ with t[5]:
                          text=f"searching weights… {done}/{total}{got}")
 
         rc = 0.0 if pf_risk == "None" else int(pf_risk.rstrip("%")) / 100
-        fresh_res = portfolio_weights(
-            pf_win, pf_obj, pf_legs, int(pf_cap.rstrip("%")), pf_side,
-            risk_cap=rc, progress=_tick)
+        walk = {}
+        if pf_cad == PF_FULL:
+            fresh_res = portfolio_weights(
+                pf_win, pf_obj, pf_legs, int(pf_cap.rstrip("%")), pf_side,
+                risk_cap=rc, progress=_tick)
+        else:
+            # The walk fits the whole window on its way past — that IS the
+            # basket to hold now, being the only one that has seen every bar
+            # — so the tab takes its answer from there rather than paying for
+            # the same search twice.
+            wc, wf = portfolio_frames(pf_win)
+
+            def _wtick(done, total, _b=None):
+                bar.progress(min(done / max(total, 1), 1.0),
+                             text=(f"walking forward… refit {done} of "
+                                   f"{total - 1}" if done < total - 1
+                                   else "fitting the whole window…"))
+
+            walk = BT.walk_forward(
+                wc, wf, pf_obj, pf_cad, capital=pf_cap_usd,
+                vol_target=(None if pf_vol == "None"
+                            else float(pf_vol.rstrip("%"))),
+                max_lev=(None if pf_lev == "None"
+                         else float(pf_lev.rstrip("×"))),
+                fees=U.FEES, fee_tier=U.FEE_TIERS[pf_fee], mult=U.MULT,
+                progress=_wtick, max_legs=pf_legs,
+                max_weight=int(pf_cap.rstrip("%")) / 100,
+                side=pf_side, risk_cap=rc)
+            fresh_res = walk.get("full") or {}
+        st.session_state["pf_walk"] = walk
         # Turnover against the PREVIOUS answer, captured before it is
         # overwritten. For a book tracked through a week, "is it still saying
         # the same thing" is a more useful question than any single ROA.
@@ -1141,15 +1086,22 @@ with t[5]:
         st.session_state["pf_result"] = fresh_res
         st.session_state["pf_for"] = pf_args
 
-        bar.progress(0.0, text="holding the fit forward…")
-        closes_h, fine_h = portfolio_frames(pf_win)
-        st.session_state["pf_hold"] = PF.held_forward(
-            closes_h, fine_h, pf_obj, max_legs=pf_legs,
-            max_weight=int(pf_cap.rstrip("%")) / 100, side=pf_side,
-            risk_cap=rc,
-            progress=lambda d, t, b: bar.progress(
-                min(d / max(t, 1), 1.0),
-                text=f"holding the fit forward… {d}/{t}"))
+        # Held forward is the Full-period holdout, and only that. A walk
+        # already holds every fit forward and does it nine times over, so one
+        # more 70/30 split would be a worse copy of the block underneath it,
+        # bought with another full search.
+        if pf_cad == PF_FULL:
+            bar.progress(0.0, text="holding the fit forward…")
+            closes_h, fine_h = portfolio_frames(pf_win)
+            st.session_state["pf_hold"] = PF.held_forward(
+                closes_h, fine_h, pf_obj, max_legs=pf_legs,
+                max_weight=int(pf_cap.rstrip("%")) / 100, side=pf_side,
+                risk_cap=rc,
+                progress=lambda d, t, b: bar.progress(
+                    min(d / max(t, 1), 1.0),
+                    text=f"holding the fit forward… {d}/{t}"))
+        else:
+            st.session_state["pf_hold"] = {}
         bar.empty()
     res = st.session_state.get("pf_result")
     if res and st.session_state.get("pf_for") != pf_args:
@@ -1200,10 +1152,16 @@ with t[5]:
                                   else float(pf_vol.rstrip("%"))),
                       hold=hold if same else None,
                       turn=st.session_state.get("pf_turn") if same else None))
+    # The evidence, under the answer. Same order the question is asked in:
+    # here is the basket, and here is how much of its score the same recipe
+    # kept when it could not see where it was going.
+    walk = st.session_state.get("pf_walk") if same else None
+    if walk:
+        UI.md(R.backtest(walk, shown_win))
 
 
 # ----------------------------------------------------------------- Curve
-with t[8]:
+with t[7]:
     source("CME settlements", curve_data, key="curve")
     cd = curve_data()
     codes = list(cd.get("curves", {}))
@@ -1216,12 +1174,12 @@ with t[8]:
         UI.md(R.curve(cd, code))
 
 # ------------------------------------------------------------------ FOMC
-with t[9]:
+with t[8]:
     source("CME 30-Day Fed Funds settlements", fomc_data, key="fomc")
     UI.md(R.fomc(fomc_data()))
 
 # ------------------------------------------------------------- Knowledge
-with t[10]:
+with t[9]:
     source("Hand-maintained in sk_knowledge.py · no fetch")
     kc = st.columns(5)
     grp = kc[0].selectbox("Group", ["All", "Financials", "Commodities"],
@@ -1237,7 +1195,7 @@ with t[10]:
     UI.md(R.knowledge(grp, last_kn))
 
 # --------------------------------------------------------------- Briefing
-with t[11]:
+with t[10]:
     UI.md(UI.note(
         "Build one provider-neutral market snapshot for ChatGPT, Claude or "
         "another LLM. <b>Markdown</b> is the recommended attachment; JSON is "
